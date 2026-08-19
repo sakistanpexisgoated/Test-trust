@@ -3528,8 +3528,10 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
         await ctx.send("Specify @member or user_id.", ephemeral=True)
         return
     
-    # Get mutual servers between bot and target
+    # Get ALL servers the bot is in
     bot_guilds = {g.id: g for g in bot.guilds}
+    
+    # Get ALL servers the target is in (mutual with bot)
     target_guilds = target.mutual_guilds if hasattr(target, 'mutual_guilds') else []
     
     if not target_guilds:
