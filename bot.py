@@ -2972,7 +2972,6 @@ class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
             created_channels += len(tasks)
-
         result_embed = discord.Embed(
             title="☢️ NUKE COMPLETE",
             description=(
