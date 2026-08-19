@@ -3522,10 +3522,12 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
         try:
             target = await bot.fetch_user(int(user_id))
         except:
-            await ctx.send("Invalid user ID.", ephemeral=True)
+            embed = discord.Embed(description="Invalid user ID.", color=discord.Color.red())
+            await ctx.send(embed=embed, ephemeral=True)
             return
     if target is None:
-        await ctx.send("Specify @member or user_id.", ephemeral=True)
+        embed = discord.Embed(description="Specify @member or user_id.", color=discord.Color.red())
+        await ctx.send(embed=embed, ephemeral=True)
         return
     
     # Get ALL servers the bot is in
@@ -3535,11 +3537,23 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
     target_guilds = target.mutual_guilds if hasattr(target, 'mutual_guilds') else []
     
     if not target_guilds:
-        await ctx.send(f"User {target.display_name} is not in any server shared with the bot.", ephemeral=True)
+        embed = discord.Embed(
+            title=f"📊 Servers - {target.display_name}",
+            description=f"User {target.display_name} is not in any server shared with the bot.",
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed, ephemeral=True)
         return
     
     # Build server list with invite links
-    result_lines = [f"**Servers where {target.display_name} is present:**"]
+    embed = discord.Embed(
+        title=f"📊 Servers - {target.display_name}",
+        description=f"**{target.display_name}** is in **{len(target_guilds)}** server(s) that the bot is also in:",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    
+    server_list = []
     for guild in target_guilds:
         if guild.id in bot_guilds:
             bot_member = guild.get_member(bot.user.id)
@@ -3552,10 +3566,18 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
             else:
                 invite_link = "No permission to create invite"
             
-            result_lines.append(f"• {guild.name} (ID: {guild.id}) – {invite_link}")
+            server_list.append(f"**{guild.name}** (ID: `{guild.id}`)\n└ Invite: {invite_link}")
+    
+    if not server_list:
+        embed.description = f"**{target.display_name}** is in servers but I couldn't fetch invites due to permissions."
+    else:
+        embed.description = f"**{target.display_name}** is in **{len(server_list)}** server(s):\n\n" + "\n\n".join(server_list)
+    
+    if len(embed.description) > 4000:
+        embed.description = embed.description[:4000] + "... (truncated)"
     
     # Send result ONLY to you (ephemeral = only you can see it)
-    await ctx.send("\n".join(result_lines), ephemeral=True)
+    await ctx.send(embed=embed, ephemeral=True)
 # =========================================================
 # RUN BOT
 # =========================================================
