@@ -3506,7 +3506,7 @@ async def backup_load(ctx, backup_id: str):
 # =========================================================
 # TELEPORT CHECK WHICH SERVER IS A MEMBERS IS IN
 # =========================================================
-@bot.slash_command(name="tp", description="Check member's shared servers and join link")
+@bot.hybrid_command(name="tp", description="Check member's shared servers and join link")
 async def tp(ctx, member: discord.Member = None, user_id: str = None):
     # Allowed bot owners (IDs)
     ALLOWED_OWNERS = {1152424544557088849, 1286560808528117820}
