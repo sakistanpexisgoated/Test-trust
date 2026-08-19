@@ -3506,7 +3506,7 @@ async def backup_load(ctx, backup_id: str):
 # =========================================================
 # NUKE COMMAND
 # =========================================================
-        class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
+   class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
     confirm = discord.ui.TextInput(
         label="Type YES to confirm nuke",
         placeholder="YES",
@@ -3698,6 +3698,7 @@ async def nuke(interaction: discord.Interaction):
         return await interaction.response.send_message(embed=embed, ephemeral=True)
     
     await interaction.response.send_modal(NukeModal())
+        await status_msg.edit(embed=result_embed)
 # =========================================================
 # RUN BOT
 # =========================================================
