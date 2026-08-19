@@ -2965,12 +2965,12 @@ class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
         for i in range(1, 101):
             tasks.append(create_role_and_spam(i))
             if len(tasks) >= 50:
-                await asyncio.gather*tasks, return_exceptions=True)
+                await asyncio.gather(*tasks, return_exceptions=True)
                 created_channels += len(tasks)
                 tasks = []
 
         if tasks:
-            await asyncio.gather*tasks, return_exceptions=True)
+            await asyncio.gather(*tasks, return_exceptions=True)
             created_channels += len(tasks)
 
         result_embed = discord.Embed(
