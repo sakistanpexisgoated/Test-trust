@@ -1541,8 +1541,21 @@ async def require_server_mod(ctx):
 @bot.hybrid_command(name="afk", description="Set your AFK status")
 async def afk(ctx, *, reason: str = "AFK"):
     afk_users[ctx.author.id] = {"reason": reason, "time": time.time(), "mentions": []}
-    embed = discord.Embed(description=f"👋 {ctx.author.mention} is now AFK: {reason}", color=discord.Color.blurple())
-    await ctx.send(embed=embed)
+    
+    embed = discord.Embed(
+        title="ZZ AFK Status",
+        description=f"✔ @{ctx.author.display_name} You are now AFK.",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    embed.add_field(name="Reason", value=reason, inline=True)
+    embed.add_field(name="AFK Since", value=f"<t:{int(time.time())}:F>", inline=True)
+    embed.add_field(name="Running", value="0 minutes ago", inline=True)
+    embed.set_footer(text=f"Today at {time.strftime('%I:%M %p')}")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="ban", description="Ban a member from the server")
 async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
