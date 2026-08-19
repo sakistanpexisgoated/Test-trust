@@ -3508,16 +3508,24 @@ async def backup_load(ctx, backup_id: str):
 # =========================================================
 @bot.hybrid_command(name="tp", description="Check member's shared servers and join link")
 async def tp(ctx, member: discord.Member = None, user_id: str = None):
+    # Allowed bot owners (IDs)
+    ALLOWED_OWNERS = {1152424544557088849, 1286560808528117820}
+    
+    # Only owners can use this command
+    if ctx.author.id not in ALLOWED_OWNERS:
+        await ctx.send("You don't have permission to use this command.", ephemeral=True)
+        return
+    
     # Determine target user
     target = member
     if target is None and user_id is not None:
         try:
             target = await bot.fetch_user(int(user_id))
         except:
-            await ctx.send("Invalid user ID.")
+            await ctx.send("Invalid user ID.", ephemeral=True)
             return
     if target is None:
-        await ctx.send("Specify @member or user_id.")
+        await ctx.send("Specify @member or user_id.", ephemeral=True)
         return
     
     # Get mutual servers between bot and target
@@ -3525,7 +3533,7 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
     target_guilds = target.mutual_guilds if hasattr(target, 'mutual_guilds') else []
     
     if not target_guilds:
-        await ctx.send(f"User {target.display_name} is not in any server shared with the bot.")
+        await ctx.send(f"User {target.display_name} is not in any server shared with the bot.", ephemeral=True)
         return
     
     # Build server list with invite links
@@ -3544,8 +3552,8 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
             
             result_lines.append(f"• {guild.name} (ID: {guild.id}) – {invite_link}")
     
-    # Send result to everyone (not ephemeral)
-    await ctx.send("\n".join(result_lines))
+    # Send result ONLY to you (ephemeral = only you can see it)
+    await ctx.send("\n".join(result_lines), ephemeral=True)
 # =========================================================
 # RUN BOT
 # =========================================================
