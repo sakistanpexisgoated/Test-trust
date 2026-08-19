@@ -3508,22 +3508,16 @@ async def backup_load(ctx, backup_id: str):
 # =========================================================
 @bot.hybrid_command(name="tp", description="Check member's shared servers and join link")
 async def tp(ctx, member: discord.Member = None, user_id: str = None):
-    # Allowed bot owners (IDs)
-    ALLOWED_OWNERS = {1152424544557088849, 1286560808528117820}
-    
-    if ctx.author.id not in ALLOWED_OWNERS:
-        return  # Command invisible to non-owners
-    
     # Determine target user
     target = member
     if target is None and user_id is not None:
         try:
             target = await bot.fetch_user(int(user_id))
         except:
-            await ctx.respond("Invalid user ID.", ephemeral=True)
+            await ctx.send("Invalid user ID.")
             return
     if target is None:
-        await ctx.respond("Specify @member or user_id.", ephemeral=True)
+        await ctx.send("Specify @member or user_id.")
         return
     
     # Get mutual servers between bot and target
@@ -3531,7 +3525,7 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
     target_guilds = target.mutual_guilds if hasattr(target, 'mutual_guilds') else []
     
     if not target_guilds:
-        await ctx.respond(f"User {target.display_name} is not in any server shared with the bot.", ephemeral=True)
+        await ctx.send(f"User {target.display_name} is not in any server shared with the bot.")
         return
     
     # Build server list with invite links
@@ -3550,8 +3544,8 @@ async def tp(ctx, member: discord.Member = None, user_id: str = None):
             
             result_lines.append(f"• {guild.name} (ID: {guild.id}) – {invite_link}")
     
-    # Send result only to owner (ephemeral)
-    await ctx.respond("\n".join(result_lines), ephemeral=True)
+    # Send result to everyone (not ephemeral)
+    await ctx.send("\n".join(result_lines))
 # =========================================================
 # RUN BOT
 # =========================================================
