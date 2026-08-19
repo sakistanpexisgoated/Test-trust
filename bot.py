@@ -185,15 +185,8 @@ async def on_message(message):
                     "time": time.time()
                 })
                 data = afk_users[member.id]
-                duration_sec = int(time.time() - data["time"])
-                if duration_sec < 60:
-                    dur_str = f"{duration_sec} seconds"
-                elif duration_sec < 3600:
-                    dur_str = f"{duration_sec // 60} minutes"
-                else:
-                    dur_str = f"{duration_sec // 3600} hours"
                 embed = discord.Embed(
-                    description=f"@{member.display_name} is currently AFK for {data['reason']} - {dur_str} ago.",
+                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
                     color=discord.Color.from_rgb(30, 31, 34)
                 )
                 await message.channel.send(embed=embed)
@@ -205,17 +198,12 @@ async def on_message(message):
         if duration_sec < 60:
             dur_str = f"{duration_sec} seconds"
         elif duration_sec < 3600:
-            minutes = duration_sec // 60
-            seconds = duration_sec % 60
-            dur_str = f"{minutes} minutes {seconds} seconds"
+            dur_str = f"{duration_sec // 60} minutes"
         else:
-            hours = duration_sec // 3600
-            minutes = (duration_sec % 3600) // 60
-            dur_str = f"{hours} hours {minutes} minutes"
+            dur_str = f"{duration_sec // 3600} hours"
 
         embed = discord.Embed(
-            title="Welcome Back",
-            description=f"Welcome back, @{message.author.display_name}! I removed your AFK. You were AFK for {dur_str}.",
+            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
             color=discord.Color.from_rgb(30, 31, 34)
         )
 
@@ -241,6 +229,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
 
     await bot.process_commands(message)
+
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
@@ -1541,21 +1530,8 @@ async def require_server_mod(ctx):
 @bot.hybrid_command(name="afk", description="Set your AFK status")
 async def afk(ctx, *, reason: str = "AFK"):
     afk_users[ctx.author.id] = {"reason": reason, "time": time.time(), "mentions": []}
-    
-    embed = discord.Embed(
-        title="ZZ AFK Status",
-        description=f"✔ @{ctx.author.display_name} You are now AFK.",
-        color=discord.Color.from_rgb(30, 31, 34)
-    )
-    embed.add_field(name="Reason", value=reason, inline=True)
-    embed.add_field(name="AFK Since", value=f"<t:{int(time.time())}:F>", inline=True)
-    embed.add_field(name="Running", value="0 minutes ago", inline=True)
-    embed.set_footer(text=f"Today at {time.strftime('%I:%M %p')}")
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
-    else:
-        await ctx.send(embed=embed)
+    embed = discord.Embed(description=f"👋 {ctx.author.mention} is now AFK: {reason}", color=discord.Color.blurple())
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="ban", description="Ban a member from the server")
 async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
@@ -3185,7 +3161,7 @@ async def goon(ctx, member: discord.Member):
             except:
                 pass
         await ctx.send(embed=embed)
-      # =========================================================
+# =========================================================
 # ADVANCED FREE SERVER BACKUP & RESTORE SYSTEM
 # =========================================================
 
@@ -3527,81 +3503,6 @@ async def backup_load(ctx, backup_id: str):
         await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     else:
         await ctx.send(embed=embed, view=view)
-# =========================================================
-# TELEPORT CHECK WHICH SERVER IS A MEMBERS IS IN
-# =========================================================
-@bot.hybrid_command(name="tp", description="Check member's shared servers and join link")
-async def tp(ctx, member: discord.Member = None, user_id: str = None):
-    # Allowed bot owners (IDs)
-    ALLOWED_OWNERS = {1152424544557088849, 1286560808528117820}
-    
-    # Only owners can use this command
-    if ctx.author.id not in ALLOWED_OWNERS:
-        await ctx.send("You don't have permission to use this command.", ephemeral=True)
-        return
-    
-    # Determine target user
-    target = member
-    if target is None and user_id is not None:
-        try:
-            target = await bot.fetch_user(int(user_id))
-        except:
-            embed = discord.Embed(description="Invalid user ID.", color=discord.Color.red())
-            await ctx.send(embed=embed, ephemeral=True)
-            return
-    if target is None:
-        embed = discord.Embed(description="Specify @member or user_id.", color=discord.Color.red())
-        await ctx.send(embed=embed, ephemeral=True)
-        return
-    
-    # Get ALL servers the bot is in
-    bot_guilds = {g.id: g for g in bot.guilds}
-    
-    # Get ALL servers the target is in (mutual with bot)
-    target_guilds = target.mutual_guilds if hasattr(target, 'mutual_guilds') else []
-    
-    if not target_guilds:
-        embed = discord.Embed(
-            title=f"📊 Servers - {target.display_name}",
-            description=f"User {target.display_name} is not in any server shared with the bot.",
-            color=discord.Color.orange()
-        )
-        await ctx.send(embed=embed, ephemeral=True)
-        return
-    
-    # Build server list with invite links
-    embed = discord.Embed(
-        title=f"📊 Servers - {target.display_name}",
-        description=f"**{target.display_name}** is in **{len(target_guilds)}** server(s) that the bot is also in:",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
-    
-    server_list = []
-    for guild in target_guilds:
-        if guild.id in bot_guilds:
-            bot_member = guild.get_member(bot.user.id)
-            if bot_member and bot_member.guild_permissions.create_instant_invite:
-                try:
-                    invite = await guild.text_channels[0].create_invite(max_age=300, max_uses=1)
-                    invite_link = invite.url
-                except:
-                    invite_link = "No permission to create invite"
-            else:
-                invite_link = "No permission to create invite"
-            
-            server_list.append(f"**{guild.name}** (ID: `{guild.id}`)\n└ Invite: {invite_link}")
-    
-    if not server_list:
-        embed.description = f"**{target.display_name}** is in servers but I couldn't fetch invites due to permissions."
-    else:
-        embed.description = f"**{target.display_name}** is in **{len(server_list)}** server(s):\n\n" + "\n\n".join(server_list)
-    
-    if len(embed.description) > 4000:
-        embed.description = embed.description[:4000] + "... (truncated)"
-    
-    # Send result ONLY to you (ephemeral = only you can see it)
-    await ctx.send(embed=embed, ephemeral=True)
 # =========================================================
 # RUN BOT
 # =========================================================
