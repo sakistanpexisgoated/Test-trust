@@ -185,8 +185,15 @@ async def on_message(message):
                     "time": time.time()
                 })
                 data = afk_users[member.id]
+                duration_sec = int(time.time() - data["time"])
+                if duration_sec < 60:
+                    dur_str = f"{duration_sec} seconds"
+                elif duration_sec < 3600:
+                    dur_str = f"{duration_sec // 60} minutes"
+                else:
+                    dur_str = f"{duration_sec // 3600} hours"
                 embed = discord.Embed(
-                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
+                    description=f"@{member.display_name} is currently AFK for {data['reason']} - {dur_str} ago.",
                     color=discord.Color.from_rgb(30, 31, 34)
                 )
                 await message.channel.send(embed=embed)
@@ -198,12 +205,17 @@ async def on_message(message):
         if duration_sec < 60:
             dur_str = f"{duration_sec} seconds"
         elif duration_sec < 3600:
-            dur_str = f"{duration_sec // 60} minutes"
+            minutes = duration_sec // 60
+            seconds = duration_sec % 60
+            dur_str = f"{minutes} minutes {seconds} seconds"
         else:
-            dur_str = f"{duration_sec // 3600} hours"
+            hours = duration_sec // 3600
+            minutes = (duration_sec % 3600) // 60
+            dur_str = f"{hours} hours {minutes} minutes"
 
         embed = discord.Embed(
-            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
+            title="Welcome Back",
+            description=f"Welcome back, @{message.author.display_name}! I removed your AFK. You were AFK for {dur_str}.",
             color=discord.Color.from_rgb(30, 31, 34)
         )
 
@@ -229,7 +241,6 @@ async def on_message(message):
         await message.channel.send(embed=embed)
 
     await bot.process_commands(message)
-
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
