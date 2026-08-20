@@ -142,6 +142,7 @@ db.commit()
 
 sniped_messages = {}
 edited_messages = {}
+afk_users = {}
 
 troll_settings = {}
 
@@ -202,6 +203,59 @@ async def on_message(message):
         embed.add_field(name="🛡️ Moderation & Utility", value="`afk`, `ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `help`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`, `blacklist`, `serverblacklist`", inline=False)
         await message.channel.send(embed=embed)
         return
+
+    if message.mentions:
+        for member in message.mentions:
+            if member.id in afk_users:
+                afk_users[member.id]["mentions"].append({
+                    "author_name": message.author.display_name,
+                    "content": message.content,
+                    "jump_url": message.jump_url,
+                    "time": time.time()
+                })
+                data = afk_users[member.id]
+                embed = discord.Embed(
+                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
+                    color=discord.Color.from_rgb(30, 31, 34)
+                )
+                await message.channel.send(embed=embed)
+
+    if message.author.id in afk_users:
+        data = afk_users.pop(message.author.id)
+        duration_sec = int(time.time() - data["time"])
+        
+        if duration_sec < 60:
+            dur_str = f"{duration_sec} seconds"
+        elif duration_sec < 3600:
+            dur_str = f"{duration_sec // 60} minutes"
+        else:
+            dur_str = f"{duration_sec // 3600} hours"
+
+        embed = discord.Embed(
+            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
+            color=discord.Color.from_rgb(30, 31, 34)
+        )
+
+        if data["mentions"]:
+            mentions_text = []
+            for m in data["mentions"]:
+                time_ago = int(time.time() - m["time"])
+                if time_ago < 60:
+                    time_str = f"{time_ago} seconds ago"
+                elif time_ago < 3600:
+                    time_str = f"{time_ago // 60} minutes ago"
+                else:
+                    time_str = f"{time_ago // 3600} hours ago"
+                
+                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
+            
+            embed.add_field(
+                name=f"You received {len(data['mentions'])} mention(s)",
+                value="\n\n".join(mentions_text),
+                inline=False
+            )
+
+        await message.channel.send(embed=embed)
 
     await bot.process_commands(message)
 
@@ -634,24 +688,28 @@ class GhostPingControlView(discord.ui.View):
 )
 @app_commands.describe(member="The member to ghost-ping", times="How many times (1-100)", message="Optional message after the mention")
 async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str = ""):
+    # permission / whitelist check
     if not is_troll_whitelisted(ctx.author.id):
         embed = discord.Embed(description="You are not whitelisted to use this troll command.", color=discord.Color.red())
         if ctx.interaction:
             return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
 
+    # sanitize times
     try:
         times = int(times)
     except Exception:
         times = 1
     times = max(1, min(100, times))
 
+    # delete invoking message for prefix usage if possible
     if not ctx.interaction and ctx.message:
         try:
             await ctx.message.delete()
         except Exception:
             pass
 
+    # prepare view + embed
     view = GhostPingControlView(owner_id=ctx.author.id)
     embed = discord.Embed(
         title=f"👻 Ghost pinging {member.display_name} x{times}...",
@@ -660,6 +718,7 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
     )
     embed.set_footer(text="Press Stop to cancel the ghost pings.")
 
+    # Send status: ephemeral for slash, channel message for prefix
     status_msg = None
     if ctx.interaction:
         try:
@@ -674,6 +733,7 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
     else:
         status_msg = await ctx.channel.send(embed=embed, view=view)
 
+    # INTERVAL SET TO 1 SECOND
     delay = 1.0
 
     async def do_send():
@@ -684,14 +744,17 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
                 break
             try:
                 ping_msg = await ctx.channel.send(content)
+                # delete right away (best-effort)
                 try:
                     await ping_msg.delete()
                 except Exception:
                     pass
                 sent += 1
             except Exception:
+                # stop on repeated send failures
                 break
 
+            # update status embed after each sent ping
             try:
                 embed.description = f"Progress: {sent}/{times}"
                 embed.set_footer(text=f"Press Stop to cancel — sent {sent}/{times}")
@@ -699,9 +762,11 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
             except Exception:
                 pass
 
+            # wait 1 second between pings (balances rate and load)
             if i != times - 1:
                 await asyncio.sleep(delay)
 
+        # Finalize status
         if view.stop_event.is_set():
             embed.title = "🛑 Ghost pinging stopped"
             if view.stopped_by:
@@ -1466,45 +1531,70 @@ async def hack(ctx, member: discord.Member):
 
 async def time_sleep_wrapper(seconds):
     await asyncio.sleep(seconds)
-
-# =========================================================
-# AFK COMMAND (Simple plain-text version)
-# =========================================================
-
-@bot.hybrid_command(name="afk", description="Set your AFK status")
-async def afk(ctx, *, reason: str = "AFK"):
-    await ctx.send(f"AFK Set!\nYou are now afk in this server. Reason: **{reason}**")
-
 # =========================================================
 # MODERATOR UI / PERMISSION GATE
 # =========================================================
 
-def _has_mod_perms(member: discord.Member) -> bool:
-    return (
-        member.guild_permissions.administrator or 
-        member.guild_permissions.ban_members or 
-        member.guild_permissions.kick_members or 
-        member.guild_permissions.manage_messages or 
-        member.guild_permissions.manage_roles
-    )
-
 async def require_server_mod(ctx):
-    if not isinstance(ctx.author, discord.Member) or not _has_mod_perms(ctx.author):
-        msg = f"{ctx.author.mention} You are missing Ban perms"
+    if not isinstance(ctx.author, discord.Member) or not _is_server_mod(ctx.author):
+        embed = discord.Embed(
+            title="🛡️ Permission Denied",
+            description="Only **server administrators or moderators** can use this command.",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
             try:
-                await ctx.interaction.followup.send(msg, ephemeral=True)
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             except Exception:
                 pass
         else:
-            await ctx.send(msg)
+            await ctx.send(embed=embed)
         return False
     return True
 
+# =========================================================
+# HELP, MODERATION & UTILITY COMMANDS
+# =========================================================
 
-# =========================================================
-# FAKE MODERATION GROUP (Open to everyone)
-# =========================================================
+@bot.hybrid_command(name="afk", description="Set your AFK status")
+async def afk(ctx, *, reason: str = "AFK"):
+    afk_users[ctx.author.id] = {"reason": reason, "time": time.time(), "mentions": []}
+    embed = discord.Embed(description=f"👋 {ctx.author.mention} is now AFK: {reason}", color=discord.Color.blurple())
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="ban", description="Ban a member from the server")
+async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
+    if not await require_server_mod(ctx):
+        return
+
+    if member.bot and member.id == ctx.bot.user.id:
+        embed = discord.Embed(description="I cannot ban a server bot.", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
+        embed = discord.Embed(description=f"This {member.mention} is higher than me i cant ban/change his roles", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    await member.ban(reason=reason)
+    embed = discord.Embed(description=f"🔨 Successfully banned **{member.display_name}**. Reason: {reason}", color=discord.Color.green())
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="unban", description="Unban a user by ID")
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, user_id: str):
+    try:
+        uid = int(user_id)
+        user = await bot.fetch_user(uid)
+        await ctx.guild.unban(user)
+        embed = discord.Embed(description=f"🎉 Successfully unbanned **{user}**.", color=discord.Color.green())
+        await ctx.send(embed=embed)
+    except Exception:
+        embed = discord.Embed(description="Could not find or unban that user. Check the user ID.", color=discord.Color.red())
+        await ctx.send(embed=embed)
 
 @bot.hybrid_group(name="fake", description="Fake moderation commands")
 async def fake(ctx):
@@ -1512,91 +1602,354 @@ async def fake(ctx):
 
 @fake.command(name="ban", description="Fake-ban a member without actually banning them")
 async def fake_ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
-    await ctx.send(f"Banned {member.name}. Reason: {reason}\nFake ban by {ctx.author.display_name}")
+    if not isinstance(ctx.author, discord.Member) or not _is_server_mod(ctx.author):
+        embed = discord.Embed(
+            title="🛡️ Permission Denied",
+            description="Only **server administrators or moderators** can use this command.",
+            color=discord.Color.red()
+        )
+        return await ctx.send(embed=embed, ephemeral=True)
 
+    embed = discord.Embed(
+        description=f"Banned **{member.display_name}**",
+        color=discord.Color.red()
+    )
+    if reason != "No reason provided":
+        embed.add_field(name="Reason", value=reason, inline=False)
+    embed.set_footer(text=f"Fake ban by {ctx.author.display_name}")
 
-# =========================================================
-# REAL MODERATION COMMANDS
-# =========================================================
-
-@bot.hybrid_command(name="ban", description="Ban a member from the server")
-async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
-    if not await require_server_mod(ctx):
-        return
-    if member.bot and member.id == ctx.bot.user.id:
-        return await ctx.send("I cannot ban a server bot.")
-    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
-        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot ban him.")
-    await member.ban(reason=reason)
-    await ctx.send(f"{member.name} has been banned. Reason: {reason}")
-
-
-@bot.hybrid_command(name="unban", description="Unban a user by ID")
-@commands.has_permissions(ban_members=True)
-async def unban(ctx, user_id: str, *, reason: str = "No reason provided"):
-    try:
-        uid = int(user_id)
-        user = await bot.fetch_user(uid)
-        await ctx.guild.unban(user)
-        await ctx.send(f"{user.name} successfully unbanned. Reason: {reason}")
-    except Exception:
-        await ctx.send("Could not find or unban that user. Check the user ID.")
-
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="kick", description="Kick a member from the server")
 async def kick(ctx, member: discord.Member, *, reason: str = "No reason provided"):
     if not await require_server_mod(ctx):
         return
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
-        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot kick him.")
-    await member.kick(reason=reason)
-    await ctx.send(f"{member.name} has been kicked. Reason: {reason}")
+        embed = discord.Embed(description=f"This {member.mention} is higher than me i cant ban/change his roles", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
 
+    await member.kick(reason=reason)
+    embed = discord.Embed(description=f"Successfully kicked **{member.display_name}**. Reason: {reason}", color=discord.Color.green())
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="mute", description="Mute a member")
 async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str = "No reason provided"):
     if not await require_server_mod(ctx):
         return
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
-        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot mute him.")
+        embed = discord.Embed(description=f"This {member.mention} is higher than me i cant ban/change his roles", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
     seconds = parse_duration(duration)
     if not seconds:
-        return await ctx.send("Invalid duration format. Use e.g. `10s`, `5m`, `2h`, `1d`.")
+        embed = discord.Embed(description="Invalid duration format. Use e.g. `10s`, `5m`, `2h`, `1d`.", color=discord.Color.red())
+        return await ctx.send(embed=embed)
     try:
         await member.timeout(timedelta(seconds=seconds), reason=reason)
-        await ctx.send(f"{member.name} has been muted for {duration}. Reason: {reason}")
+        embed = discord.Embed(description=f"Muted **{member.display_name}** for {duration}. Reason: {reason}", color=discord.Color.green())
+        await ctx.send(embed=embed)
     except Exception as e:
-        await ctx.send(f"Failed to mute member: {e}")
-
+        embed = discord.Embed(description=f"Failed to mute member: {e}", color=discord.Color.red())
+        await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="unmute", description="Remove a member's timeout")
 @commands.has_permissions(manage_roles=True)
 async def unmute(ctx, member: discord.Member):
     try:
         await member.timeout(None, reason=f"Unmuted by {ctx.author}")
-        await ctx.send(f"{member.name} has been unmuted successfully. Unmuted by {ctx.author.display_name}")
+        embed = discord.Embed(
+            title="🔊 Member Unmuted",
+            description=f"**{member.display_name}** has been unmuted successfully.",
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Unmuted by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
     except Exception as e:
-        await ctx.send(f"Unmute Failed: {e}")
-
+        embed = discord.Embed(
+            title="Unmute Failed",
+            description=f"Something went wrong: `{e}`",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="warn", description="Warn a member")
 async def warn(ctx, member: discord.Member, *, reason: str = "No reason provided"):
     if not await require_server_mod(ctx):
         return
-    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
-        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot warn him.")
     cursor.execute("INSERT INTO warnings (user_id, moderator_id, reason) VALUES (?, ?, ?)", (member.id, ctx.author.id, reason))
     db.commit()
-    cursor.execute("SELECT COUNT(*) FROM warnings WHERE user_id = ?", (member.id,))
-    total_warns = cursor.fetchone()[0]
-    await ctx.send(f"{member.name} has been warned. Reason: {reason} (Total warnings: {total_warns})")
-
+    embed = discord.Embed(description=f"⚠️ Warned **{member.display_name}**. Reason: {reason}", color=discord.Color.orange())
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="avatar", description="Show a user's avatar")
 async def avatar(ctx, member: discord.Member = None):
     target = member or ctx.author
     embed = discord.Embed(title=f"{target.display_name}'s Avatar", color=target.color)
     embed.set_image(url=target.display_avatar.url)
+    await ctx.send(embed=embed)
+
+class MarriageRequestView(discord.ui.View):
+    def __init__(self, proposer_id, target_id, action="marry"):
+        super().__init__(timeout=60)
+        self.proposer_id = proposer_id
+        self.target_id = target_id
+        self.action = action
+        self.answered = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.target_id:
+            await interaction.response.send_message("This request isn't for you.", ephemeral=True)
+            return False
+        if self.answered:
+            await interaction.response.send_message("This request has already been answered.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        if self.answered:
+            return
+        self.answered = True
+        for child in self.children:
+            child.disabled = True
+
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅")
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.answered = True
+        for child in self.children:
+            child.disabled = True
+
+        if self.action == "marry":
+            cursor.execute("SELECT * FROM marriages WHERE user1_id = ? OR user2_id = ?", (self.proposer_id, self.proposer_id))
+            if cursor.fetchone():
+                return await interaction.response.edit_message(content="💍 The person who proposed is already married.", view=self)
+            cursor.execute("SELECT * FROM marriages WHERE user1_id = ? OR user2_id = ?", (self.target_id, self.target_id))
+            if cursor.fetchone():
+                return await interaction.response.edit_message(content="💍 You are already married.", view=self)
+            cursor.execute("INSERT INTO marriages (user1_id, user2_id) VALUES (?, ?)", (self.proposer_id, self.target_id))
+            db.commit()
+            embed = discord.Embed(description=f"💍 Congratulations! <@{self.proposer_id}> and <@{self.target_id}> are now married! ❤️", color=discord.Color.from_rgb(255, 105, 180))
+        else:
+            cursor.execute("SELECT * FROM marriages WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)", (self.proposer_id, self.target_id, self.target_id, self.proposer_id))
+            if not cursor.fetchone():
+                return await interaction.response.edit_message(content="👏 You are no longer married to this person.", view=self)
+            cursor.execute("DELETE FROM marriages WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)", (self.proposer_id, self.target_id, self.target_id, self.proposer_id))
+            db.commit()
+            embed = discord.Embed(description=f"💔 <@{self.proposer_id}> and <@{self.target_id}> are now divorced.", color=discord.Color.blurple())
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger, emoji="❌")
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.answered = True
+        for child in self.children:
+            child.disabled = True
+        if self.action == "marry":
+            text = f"💔 <@{self.target_id}> declined <@{self.proposer_id}>'s marriage proposal."
+        else:
+            text = f"❤️ <@{self.target_id}> declined <@{self.proposer_id}>'s divorce request."
+        await interaction.response.edit_message(content=text, view=self)
+
+@bot.hybrid_command(name="marry", description="Ask another user to marry you")
+async def marry(ctx, member: discord.Member):
+    if member.id == ctx.author.id:
+        return await ctx.send(embed=discord.Embed(description="😭 You cannot marry yourself.", color=discord.Color.red()))
+    if member.bot:
+        return await ctx.send(embed=discord.Embed(description="☠️ You cannot marry a bot.", color=discord.Color.red()))
+    cursor.execute("SELECT * FROM marriages WHERE user1_id = ? OR user2_id = ?", (ctx.author.id, ctx.author.id))
+    if cursor.fetchone():
+        return await ctx.send(embed=discord.Embed(description="💍 You are already married!", color=discord.Color.red()))
+    cursor.execute("SELECT * FROM marriages WHERE user1_id = ? OR user2_id = ?", (member.id, member.id))
+    if cursor.fetchone():
+        return await ctx.send(embed=discord.Embed(description=f"🥺 **{member.display_name}** is already married!", color=discord.Color.red()))
+
+    embed = discord.Embed(title="💍 Marriage Proposal", description=f"{ctx.author.mention} wants to marry {member.mention}!\n\n{member.mention}, do you accept?", color=discord.Color.from_rgb(255, 105, 180))
+    embed.set_footer(text="This request expires in 60 seconds.")
+    await ctx.send(embed=embed, view=MarriageRequestView(ctx.author.id, member.id, "marry"))
+
+@bot.hybrid_command(name="divorce", description="Get divorced from your spouse")
+async def divorce(ctx):
+    cursor.execute("SELECT user1_id, user2_id FROM marriages WHERE user1_id = ? OR user2_id = ?", (ctx.author.id, ctx.author.id))
+    row = cursor.fetchone()
+    if not row:
+        return await ctx.send(embed=discord.Embed(description="You are not married to anyone crackhead.", color=discord.Color.red()))
+
+    spouse_id = row[1] if row[0] == ctx.author.id else row[0]
+    cursor.execute(
+        "DELETE FROM marriages WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)",
+        (ctx.author.id, spouse_id, spouse_id, ctx.author.id)
+    )
+    db.commit()
+
+    embed = discord.Embed(
+        title="💔 Divorce",
+        description=f"{ctx.author.mention} filed a divorce and got divorced with <@{spouse_id}>.",
+        color=discord.Color.blurple()
+    )
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="snipe", description="View deleted messages from the channel")
+async def snipe(ctx, amount: int = 1):
+    channel_id = ctx.channel.id
+    if channel_id not in sniped_messages or not sniped_messages[channel_id]:
+        embed = discord.Embed(description="⚠️ There are no deleted messages to snipe in this channel.", color=discord.Color.red())
+        return await ctx.send(embed=embed)
+    
+    messages = sniped_messages[channel_id]
+    count = max(1, min(amount, len(messages)))
+    target_msgs = messages[-count:]
+    target_msgs.reverse()
+
+    embed = discord.Embed(
+        title=f"🎯 Sniped Message(s)",
+        description=f"Showing the last **{count}** deleted message(s) in this channel.",
+        color=discord.Color.from_rgb(47, 49, 54)
+    )
+    
+    for idx, snipe_data in enumerate(target_msgs, 1):
+        content = snipe_data["content"] or "*No text content*"
+        if snipe_data["attachments"]:
+            content += f"\n🔗 **Attachment:** [View File]({snipe_data['attachments'][0]})"
+        
+        author = snipe_data["author"]
+        embed.add_field(
+            name=f"💬 Message #{idx} • {author}",
+            value=f"> {content}",
+            inline=False
+        )
+
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="editsnipe", description="View the last edited message")
+async def editsnipe(ctx):
+    channel_id = ctx.channel.id
+    if channel_id not in edited_messages or not edited_messages[channel_id]:
+        embed = discord.Embed(description="⚠️ There are no edited messages to snipe in this channel.", color=discord.Color.red())
+        return await ctx.send(embed=embed)
+    
+    edit_data = edited_messages[channel_id][-1]
+    embed = discord.Embed(title="Edited Message", color=discord.Color.orange())
+    embed.set_author(name=str(edit_data["author"]), icon_url=edit_data["author"].display_avatar.url)
+    
+    embed.add_field(
+        name=f"┌ 👤 **{edit_data['author']}** (Edited Message)",
+        value=f"├ 🛑 **Before:** {edit_data['before']}\n└ ✅ **After:** {edit_data['after']}",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="poll", description="Create a simple poll")
+@commands.has_permissions(manage_messages=True)
+async def poll(ctx, *, question: str):
+    embed = discord.Embed(title="📊 Poll", description=question, color=discord.Color.blurple())
+    embed.set_footer(text=f"Poll created by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    if ctx.interaction:
+        response_embed = discord.Embed(description="📊 Poll created!", color=discord.Color.green())
+        await ctx.interaction.response.send_message(embed=response_embed, ephemeral=True)
+        msg = await ctx.channel.send(embed=embed)
+    else:
+        if ctx.message:
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        msg = await ctx.send(embed=embed)
+    await msg.add_reaction("👍")
+    await msg.add_reaction("👎")
+
+@bot.hybrid_command(name="say", description="Make the bot say something")
+@commands.has_permissions(manage_messages=True)
+async def say(ctx, *, message: str):
+    if ctx.interaction:
+        await ctx.interaction.response.send_message("Message sent!", ephemeral=True)
+        await ctx.channel.send(message)
+    else:
+        if ctx.message:
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        await ctx.send(message)
+
+@bot.hybrid_command(name="embed", description="Send a custom embed message")
+@commands.has_permissions(manage_messages=True)
+async def custom_embed(ctx, *, content: str):
+    parts = content.split("|")
+    title = parts[0].strip()
+    desc = parts[1].strip() if len(parts) > 1 else ""
+    
+    embed = discord.Embed(title=title, description=desc, color=discord.Color.blurple())
+    if ctx.interaction:
+        response_embed = discord.Embed(description="🤑 Embed sent!", color=discord.Color.green())
+        await ctx.interaction.response.send_message(embed=response_embed, ephemeral=True)
+        await ctx.channel.send(embed=embed)
+    else:
+        if ctx.message:
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        await ctx.send(embed=embed)
+
+def _is_server_mod(member: discord.Member) -> bool:
+    if member.guild_permissions.administrator:
+        return True
+    mod_role_names = {"Moderator", "Admin", "Owner"}
+    return any(role.name in mod_role_names for role in member.roles)
+
+async def _run_purge(ctx, amount: int):
+    if not isinstance(ctx.author, discord.Member) or not _is_server_mod(ctx.author):
+        embed = discord.Embed(
+            title="☠️ Permission Denied",
+            description="Only **server administrators or moderators** can use this command.",
+            color=discord.Color.red()
+        )
+        return await ctx.send(embed=embed, ephemeral=True)
+
+    if amount < 1 or amount > 100:
+        embed = discord.Embed(
+            title="Invalid Amount",
+            description="Choose an amount between **1 and 100** messages.",
+            color=discord.Color.red()
+        )
+        return await ctx.send(embed=embed, ephemeral=True)
+
+    extra = 1 if ctx.message is not None and ctx.interaction is None else 0
+    deleted = await ctx.channel.purge(limit=amount + extra)
+    removed = len(deleted) - extra
+
+    embed = discord.Embed(
+        title="Messages Purged",
+        description=f"Successfully deleted **{removed}** message(s) from this channel.",
+        color=discord.Color.green()
+    )
+    embed.set_footer(text=f"Purged by {ctx.author.display_name}")
+    await ctx.send(embed=embed, delete_after=5)
+
+@bot.hybrid_command(name="clear", description="Clear a number of messages")
+async def clear(ctx, amount: int):
+    await _run_purge(ctx, amount)
+
+@bot.hybrid_command(name="purge", description="Mass-delete messages (Admin/Moderator only)")
+async def purge(ctx, amount: int):
+    await _run_purge(ctx, amount)
+
+@bot.hybrid_command(name="slowmode", description="Set channel slowmode")
+@commands.has_permissions(manage_channels=True)
+async def slowmode(ctx, seconds: int):
+    if seconds < 0:
+        embed = discord.Embed(description="Seconds cannot be negative.", color=discord.Color.red())
+        return await ctx.send(embed=embed)
+    await ctx.channel.edit(slowmode_delay=seconds)
+    if seconds == 0:
+        embed = discord.Embed(description="Slowmode has been disabled.", color=discord.Color.green())
+    else:
+        embed = discord.Embed(description=f"Slowmode has been set to **{seconds} seconds**.", color=discord.Color.green())
     await ctx.send(embed=embed)
 
 # =========================================================
@@ -2095,9 +2448,8 @@ async def setup(ctx, style: str = "┃"):
         await interaction.followup.send(success_text, ephemeral=True)
     else:
         await ctx.send(success_text)
-
 # =========================================================
-# GUESS A NUMBER COMMAND & UI
+# GUESS A NUMBER COMMAND & UI - FIXED WITH PROPER BOT GUESSING
 # =========================================================
 
 guess_number_games = {}
@@ -2418,6 +2770,7 @@ class GuessModal(discord.ui.Modal, title="Enter Your Guess"):
         remaining_secs = max(0, 200 - elapsed)
         remaining_time = f"{remaining_secs // 60}:{remaining_secs % 60:02d}"
 
+        # Send "Bot's turn" message
         turn_embed = discord.Embed(
             description="🤖 **Bot's turn!**",
             color=discord.Color.blurple()
@@ -2459,23 +2812,25 @@ async def guess(ctx):
     modal = BetModal()
     if ctx.interaction:
         await ctx.interaction.response.send_modal(modal)
-
-# ---------- GIVEAWAY ----------
+   # ---------- GIVEAWAY (button entry) + REROLL SUPPORT (paste this block) ----------
 from typing import List
 
 @bot.hybrid_group(name="giveaway", description="Giveaway commands")
 async def giveaway_group(ctx):
     pass
 
+# Persistent entry view (button has a fixed custom_id so we can re-register the view on startup)
 class GiveawayEntryView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # persistent view
 
     @discord.ui.button(label="Enter Giveaway 🎉", style=discord.ButtonStyle.primary, custom_id="giveaway_enter")
     async def enter_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Quick guard
         if interaction.user.bot:
             return await interaction.response.send_message("Bots can't join giveaways.", ephemeral=True)
 
+        # Ack immediately so Discord doesn't show "didn't respond in time"
         try:
             await interaction.response.send_message("✅ You've been entered into the giveaway! Good luck!", ephemeral=True)
         except Exception:
@@ -2484,6 +2839,7 @@ class GiveawayEntryView(discord.ui.View):
             except Exception:
                 pass
 
+        # Do DB work in background to avoid blocking interaction
         async def do_join(message_id: int, user_id: int):
             try:
                 cursor.execute("SELECT entrants FROM giveaways WHERE message_id = ?", (message_id,))
@@ -2502,7 +2858,9 @@ class GiveawayEntryView(discord.ui.View):
                 cursor.execute("UPDATE giveaways SET entrants = ? WHERE message_id = ?", (json.dumps(entrants), message_id))
                 db.commit()
 
+                # Best-effort: update the giveaway embed Entrants field
                 try:
+                    # fetch channel id from DB
                     cursor.execute("SELECT channel_id FROM giveaways WHERE message_id = ?", (message_id,))
                     chrow = cursor.fetchone()
                     if chrow:
@@ -2525,6 +2883,7 @@ class GiveawayEntryView(discord.ui.View):
             except Exception:
                 pass
 
+        # use interaction.message.id as the giveaway message id
         message_id = interaction.message.id if interaction.message else None
         if message_id:
             bot.loop.create_task(do_join(message_id, interaction.user.id))
@@ -2538,6 +2897,12 @@ async def giveaway_create(
     prize: str,
     channel: discord.TextChannel = None
 ):
+    """
+    duration: e.g. 1h, 30m, 2h, 1d
+    winners: number of winners (int)
+    prize: prize string
+    channel: optional channel (defaults to current channel)
+    """
     if ctx.guild is None:
         return await ctx.send(embed=discord.Embed(description="This command must be used in a server.", color=discord.Color.red()))
     if not ctx.author.guild_permissions.manage_guild and ctx.author.id not in OWNER_IDS:
@@ -2555,6 +2920,7 @@ async def giveaway_create(
     if target_channel.guild.id != ctx.guild.id:
         return await ctx.send(embed=discord.Embed(description="Channel must be in this server.", color=discord.Color.red()))
 
+    # Ensure giveaways table exists (entrants and winners_list stored as JSON text)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS giveaways (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2592,12 +2958,14 @@ async def giveaway_create(
     except Exception as e:
         return await ctx.send(embed=discord.Embed(description=f"Failed to post giveaway: {e}", color=discord.Color.red()))
 
+    # Persist giveaway (store host_id; entrants/winners_list empty)
     cursor.execute(
         "INSERT INTO giveaways (message_id, channel_id, guild_id, prize, host_id, end_time, winners, entrants, winners_list) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (giveaway_msg.id, target_channel.id, ctx.guild.id, prize, ctx.author.id, end_ts, winners, json.dumps([]), json.dumps([]))
     )
     db.commit()
 
+    # Add Entrants field to embed
     try:
         embed.add_field(name="Entrants", value="0", inline=True)
         await giveaway_msg.edit(embed=embed, view=view)
@@ -2610,13 +2978,16 @@ async def giveaway_create(
     else:
         await ctx.send(embed=confirm, delete_after=10)
 
+    # Spawn background task (pass host id)
     bot.loop.create_task(_handle_giveaway_end(giveaway_msg.id, target_channel.id, ctx.guild.id, prize, winners, end_ts, ctx.author.id))
 
 
 async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, prize: str, winners_count: int, end_time_unix: int, host_id: int):
+    # Sleep until giveaway end (handles negative/late cases)
     wait_for = max(0, end_time_unix - int(time.time()))
     await asyncio.sleep(wait_for)
 
+    # Try to fetch channel and message
     try:
         channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
     except Exception:
@@ -2627,6 +2998,7 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
     except Exception:
         return
 
+    # Load entrants from DB
     cursor.execute("SELECT entrants, winners_list FROM giveaways WHERE message_id = ?", (message_id,))
     row = cursor.fetchone()
     entrants: List[int] = []
@@ -2641,6 +3013,7 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
         except Exception:
             previous_winners = []
 
+    # Decide winners
     winner_mentions = "None"
     winners = []
     if not entrants:
@@ -2651,6 +3024,7 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
         winners = random.sample(entrants, k=pick_count)
         winner_mentions = ", ".join(f"<@{w}>" for w in winners)
 
+        # Record winners (overwrite winners_list to current winners)
         cursor.execute("UPDATE giveaways SET winners_list = ? WHERE message_id = ?", (json.dumps(winners), message_id))
         db.commit()
 
@@ -2662,6 +3036,7 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
         result_embed.add_field(name="Host", value=f"<@{host_id}>", inline=True)
         result_embed.add_field(name="Entrants", value=str(len(entrants)), inline=True)
 
+        # DM winners with requested message
         for uid in winners:
             try:
                 user = await bot.fetch_user(uid)
@@ -2672,6 +3047,7 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
 
         await channel.send(embed=result_embed)
 
+    # Edit original giveaway message to mark ended and disable the button
     try:
         if message.embeds:
             ended_embed = message.embeds[0]
@@ -2683,9 +3059,18 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
     except Exception:
         pass
 
+    # Do NOT delete DB row so host can reroll later. If you want auto-delete, uncomment the lines below:
+    # cursor.execute("DELETE FROM giveaways WHERE message_id = ?", (message_id,))
+    # db.commit()
+
 
 @giveaway_group.command(name="reroll", description="Reroll winners for a giveaway by message ID (host only)")
 async def giveaway_reroll(ctx, message_id: int, count: int = 1):
+    """
+    Example: ,,giveaway reroll 123456789012345678 1
+    Only the host or bot owners can reroll.
+    count: how many new winners to pick (default 1)
+    """
     cursor.execute("SELECT channel_id, prize, host_id, entrants, winners_list FROM giveaways WHERE message_id = ?", (message_id,))
     row = cursor.fetchone()
     if not row:
@@ -2707,6 +3092,7 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
     if not entrants:
         return await ctx.send(embed=discord.Embed(description="No entrants to pick from.", color=discord.Color.orange()))
 
+    # Build pool excluding previous winners if possible
     pool = [u for u in entrants if u not in previous_winners]
     if not pool:
         pool = entrants.copy()
@@ -2714,10 +3100,12 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
     pick_count = max(1, min(count, len(pool)))
     new_winners = random.sample(pool, k=pick_count)
 
+    # Update winners_list (append new winners to previous list)
     updated_winners = previous_winners + new_winners
     cursor.execute("UPDATE giveaways SET winners_list = ? WHERE message_id = ?", (json.dumps(updated_winners), message_id))
     db.commit()
 
+    # Announce new winner(s) in original channel and DM them
     try:
         channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
         mentions = ", ".join(f"<@{w}>" for w in new_winners)
@@ -2734,6 +3122,7 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
 
         await channel.send(embed=reroll_embed)
 
+        # DM each new winner with the requested DM format
         for uid in new_winners:
             try:
                 user = await bot.fetch_user(uid)
@@ -2742,6 +3131,7 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
             except Exception:
                 pass
 
+        # Also append reroll winners to original giveaway message (best-effort)
         try:
             original_msg = await channel.fetch_message(message_id)
             if original_msg and original_msg.embeds:
@@ -2754,9 +3144,10 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
         await ctx.send(embed=discord.Embed(description=f"Rerolled — new winner(s): {mentions}", color=discord.Color.green()))
     except Exception as e:
         await ctx.send(embed=discord.Embed(description=f"Failed to announce reroll: {e}", color=discord.Color.red()))
+# ---------- END GIVEAWAY BLOCK ----------
 
 # =========================================================
-# SYNC COMMAND
+# SYNC COMMAND - FIX SLASH COMMANDS
 # =========================================================
 
 @bot.hybrid_command(name="sync", description="Force sync slash commands")
@@ -2799,7 +3190,630 @@ async def goon(ctx, member: discord.Member):
             except:
                 pass
         await ctx.send(embed=embed)
+      # =========================================================
+# ADVANCED FREE SERVER BACKUP & RESTORE SYSTEM
+# =========================================================
 
+import io
+import json
+import discord
+from discord.ext import commands
+from discord.ui import View, Select
+
+server_backups = {}
+
+# --- VIEW CLASSES FOR INTERACTIVE MENUS ---
+
+class RestoreSelectView(View):
+    def __init__(self, ctx, backup_data):
+        super().__init__(timeout=180)
+        self.ctx = ctx
+        self.backup_data = backup_data
+        self.selected_options = ["Delete Roles", "Delete Channels", "Load Roles", "Load Channels", "Load Settings", "Load Messages"]
+
+        # Add interactive dropdown matching the layout in your screenshots
+        self.select = Select(
+            placeholder="Select options to load from backup...",
+            min_values=1,
+            max_values=6,
+            options=[
+                discord.SelectOption(label="Delete Roles", value="Delete Roles", default=True, description="Wipes current non-managed roles"),
+                discord.SelectOption(label="Delete Channels", value="Delete Channels", default=True, description="Wipes current server channels"),
+                discord.SelectOption(label="Load Roles", value="Load Roles", default=True, description="Recreates roles with exact permissions & colors"),
+                discord.SelectOption(label="Load Channels", value="Load Channels", default=True, description="Recreates categories, text, and voice channels"),
+                discord.SelectOption(label="Load Settings", value="Load Settings", default=True, description="Restores server name, icon, and region settings"),
+                discord.SelectOption(label="Load Messages", value="Load Messages", default=True, description="Restores backed-up messages into channels")
+            ]
+        )
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        if interaction.user != self.ctx.author:
+            return await interaction.response.send_message("This menu isn't for you!", ephemeral=True)
+        self.selected_options = self.select.values
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Continue", style=discord.ButtonStyle.green)
+    async def continue_button(self, interaction: discord.Interaction, button: discord.Button):
+        if interaction.user != self.ctx.author:
+            return await interaction.response.send_message("This menu isn't for you!", ephemeral=True)
+        
+        # Move to confirmation step view
+        confirm_view = ConfirmRestoreView(self.ctx, self.backup_data, self.selected_options)
+        
+        roles_up = "will be updated" if "Load Roles" in self.selected_options else "will be skipped"
+        ch_del = len(self.ctx.guild.channels) if "Delete Channels" in self.selected_options else 0
+        ch_cre = len(self.backup_data["channels"]) if "Load Channels" in self.selected_options else 0
+
+        embed = discord.Embed(
+            title="⚠️ Warning",
+            description=(
+                "**Hey, be careful!** The following actions will be taken on this server and **can not be undone**:\n\n"
+                f"• **1** roles {roles_up}\n"
+                f"• **{ch_del}** channels will be **deleted**\n"
+                f"• **{ch_cre}** channels will be created\n"
+                f"• Server settings will {'be updated' if 'Load Settings' in self.selected_options else 'remain unchanged'}"
+            ),
+            color=discord.Color.gold()
+        )
+        await interaction.response.edit_message(embed=embed, view=confirm_view)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.Button):
+        if interaction.user != self.ctx.author:
+            return await interaction.response.send_message("This menu isn't for you!", ephemeral=True)
+        embed = discord.Embed(title="❌ Restore Cancelled", description="Server restoration was aborted safely.", color=discord.Color.red())
+        await interaction.response.edit_message(embed=embed, view=None)
+
+
+class ConfirmRestoreView(View):
+    def __init__(self, ctx, backup_data, options):
+        super().__init__(timeout=180)
+        self.ctx = ctx
+        self.backup_data = backup_data
+        self.options = options
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
+    async def confirm_button(self, interaction: discord.Interaction, button: discord.Button):
+        if interaction.user != self.ctx.author:
+            return await interaction.response.send_message("This menu isn't for you!", ephemeral=True)
+
+        guild = self.ctx.guild
+        await interaction.response.edit_message(embed=discord.Embed(title="♻️ Restoring Server...", description="Processing backup payload. Please wait...", color=discord.Color.blue()), view=None)
+
+        try:
+            # 1. Server Settings
+            if "Load Settings" in self.options:
+                try:
+                    await guild.edit(name=self.backup_data.get("name", guild.name))
+                except Exception:
+                    pass
+
+            # 2. Delete Channels
+            if "Delete Channels" in self.options:
+                for channel in guild.channels:
+                    try:
+                        await channel.delete(reason="Server Restore: Wiping old channels")
+                        await asyncio.sleep(0.2)
+                    except Exception:
+                        pass
+
+            # 3. Delete Roles
+            if "Delete Roles" in self.options:
+                for role in guild.roles:
+                    if role != guild.default_role and not role.managed and role < guild.me.top_role:
+                        try:
+                            await role.delete(reason="Server Restore: Wiping old roles")
+                            await asyncio.sleep(0.2)
+                        except Exception:
+                            pass
+
+            # 4. Load Roles
+            role_mapping = {} # old_name -> new_role object
+            if "Load Roles" in self.options:
+                for r_data in self.backup_data["roles"]:
+                    try:
+                        new_role = await guild.create_role(
+                            name=r_data["name"],
+                            color=discord.Color(r_data["color"]),
+                            permissions=discord.Permissions(r_data["permissions"]),
+                            hoist=r_data["hoist"],
+                            mentionable=r_data["mentionable"],
+                            reason="Server Restore: Restoring role"
+                        )
+                        role_mapping[r_data["name"]] = new_role
+                        await asyncio.sleep(0.2)
+                    except Exception:
+                        pass
+
+            # 5. Load Channels & Categories
+            category_mapping = {} # old_category_name -> new category object
+            channel_mapping = {} # old_channel_name -> new channel object
+
+            if "Load Channels" in self.options:
+                # First pass: Create categories
+                for c_data in self.backup_data["channels"]:
+                    if c_data["type"] == "category":
+                        try:
+                            new_cat = await guild.create_category(name=c_data["name"], position=c_data["position"])
+                            category_mapping[c_data["name"]] = new_cat
+                            channel_mapping[c_data["name"]] = new_cat
+                            await asyncio.sleep(0.3)
+                        except Exception:
+                            pass
+
+                # Second pass: Create text & voice channels inside categories
+                for c_data in self.backup_data["channels"]:
+                    if c_data["type"] == "text":
+                        cat = category_mapping.get(c_data["category"]) if c_data["category"] else None
+                        try:
+                            new_ch = await guild.create_text_channel(name=c_data["name"], category=cat, position=c_data["position"])
+                            channel_mapping[c_data["name"]] = new_ch
+                            await asyncio.sleep(0.3)
+                        except Exception:
+                            pass
+                    elif c_data["type"] == "voice":
+                        cat = category_mapping.get(c_data["category"]) if c_data["category"] else None
+                        try:
+                            new_ch = await guild.create_voice_channel(name=c_data["name"], category=cat, position=c_data["position"])
+                            channel_mapping[c_data["name"]] = new_ch
+                            await asyncio.sleep(0.3)
+                        except Exception:
+                            pass
+
+            # 6. Load Messages
+            if "Load Messages" in self.options and "messages" in self.backup_data:
+                for ch_name, msgs in self.backup_data["messages"].items():
+                    target_ch = channel_mapping.get(ch_name)
+                    if target_ch and isinstance(target_ch, discord.TextChannel):
+                        # Reverse to send oldest messages first
+                        for m in reversed(msgs):
+                            try:
+                                author_tag = m["author"]
+                                content = f"**[Backup Archive] {author_tag}:** {m['content']}"
+                                
+                                # Include attachments or embeds text notation if present
+                                if m.get("attachments"):
+                                    content += "\n" + "\n".join(m["attachments"])
+                                    
+                                await target_ch.send(content)
+                                await asyncio.sleep(0.5)
+                            except Exception:
+                                pass
+
+            success_embed = discord.Embed(
+                title="✅ Success",
+                description="Server restoration completed successfully with all layouts, styles, and settings copied perfectly!",
+                color=discord.Color.green()
+            )
+            await self.ctx.send(embed=success_embed)
+
+        except Exception as e:
+            err_embed = discord.Embed(title="❌ Error", description=f"An error occurred during restoration: `{e}`", color=discord.Color.red())
+            await self.ctx.send(embed=err_embed)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.Button):
+        if interaction.user != self.ctx.author:
+            return await interaction.response.send_message("This menu isn't for you!", ephemeral=True)
+        await interaction.response.edit_message(embed=discord.Embed(title="❌ Cancelled", description="Restoration cancelled.", color=discord.Color.red()), view=None)
+
+
+# --- COMMANDS ---
+
+@bot.hybrid_group(name="backup", description="Server backup management commands")
+async def backup(ctx):
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Use `/backup create`, `/backup info`, or `/backup load`.", ephemeral=True)
+
+@backup.command(name="create", description="Create a backup of this server (channels, roles, settings, and messages)")
+async def backup_create(ctx, message_count: int = 25):
+    if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
+        return await ctx.send("Only the server owner can create backups.", ephemeral=True)
+
+    guild = ctx.guild
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+
+    # Generate unique backup ID tag
+    import random, string, datetime
+    backup_id = "".join(random.choices(string.ascii_uppercase + string.digits, k=11))
+    
+    # Backup channels
+    channels_data = []
+    for c in sorted(guild.channels, key=lambda x: x.position):
+        channels_data.append({
+            "name": c.name,
+            "type": str(c.type),
+            "category": c.category.name if c.category else None,
+            "position": c.position
+        })
+
+    # Backup roles
+    roles_data = []
+    for r in guild.roles:
+        if r != guild.default_role and not r.managed:
+            roles_data.append({
+                "name": r.name,
+                "color": r.color.value,
+                "permissions": r.permissions.value,
+                "hoist": r.hoist,
+                "mentionable": r.mentionable
+            })
+
+    # Backup messages if requested
+    messages_data = {}
+    if message_count > 0:
+        for channel in guild.text_channels:
+            try:
+                ch_msgs = []
+                async for message in channel.history(limit=message_count):
+                    ch_msgs.append({
+                        "author": str(message.author),
+                        "content": message.content,
+                        "attachments": [att.url for att in message.attachments]
+                    })
+                if ch_msgs:
+                    messages_data[channel.name] = ch_msgs
+            except Exception:
+                pass
+
+    server_backups[backup_id] = {
+        "name": guild.name,
+        "channels": channels_data,
+        "roles": roles_data,
+        "messages": messages_data,
+        "created_at": datetime.datetime.now().strftime("%d. %b %Y - %H:%M")
+    }
+
+    date_str = datetime.datetime.now().strftime("%d. %b %Y - %H:%M")
+    backup_label = f"{guild.name} | {date_str} ({backup_id})"
+
+    embed = discord.Embed(
+        title="✅ Success",
+        description=(
+            f"Successfully **created backup** with the id `{backup_id}`.\n\n"
+            f"This backup contains full server settings, channels, roles, and message archives!\n\n"
+            f"**Usage**\n"
+            f"`/backup info backup_id: {backup_id}`\n"
+            f"`/backup load backup_id: {backup_id}`"
+        ),
+        color=discord.Color.green()
+    )
+
+    if ctx.interaction:
+        await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+    else:
+        await ctx.send(embed=embed)
+
+
+@backup.command(name="info", description="View details of a specific backup id")
+async def backup_info(ctx, backup_id: str):
+    bdata = server_backups.get(backup_id)
+    if not bdata:
+        return await ctx.send("❌ No backup found with that ID.", ephemeral=True)
+
+    embed = discord.Embed(
+        title=f"📦 Backup Info: {backup_id}",
+        description=(
+            f"**Server Name:** {bdata['name']}\n"
+            f"**Created At:** {bdata['created_at']}\n"
+            f"**Channels Saved:** {len(bdata['channels'])}\n"
+            f"**Roles Saved:** {len(bdata['roles'])}\n"
+            f"**Message Archives:** {len(bdata['messages'])} channels archived"
+        ),
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed, ephemeral=True)
+
+
+@backup.command(name="load", description="Load and restore a backup into the current server")
+async def backup_load(ctx, backup_id: str):
+    if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
+        return await ctx.send("Only the server owner can load backups.", ephemeral=True)
+
+    bdata = server_backups.get(backup_id)
+    if not bdata:
+        return await ctx.send("❌ Invalid backup ID or backup does not exist.", ephemeral=True)
+
+    embed = discord.Embed(
+        title="⚠️ Warning",
+        description=(
+            "**What do you want to load from the backup?**\n\n"
+            "Select below what actions you would like to perform. In the next menu, "
+            "you will be able to see a detailed list of changes before continuing."
+        ),
+        color=discord.Color.gold()
+    )
+
+    view = RestoreSelectView(ctx, bdata)
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    else:
+        await ctx.send(embed=embed, view=view)
+        # =========================================================
+# DYNAMIC WELCOME BANNER GENERATOR & EVENT SYSTEM
+# =========================================================
+
+import io
+from PIL import Image, ImageDraw, ImageOps, ImageFont
+import discord
+from discord.ext import commands
+
+# Storage for welcomer channels and toggle status per guild
+welcomer_settings = {} # {guild_id: {"channel_id": int, "enabled": bool}}
+
+def generate_welcome_card(avatar_bytes, username, guild_name, member_count):
+    # Create dark banner matching your style
+    width, height = 700, 250
+    banner = Image.new("RGBA", (width, height), (15, 15, 15, 255))
+    draw = ImageDraw.Draw(banner)
+
+    # Draw border outline
+    draw.rectangle([10, 10, width - 10, height - 10], outline=(255, 255, 255, 255), width=3)
+
+    # Process user avatar into a circle
+    avatar_size = 150
+    avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+    avatar_img = avatar_img.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
+    
+    # Make circular mask
+    mask = Image.new("L", (avatar_size, avatar_size), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.ellipse((0, 0, avatar_size, avatar_size), fill=255)
+    
+    # Apply circular mask and white border ring around avatar
+    circular_avatar = Image.new("RGBA", (avatar_size, avatar_size), (0, 0, 0, 0))
+    circular_avatar.paste(avatar_img, (0, 0), mask=mask)
+
+    ring_size = avatar_size + 10
+    ring = Image.new("RGBA", (ring_size, ring_size), (0, 0, 0, 0))
+    ring_draw = ImageDraw.Draw(ring)
+    ring_draw.ellipse((0, 0, ring_size, ring_size), fill=(255, 255, 255, 255))
+    
+    # Paste avatar inside white ring
+    ring.paste(circular_avatar, (5, 5), mask=circular_avatar)
+    
+    # Paste onto main banner at position (45, 50)
+    banner.paste(ring, (45, 50), mask=ring)
+
+    # Add text details
+    try:
+        font_large = ImageFont.truetype("arial.ttf", 24)
+        font_small = ImageFont.truetype("arial.ttf", 18)
+    except IOError:
+        font_large = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+
+    text_x = 220
+    draw.text((text_x, 90), f"Welcome {username}", fill=(255, 255, 255, 255), font=font_large)
+    draw.text((text_x, 130), f"to {guild_name} server you are the {member_count}th member!", fill=(255, 255, 255, 255), font=font_small)
+
+    # Save to binary buffer
+    output = io.BytesIO()
+    banner.save(output, format="PNG")
+    output.seek(0)
+    return output
+
+
+# --- EVENTS ---
+
+@bot.event
+async def on_member_join(member):
+    guild_id = member.guild.id
+    settings = welcomer_settings.get(guild_id)
+    
+    if not settings or not settings.get("enabled"):
+        return
+
+    channel_id = settings.get("channel_id")
+    channel = member.guild.get_channel(channel_id)
+    if not channel:
+        return
+
+    try:
+        # Fetch user's avatar asset bytes
+        avatar_asset = member.avatar or member.default_avatar
+        avatar_bytes = await avatar_asset.read()
+        
+        # Generate card image
+        card_io = generate_welcome_card(
+            avatar_bytes=avatar_bytes,
+            username=member.name,
+            guild_name=member.guild.name,
+            member_count=member.guild.member_count
+        )
+
+        file = discord.File(card_io, filename="welcome.png")
+        await channel.send(file=file)
+    except Exception as e:
+        print(f"Failed to send welcome card: {e}")
+
+
+# --- COMMANDS ---
+
+@bot.hybrid_group(name="welcomer", description="Configure server welcome cards")
+async def welcomer(ctx):
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Use `/welcomer enable`, `/welcomer setchannel`, or `/welcomer test`.", ephemeral=True)
+
+@welcomer.command(name="enable", description="Enable automated welcome cards for new members")
+async def welcomer_enable(ctx):
+    if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
+        return await ctx.send("Only the server owner can configure the welcomer.", ephemeral=True)
+    
+    if ctx.guild.id not in welcomer_settings:
+        welcomer_settings[ctx.guild.id] = {"channel_id": ctx.channel.id, "enabled": True}
+    else:
+        welcomer_settings[ctx.guild.id]["enabled"] = True
+
+    await ctx.send("Enabled welcomer images. Run `/welcomer test` to see the message that is sent.", ephemeral=True)
+
+@welcomer.command(name="setchannel", description="Set the text channel where welcome cards are sent")
+async def welcomer_setchannel(ctx, channel: discord.TextChannel):
+    if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
+        return await ctx.send("Only the server owner can configure the welcomer.", ephemeral=True)
+    
+    if ctx.guild.id not in welcomer_settings:
+        welcomer_settings[ctx.guild.id] = {"channel_id": channel.id, "enabled": True}
+    else:
+        welcomer_settings[ctx.guild.id]["channel_id"] = channel.id
+
+    await ctx.send(f"Set welcomer channel to: {channel.mention}. Run `/welcomer test` to see the message that is sent.", ephemeral=True)
+
+@welcomer.command(name="test", description="Test the welcome card layout using your own account")
+async def welcomer_test(ctx):
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+
+    try:
+        avatar_asset = ctx.author.avatar or ctx.author.default_avatar
+        avatar_bytes = await avatar_asset.read()
+
+        card_io = generate_welcome_card(
+            avatar_bytes=avatar_bytes,
+            username=ctx.author.name,
+            guild_name=ctx.guild.name,
+            member_count=ctx.guild.member_count
+        )
+
+        file = discord.File(card_io, filename="welcome.png")
+        
+        if ctx.interaction:
+            await ctx.interaction.followup.send("Executed successfully", ephemeral=True)
+            await ctx.channel.send(file=file)
+        else:
+            await ctx.send("Executed successfully")
+            await ctx.send(file=file)
+    except Exception as e:
+        err_msg = f"Error generating test card: {e}"
+        if ctx.interaction:
+            await ctx.interaction.followup.send(err_msg, ephemeral=True)
+        else:
+            await ctx.send(err_msg)
+# =========================================================
+# NITRO / BOOST ANNOUNCEMENT SYSTEM (Server Owners Only)
+# =========================================================
+
+@bot.hybrid_command(name="nitro", description="Send a custom server boost / nitro announcement message")
+@app_commands.describe(
+    action="Choose whether to send the live announcement or run a test",
+    channel="The channel to send the message in"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="msg", value="msg"),
+    app_commands.Choice(name="test", value="test")
+])
+@commands.has_guild_permissions(administrator=True)
+async def nitro(ctx, action: str, channel: discord.TextChannel = None):
+    # Ensure a channel is provided
+    target_channel = channel or ctx.channel
+
+    # Build the professional Nitro/Boost Embed
+    embed = discord.Embed(
+        title="🎉 NEW SERVER BOOST! 🎉",
+        description=(
+            f"Thank you for supporting **{ctx.guild.name}**! "
+            f"Your boost helps us unlock higher audio quality, more custom emoji slots, and better perks for everyone."
+        ),
+        color=discord.Color.from_rgb(244, 127, 255) # Nitro Pink
+    )
+    embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+    embed.set_footer(text=f"Triggered by {ctx.author}", icon_url=ctx.author.display_avatar.url)
+    embed.timestamp = discord.utils.utcnow()
+
+    # Handle the 'test' action vs live 'msg' action
+    if action == "test":
+        test_embed = discord.Embed(
+            title="🛠️ NITRO MESSAGE TEST PREVIEW",
+            description=f"This is a test preview of the nitro announcement destined for {target_channel.mention}.",
+            color=discord.Color.orange()
+        )
+        test_embed.add_field(name="Target Channel", value=target_channel.mention, inline=False)
+        test_embed.add_field(name="Embed Preview Below:", value="👇", inline=False)
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embeds=[test_embed, embed], ephemeral=True)
+        else:
+            if ctx.message:
+                try:
+                    await ctx.message.delete()
+                except Exception:
+                    pass
+            await ctx.send(embeds=[test_embed, embed], delete_after=20)
+        return
+
+    # Handle live 'msg' action
+    if action == "msg":
+        try:
+            await target_channel.send(embed=embed)
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(f"✅ Successfully sent the nitro announcement to {target_channel.mention}!", ephemeral=True)
+            else:
+                if ctx.message:
+                    try:
+                        await ctx.message.delete()
+                    except Exception:
+                        pass
+                confirmation = await ctx.send(f"✅ Successfully sent to {target_channel.mention}!")
+                await asyncio.sleep(5)
+                try:
+                    await confirmation.delete()
+                except Exception:
+                    pass
+        except discord.Forbidden:
+            error_msg = f"❌ I do not have permission to send messages in {target_channel.mention}."
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(error_msg, ephemeral=True)
+            else:
+                await ctx.send(error_msg)
+                @bot.slash_command(name="tp", description="Check member's shared servers and join link")
+async def tp(ctx, member: discord.Member = None, user_id: str = None):
+    # Allowed bot owners (IDs)
+    ALLOWED_OWNERS = {1152424544557088849, 1286560808528117820}
+    
+    if ctx.author.id not in ALLOWED_OWNERS:
+        return  # Command invisible to non-owners
+    
+    # Determine target user
+    target = member
+    if target is None and user_id is not None:
+        try:
+            target = await bot.fetch_user(int(user_id))
+        except:
+            await ctx.respond("Invalid user ID.", ephemeral=True)
+            return
+    if target is None:
+        await ctx.respond("Specify @member or user_id.", ephemeral=True)
+        return
+    
+    # Get mutual servers between bot and target
+    bot_guilds = {g.id: g for g in bot.guilds}
+    target_guilds = target.mutual_guilds if hasattr(target, 'mutual_guilds') else []
+    
+    if not target_guilds:
+        await ctx.respond(f"User {target.display_name} is not in any server shared with the bot.", ephemeral=True)
+        return
+    
+    # Build server list with invite links
+    result_lines = [f"**Servers where {target.display_name} is present:**"]
+    for guild in target_guilds:
+        if guild.id in bot_guilds:
+            bot_member = guild.get_member(bot.user.id)
+            if bot_member and bot_member.guild_permissions.create_instant_invite:
+                try:
+                    invite = await guild.text_channels[0].create_invite(max_age=300, max_uses=1)
+                    invite_link = invite.url
+                except:
+                    invite_link = "No permission to create invite"
+            else:
+                invite_link = "No permission to create invite"
+            
+            result_lines.append(f"• {guild.name} (ID: {guild.id}) – {invite_link}")
+    
+    # Send result only to owner (ephemeral)
+    await ctx.respond("\n".join(result_lines), ephemeral=True)
 # =========================================================
 # RUN BOT
 # =========================================================
