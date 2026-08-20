@@ -2805,7 +2805,6 @@ async def guess(ctx):
         await ctx.interaction.response.send_modal(modal)
 
 # ---------- GIVEAWAY (button entry) + REROLL SUPPORT ----------
-from typing import List
 
 @bot.hybrid_group(name="giveaway", description="Giveaway commands")
 async def giveaway_group(ctx):
@@ -3170,10 +3169,6 @@ async def goon(ctx, member: discord.Member):
 # ADVANCED FREE SERVER BACKUP & RESTORE SYSTEM
 # =========================================================
 
-import io
-import json
-import discord
-from discord.ext import commands
 from discord.ui import View, Select
 
 # --- VIEW CLASSES FOR INTERACTIVE MENUS ---
