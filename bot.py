@@ -40,35 +40,6 @@ bot = commands.Bot(
     intents=intents,
     help_command=None
 )
-
-@bot.command(name="sync", description="Sync slash commands")
-@commands.has_permissions(administrator=True)
-async def sync(ctx):
-    try:
-        synced = await bot.tree.sync()
-        await ctx.send(f"✅ Successfully synced {len(synced)} slash command(s) globally!")
-    except Exception as e:
-        await ctx.send(f"❌ Failed to sync commands: `{e}`")
-    try:
-        bot.add_view(GiveawayEntryView())
-        print("Registered GiveawayEntryView for persistent buttons.")
-    except Exception as e:
-        print("Failed to add giveaway view:", e)
-
-    try:
-        now_ts = int(time.time())
-        cursor.execute(
-            "SELECT message_id, channel_id, guild_id, prize, winners, end_time, host_id FROM giveaways WHERE end_time > ?",
-            (now_ts,)
-        )
-        rows = cursor.fetchall()
-        for row in rows:
-            message_id, channel_id, guild_id, prize, winners, end_time, host_id = row
-            asyncio.create_task(_handle_giveaway_end(message_id, channel_id, guild_id, prize, winners, int(end_time), host_id))
-        if rows:
-            print(f"Resumed {len(rows)} pending giveaway(s).")
-    except Exception as e:
-        print("Error scheduling pending giveaways:", e)
 # =========================================================
 # DATABASE SETUP
 # =========================================================
