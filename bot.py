@@ -6,6 +6,7 @@ import random
 import sqlite3
 import asyncio
 from datetime import timedelta
+from typing import List
 
 import discord
 from discord import app_commands
@@ -99,6 +100,21 @@ CREATE TABLE IF NOT EXISTS troll_whitelist (
 )
 """)
 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS giveaways (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER,
+    channel_id INTEGER,
+    guild_id INTEGER,
+    prize TEXT,
+    host_id INTEGER,
+    end_time REAL,
+    winners INTEGER,
+    entrants TEXT DEFAULT '[]',
+    winners_list TEXT DEFAULT '[]'
+)
+""")
+
 for _owner_id in OWNER_IDS:
     cursor.execute(
         "INSERT OR IGNORE INTO troll_whitelist (user_id, added_by) VALUES (?, ?)",
@@ -117,11 +133,22 @@ afk_users = {}
 
 troll_settings = {}
 
+server_backups = {}
+
 def is_troll_whitelisted(user_id):
     if user_id in OWNER_IDS:
         return True
     cursor.execute("SELECT 1 FROM troll_whitelist WHERE user_id = ?", (user_id,))
     return cursor.fetchone() is not None
+
+async def time_sleep_wrapper(seconds):
+    await asyncio.sleep(seconds)
+
+def _is_server_mod(member: discord.Member) -> bool:
+    if member.guild_permissions.administrator:
+        return True
+    mod_role_names = {"Moderator", "Admin", "Owner"}
+    return any(role.name in mod_role_names for role in member.roles)
 
 @bot.event
 async def on_message_delete(message):
@@ -1500,8 +1527,6 @@ async def hack(ctx, member: discord.Member):
     embed.color = discord.Color.green()
     await msg.edit(embed=embed)
 
-async def time_sleep_wrapper(seconds):
-    await asyncio.sleep(seconds)
 # =========================================================
 # MODERATOR UI / PERMISSION GATE
 # =========================================================
@@ -1866,12 +1891,6 @@ async def custom_embed(ctx, *, content: str):
             except Exception:
                 pass
         await ctx.send(embed=embed)
-
-def _is_server_mod(member: discord.Member) -> bool:
-    if member.guild_permissions.administrator:
-        return True
-    mod_role_names = {"Moderator", "Admin", "Owner"}
-    return any(role.name in mod_role_names for role in member.roles)
 
 async def _run_purge(ctx, amount: int):
     if not isinstance(ctx.author, discord.Member) or not _is_server_mod(ctx.author):
@@ -2419,6 +2438,7 @@ async def setup(ctx, style: str = "┃"):
         await interaction.followup.send(success_text, ephemeral=True)
     else:
         await ctx.send(success_text)
+
 # =========================================================
 # GUESS A NUMBER COMMAND & UI - FIXED WITH PROPER BOT GUESSING
 # =========================================================
@@ -2783,7 +2803,8 @@ async def guess(ctx):
     modal = BetModal()
     if ctx.interaction:
         await ctx.interaction.response.send_modal(modal)
-   # ---------- GIVEAWAY (button entry) + REROLL SUPPORT (paste this block) ----------
+
+# ---------- GIVEAWAY (button entry) + REROLL SUPPORT ----------
 from typing import List
 
 @bot.hybrid_group(name="giveaway", description="Giveaway commands")
@@ -2890,23 +2911,6 @@ async def giveaway_create(
     target_channel = channel or ctx.channel
     if target_channel.guild.id != ctx.guild.id:
         return await ctx.send(embed=discord.Embed(description="Channel must be in this server.", color=discord.Color.red()))
-
-    # Ensure giveaways table exists (entrants and winners_list stored as JSON text)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS giveaways (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        message_id INTEGER,
-        channel_id INTEGER,
-        guild_id INTEGER,
-        prize TEXT,
-        host_id INTEGER,
-        end_time REAL,
-        winners INTEGER,
-        entrants TEXT DEFAULT '[]',
-        winners_list TEXT DEFAULT '[]'
-    )
-    """)
-    db.commit()
 
     end_ts = int(time.time() + seconds)
     end_ts_discord = f"<t:{end_ts}:R>"
@@ -3161,7 +3165,8 @@ async def goon(ctx, member: discord.Member):
             except:
                 pass
         await ctx.send(embed=embed)
-      # =========================================================
+
+# =========================================================
 # ADVANCED FREE SERVER BACKUP & RESTORE SYSTEM
 # =========================================================
 
@@ -3170,8 +3175,6 @@ import json
 import discord
 from discord.ext import commands
 from discord.ui import View, Select
-
-server_backups = {}
 
 # --- VIEW CLASSES FOR INTERACTIVE MENUS ---
 
