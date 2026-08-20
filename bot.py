@@ -1386,10 +1386,7 @@ async def roast(ctx, member1: discord.Member = None, member2: discord.Member = N
     for target in targets:
         selected_roast = random.choice(roasts)
         lines.append(f"🔥 {target.mention} {selected_roast}")
-
-    embed = discord.Embed(description="\n".join(lines), color=discord.Color.red())
-    await ctx.send(embed=embed)
-
+        
 @bot.hybrid_command(name="iq", description="Check someone's IQ score")
 async def iq(ctx, member: discord.Member = None):
     target = member or ctx.author
