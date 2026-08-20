@@ -40,6 +40,7 @@ bot = commands.Bot(
     intents=intents,
     help_command=None
 )
+
 # =========================================================
 # DATABASE SETUP
 # =========================================================
@@ -605,28 +606,24 @@ class GhostPingControlView(discord.ui.View):
 )
 @app_commands.describe(member="The member to ghost-ping", times="How many times (1-100)", message="Optional message after the mention")
 async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str = ""):
-    # permission / whitelist check
     if not is_troll_whitelisted(ctx.author.id):
         embed = discord.Embed(description="You are not whitelisted to use this troll command.", color=discord.Color.red())
         if ctx.interaction:
             return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
 
-    # sanitize times
     try:
         times = int(times)
     except Exception:
         times = 1
     times = max(1, min(100, times))
 
-    # delete invoking message for prefix usage if possible
     if not ctx.interaction and ctx.message:
         try:
             await ctx.message.delete()
         except Exception:
             pass
 
-    # prepare view + embed
     view = GhostPingControlView(owner_id=ctx.author.id)
     embed = discord.Embed(
         title=f"👻 Ghost pinging {member.display_name} x{times}...",
@@ -635,7 +632,6 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
     )
     embed.set_footer(text="Press Stop to cancel the ghost pings.")
 
-    # Send status: ephemeral for slash, channel message for prefix
     status_msg = None
     if ctx.interaction:
         try:
@@ -650,7 +646,6 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
     else:
         status_msg = await ctx.channel.send(embed=embed, view=view)
 
-    # INTERVAL SET TO 1 SECOND
     delay = 1.0
 
     async def do_send():
@@ -661,17 +656,14 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
                 break
             try:
                 ping_msg = await ctx.channel.send(content)
-                # delete right away (best-effort)
                 try:
                     await ping_msg.delete()
                 except Exception:
                     pass
                 sent += 1
             except Exception:
-                # stop on repeated send failures
                 break
 
-            # update status embed after each sent ping
             try:
                 embed.description = f"Progress: {sent}/{times}"
                 embed.set_footer(text=f"Press Stop to cancel — sent {sent}/{times}")
@@ -679,11 +671,9 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
             except Exception:
                 pass
 
-            # wait 1 second between pings (balances rate and load)
             if i != times - 1:
                 await asyncio.sleep(delay)
 
-        # Finalize status
         if view.stop_event.is_set():
             embed.title = "🛑 Ghost pinging stopped"
             if view.stopped_by:
@@ -1357,7 +1347,10 @@ async def roast(ctx, member1: discord.Member = None, member2: discord.Member = N
     for target in targets:
         selected_roast = random.choice(roasts)
         lines.append(f"🔥 {target.mention} {selected_roast}")
-        
+
+    embed = discord.Embed(description="\n".join(lines), color=discord.Color.red())
+    await ctx.send(embed=embed)
+
 @bot.hybrid_command(name="iq", description="Check someone's IQ score")
 async def iq(ctx, member: discord.Member = None):
     target = member or ctx.author
@@ -1452,7 +1445,6 @@ async def time_sleep_wrapper(seconds):
 
 @bot.hybrid_command(name="afk", description="Set your AFK status")
 async def afk(ctx, *, reason: str = "AFK"):
-    # Simple, plain-text response exactly like Apollo bot
     await ctx.send(f"AFK Set!\nYou are now afk in this server. Reason: **{reason}**")
 
 # =========================================================
@@ -2398,7 +2390,6 @@ class GuessModal(discord.ui.Modal, title="Enter Your Guess"):
         remaining_secs = max(0, 200 - elapsed)
         remaining_time = f"{remaining_secs // 60}:{remaining_secs % 60:02d}"
 
-        # Send "Bot's turn" message
         turn_embed = discord.Embed(
             description="🤖 **Bot's turn!**",
             color=discord.Color.blurple()
@@ -2780,6 +2771,7 @@ async def goon(ctx, member: discord.Member):
             except:
                 pass
         await ctx.send(embed=embed)
+
 # =========================================================
 # RUN BOT
 # =========================================================
