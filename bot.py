@@ -1482,22 +1482,17 @@ async def time_sleep_wrapper(seconds):
 # =========================================================
 
 async def require_server_mod(ctx):
-    if not isinstance(ctx.author, discord.Member) or not _is_server_mod(ctx.author):
-        embed = discord.Embed(
-            title="🛡️ Permission Denied",
-            description="Only **server administrators or moderators** can use this command.",
-            color=discord.Color.red()
-        )
+    if not isinstance(ctx.author, discord.Member) or not _has_mod_perms(ctx.author):
+        msg = f"{ctx.author.mention} You are missing Ban perms"
         if ctx.interaction:
             try:
-                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 pass
         else:
-            await ctx.send(embed=embed)
+            await ctx.send(msg)
         return False
     return True
-
 # =========================================================
 # HELP, MODERATION & UTILITY COMMANDS
 # =========================================================
@@ -1509,127 +1504,95 @@ async def afk(ctx, *, reason: str = "AFK"):
 
 @bot.hybrid_command(name="ban", description="Ban a member from the server")
 async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
+    # 1. Normal user check
     if not await require_server_mod(ctx):
         return
 
+    # 2. Self-ban / Bot ban
     if member.bot and member.id == ctx.bot.user.id:
-        embed = discord.Embed(description="I cannot ban a server bot.", color=discord.Color.red())
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
+        return await ctx.send("I cannot ban a server bot.")
 
+    # 3. Higher role check
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
-        embed = discord.Embed(description=f"This {member.mention} is higher than me i cant ban/change his roles", color=discord.Color.red())
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
+        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot ban him.")
 
+    # Success
     await member.ban(reason=reason)
-    embed = discord.Embed(description=f"🔨 Successfully banned **{member.display_name}**. Reason: {reason}", color=discord.Color.green())
-    await ctx.send(embed=embed)
-
+    await ctx.send(f"{member.name} has been banned. Reason: {reason}")
+    
 @bot.hybrid_command(name="unban", description="Unban a user by ID")
 @commands.has_permissions(ban_members=True)
-async def unban(ctx, user_id: str):
+async def unban(ctx, user_id: str, *, reason: str = "No reason provided"):
     try:
         uid = int(user_id)
         user = await bot.fetch_user(uid)
         await ctx.guild.unban(user)
-        embed = discord.Embed(description=f"🎉 Successfully unbanned **{user}**.", color=discord.Color.green())
-        await ctx.send(embed=embed)
+        await ctx.send(f"{user.name} successfully unbanned. Reason: {reason}")
     except Exception:
-        embed = discord.Embed(description="Could not find or unban that user. Check the user ID.", color=discord.Color.red())
-        await ctx.send(embed=embed)
+        await ctx.send("Could not find or unban that user. Check the user ID.")
 
 @bot.hybrid_group(name="fake", description="Fake moderation commands")
 async def fake(ctx):
     pass
-
+    
 @fake.command(name="ban", description="Fake-ban a member without actually banning them")
 async def fake_ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
-    if not isinstance(ctx.author, discord.Member) or not _is_server_mod(ctx.author):
-        embed = discord.Embed(
-            title="🛡️ Permission Denied",
-            description="Only **server administrators or moderators** can use this command.",
-            color=discord.Color.red()
-        )
-        return await ctx.send(embed=embed, ephemeral=True)
-
-    embed = discord.Embed(
-        description=f"Banned **{member.display_name}**",
-        color=discord.Color.red()
-    )
-    if reason != "No reason provided":
-        embed.add_field(name="Reason", value=reason, inline=False)
-    embed.set_footer(text=f"Fake ban by {ctx.author.display_name}")
-
-    await ctx.send(embed=embed)
-
+    # No permission checks, no role hierarchy checks. Anyone can use it on anyone.
+    await ctx.send(f"Banned {member.name}. Reason: {reason}\nTotally Real trust {ctx.author.display_name}")
+    
 @bot.hybrid_command(name="kick", description="Kick a member from the server")
 async def kick(ctx, member: discord.Member, *, reason: str = "No reason provided"):
     if not await require_server_mod(ctx):
         return
+
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
-        embed = discord.Embed(description=f"This {member.mention} is higher than me i cant ban/change his roles", color=discord.Color.red())
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
+        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot kick him.")
 
     await member.kick(reason=reason)
-    embed = discord.Embed(description=f"Successfully kicked **{member.display_name}**. Reason: {reason}", color=discord.Color.green())
-    await ctx.send(embed=embed)
-
+    await ctx.send(f"{member.name} has been kicked. Reason: {reason}")
+    
 @bot.hybrid_command(name="mute", description="Mute a member")
 async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str = "No reason provided"):
     if not await require_server_mod(ctx):
         return
+
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
-        embed = discord.Embed(description=f"This {member.mention} is higher than me i cant ban/change his roles", color=discord.Color.red())
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
+        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot mute him.")
 
     seconds = parse_duration(duration)
     if not seconds:
-        embed = discord.Embed(description="Invalid duration format. Use e.g. `10s`, `5m`, `2h`, `1d`.", color=discord.Color.red())
-        return await ctx.send(embed=embed)
+        return await ctx.send("Invalid duration format. Use e.g. `10s`, `5m`, `2h`, `1d`.")
     try:
         await member.timeout(timedelta(seconds=seconds), reason=reason)
-        embed = discord.Embed(description=f"Muted **{member.display_name}** for {duration}. Reason: {reason}", color=discord.Color.green())
-        await ctx.send(embed=embed)
+        await ctx.send(f"{member.name} has been muted for {duration}. Reason: {reason}")
     except Exception as e:
-        embed = discord.Embed(description=f"Failed to mute member: {e}", color=discord.Color.red())
-        await ctx.send(embed=embed)
-
+        await ctx.send(f"Failed to mute member: {e}")
+        
 @bot.hybrid_command(name="unmute", description="Remove a member's timeout")
 @commands.has_permissions(manage_roles=True)
 async def unmute(ctx, member: discord.Member):
     try:
         await member.timeout(None, reason=f"Unmuted by {ctx.author}")
-        embed = discord.Embed(
-            title="🔊 Member Unmuted",
-            description=f"**{member.display_name}** has been unmuted successfully.",
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Unmuted by {ctx.author.display_name}")
-        await ctx.send(embed=embed)
+        await ctx.send(f"{member.name} has been unmuted successfully. Unmuted by {ctx.author.display_name}")
     except Exception as e:
-        embed = discord.Embed(
-            title="Unmute Failed",
-            description=f"Something went wrong: `{e}`",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed)
+        await ctx.send(f"Unmute Failed: {e}")
 
 @bot.hybrid_command(name="warn", description="Warn a member")
 async def warn(ctx, member: discord.Member, *, reason: str = "No reason provided"):
     if not await require_server_mod(ctx):
         return
+
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
+        return await ctx.send(f"{ctx.author.mention} {member.mention} is higher than you, you cannot warn him.")
+
     cursor.execute("INSERT INTO warnings (user_id, moderator_id, reason) VALUES (?, ?, ?)", (member.id, ctx.author.id, reason))
     db.commit()
-    embed = discord.Embed(description=f"⚠️ Warned **{member.display_name}**. Reason: {reason}", color=discord.Color.orange())
-    await ctx.send(embed=embed)
 
+    cursor.execute("SELECT COUNT(*) FROM warnings WHERE user_id = ?", (member.id,))
+    total_warns = cursor.fetchone()[0]
+
+    await ctx.send(f"{member.name} has been warned. Reason: {reason} (Total warnings: {total_warns})")
+    
 @bot.hybrid_command(name="avatar", description="Show a user's avatar")
 async def avatar(ctx, member: discord.Member = None):
     target = member or ctx.author
