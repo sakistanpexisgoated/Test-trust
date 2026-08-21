@@ -3730,6 +3730,149 @@ async def memes(ctx):
         return
     
     await ctx.send(random.choice(meme_list))
+    
+country_flags = {
+    "easy": [
+        {"name": "United States", "flag": "🇺🇸"},
+        {"name": "Canada", "flag": "🇨🇦"},
+        {"name": "United Kingdom", "flag": "🇬🇧"},
+        {"name": "Germany", "flag": "🇩🇪"},
+        {"name": "France", "flag": "🇫🇷"},
+        {"name": "Italy", "flag": "🇮🇹"},
+        {"name": "Spain", "flag": "🇪🇸"},
+        {"name": "Portugal", "flag": "🇵🇹"},
+        {"name": "Netherlands", "flag": "🇳🇱"},
+        {"name": "Belgium", "flag": "🇧🇪"},
+    ],
+    "medium": [
+        {"name": "Brazil", "flag": "🇧🇷"},
+        {"name": "Argentina", "flag": "🇦🇷"},
+        {"name": "Mexico", "flag": "🇲🇽"},
+        {"name": "Australia", "flag": "🇦🇺"},
+        {"name": "New Zealand", "flag": "🇳🇿"},
+        {"name": "South Africa", "flag": "🇿🇦"},
+        {"name": "Egypt", "flag": "🇪🇬"},
+        {"name": "Nigeria", "flag": "🇳🇬"},
+        {"name": "Kenya", "flag": "🇰🇪"},
+        {"name": "Ghana", "flag": "🇬🇭"},
+    ],
+    "hard": [
+        {"name": "Kazakhstan", "flag": "🇰🇿"},
+        {"name": "Uzbekistan", "flag": "🇺🇿"},
+        {"name": "Azerbaijan", "flag": "🇦🇿"},
+        {"name": "Armenia", "flag": "🇦🇲"},
+        {"name": "Georgia", "flag": "🇬🇪"},
+        {"name": "Mongolia", "flag": "🇲🇳"},
+        {"name": "Nepal", "flag": "🇳🇵"},
+        {"name": "Sri Lanka", "flag": "🇱🇰"},
+        {"name": "Myanmar", "flag": "🇲🇲"},
+        {"name": "Cambodia", "flag": "🇰🇭"},
+    ]
+}
+
+active_games = {}
+
+class CountryGuessView(discord.ui.View):
+    def __init__(self, country_data, difficulty, player_id, timeout=30):
+        super().__init__(timeout=timeout)
+        self.country_data = country_data
+        self.difficulty = difficulty
+        self.player_id = player_id
+        self.answered = False
+        
+        # Shuffle and pick 4 wrong answers
+        pool = [c for c in country_flags[difficulty] if c["name"] != country_data["name"]]
+        import random
+        wrong = random.sample(pool, min(3, len(pool)))
+        options = wrong + [country_data]
+        random.shuffle(options)
+        
+        for opt in options:
+            btn = discord.ui.Button(
+                label=opt["name"],
+                style=discord.ButtonStyle.primary,
+                custom_id=opt["name"]
+            )
+            btn.callback = self.make_callback(opt["name"])
+            self.add_item(btn)
+    
+    def make_callback(self, name):
+        async def callback(interaction: discord.Interaction):
+            if interaction.user.id != self.player_id:
+                await interaction.response.send_message("❌ Not your game!", ephemeral=True)
+                return
+            if self.answered:
+                await interaction.response.send_message("⏳ This round is already over!", ephemeral=True)
+                return
+            
+            self.answered = True
+            correct = self.country_data["name"]
+            
+            if name == correct:
+                await interaction.response.edit_message(
+                    content=f"✅ {interaction.user.mention} **got it right!** 🎉",
+                    view=None
+                )
+                await asyncio.sleep(1)
+                await interaction.delete_original_response()
+                await start_new_round(interaction.channel, self.difficulty, self.player_id)
+            else:
+                await interaction.response.send_message(
+                    f"❌ {interaction.user.mention} you didn't get it right. Try again!",
+                    ephemeral=True
+                )
+                # Reset answered to allow retry
+                self.answered = False
+                # Reset timer by re-sending? Better to keep existing view.
+        return callback
+    
+    async def on_timeout(self):
+        if not self.answered:
+            await self.message.edit(
+                content=f"⏰ Time's up! The flag was **{self.country_data['name']}** {self.country_data['flag']}",
+                view=None
+            )
+
+async def start_new_round(channel, difficulty, player_id):
+    import random
+    country = random.choice(country_flags[difficulty])
+    view = CountryGuessView(country, difficulty, player_id)
+    msg = await channel.send(
+        f"🇺🇳 **Guess the country!** {country['flag']}\n"
+        f"Difficulty: **{difficulty.upper()}** | 30 seconds to answer!",
+        view=view
+    )
+    view.message = msg
+
+@bot.hybrid_command(name="country", description="Start a country flag guessing game")
+async def country(ctx):
+    view = discord.ui.View(timeout=60)
+    
+    async def difficulty_callback(interaction: discord.Interaction, diff: str):
+        if interaction.user.id != ctx.author.id:
+            await interaction.response.send_message("❌ Not your game!", ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content=f"🎯 Starting **{diff.upper()}** mode! Get ready...",
+            view=None
+        )
+        await asyncio.sleep(1)
+        await start_new_round(ctx.channel, diff, ctx.author.id)
+    
+    for diff in ["easy", "medium", "hard"]:
+        btn = discord.ui.Button(
+            label=diff.capitalize(),
+            style=discord.ButtonStyle.success if diff == "easy" else discord.ButtonStyle.primary if diff == "medium" else discord.ButtonStyle.danger,
+            custom_id=diff
+        )
+        btn.callback = lambda i, d=diff: difficulty_callback(i, d)
+        view.add_item(btn)
+    
+    await ctx.send(
+        "🌍 **Country Flag Guessing Game**\n"
+        "Select your difficulty:",
+        view=view
+    )
 # =========================================================
 # RUN BOT
 # =========================================================
