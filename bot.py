@@ -3701,14 +3701,15 @@ async def nuke(interaction: discord.Interaction):
 async def memes(ctx):
     import random
     meme_list = [
-        "https://cdn.tenor.com/cuDVH1OeyIQAAAAC/flight-burping.gif",
-        "https://cdn.tenor.com/mAuO3q1eAkOAAAAC/ishowspeed-dance.gif",
+        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZncyZ3YzanY3YmVqcDc2NzI0Zm1wNTloZnRmYmJxcTAyYXlkemlqYiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s5wFafpHxqKbIEERl9/giphy.gif",
+        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWtucnBobGJlMzZ4YTZrOHZ5ejdncjN3dWYxM3VyN3k4NGxqdnUwOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/HAi4i45T0pAdGERov4/giphy.gif",
         "https://media.giphy.com/media/1rPynGFeM7zcvMwm4k/giphy.gif",
-        "https://cdn.tenor.com/iwIIhakbP3YAAAAC/tenor.gif",
-        "https://cdn.tenor.com/cuwllnVvePwAAAAC/tenor.gif",
-        "https://cdn.tenor.com/bkqBWYygrnMAAAAC/tenor.gif"
+        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZmQzZHd3eWM1ZncwcGk3ZTEzajgxeHZ5bXNqbjhkeHJ6ZjlsZzAxciZlcD12MV9naWZzX3NlYXJjaCZjdD1n/DMVPvOIRovYfc2jYMO/giphy.gif",
+        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZmQzZHd3eWM1ZncwcGk3ZTEzajgxeHZ5bXNqbjhkeHJ6ZjlsZzAxciZlcD12MV9naWZzX3NlYXJjaCZjdD1n/gbwNUZEPU58BscyIqO/giphy.gif",
+        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExODM1M2lqd3I0eHhuYTd3NjdrMTFoOGNscW8zYzgxM2N6ZXdldnh2ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/0SH6U6rfZaUGKWElMi/giphy.gif",
+        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExODM1M2lqd3I0eHhuYTd3NjdrMTFoOGNscW8zYzgxM2N6ZXdldnh2ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/4mLMHnkZUBgyCA9Smb/giphy.gif"
     ]
-    special = "https://cdn.tenor.com/dsMfUIZkAbaAAAAC/tenor.gif"
+    special = "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3a2Z4djFjNHA2MWh0YWp1d2M2MzBjOXJ6MTRhMjl2eXlicmRmaDg3eCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/9KzYVEbsWoIJJawG0Y/giphy.gif"
     
     if random.random() < 0.10:
         await ctx.send(special)
