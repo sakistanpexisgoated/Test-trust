@@ -3696,9 +3696,7 @@ async def nuke(interaction: discord.Interaction):
         return await interaction.response.send_message(embed=embed, ephemeral=True)
     
     await interaction.response.send_modal(NukeModal())
-# =========================================================
-# MEMEMS 
-# =========================================================
+
 MEME_DICT = {
     "flight": "https://tenor.com/cuDVH1OeyIQ.gif",
     "dance": "https://tenor.com/mAuO3q1eAkO.gif",
@@ -3711,19 +3709,20 @@ MEME_DICT = {
 SPECIAL_MEME = "https://tenor.com/dsMfUIZkAba.gif"
 SPECIAL_CHANCE = 0.10
 
-@bot.tree.command(name="memes", description="Get a random meme GIF")
-async def memes(interaction: discord.Interaction):
+@bot.hybrid_command(name="memes", description="Get a random meme GIF")
+async def memes(ctx):
+    import random
     if random.random() < SPECIAL_CHANCE:
         embed = discord.Embed(title="🎉 SPECIAL MEME!", color=0xff0000)
         embed.set_image(url=SPECIAL_MEME)
-        await interaction.response.send_message(embed=embed)
+        await ctx.send(embed=embed)
         return
     
     tag = random.choice(list(MEME_DICT.keys()))
     embed = discord.Embed(title="Random Meme", color=0x2b2d31)
     embed.set_image(url=MEME_DICT[tag])
     embed.set_footer(text=f"Tag: {tag}")
-    await interaction.response.send_message(embed=embed)
+    await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
