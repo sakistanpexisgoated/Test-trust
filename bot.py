@@ -4049,7 +4049,6 @@ async def country(ctx):
     await start_country_setup(ctx.channel, ctx.author.id)
 # =========================================================
 # FOOTBALL CARDS SYSTEM - ADD THIS BEFORE bot.run(TOKEN)
-# Requires: import json, import random, import asyncio (already imported)
 # =========================================================
 
 # --- DATABASE TABLES ---
@@ -4077,11 +4076,11 @@ CREATE TABLE IF NOT EXISTS football_packs (
 )
 """)
 
-# Default pack types
-cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('bronze', 500, 3, '{"common":0.7,"rare":0.25,"epic":0.04,"legendary":0.01}')")
-cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('silver', 1500, 5, '{"common":0.4,"rare":0.35,"epic":0.2,"legendary":0.05}')")
-cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('gold', 5000, 7, '{"common":0.15,"rare":0.35,"epic":0.35,"legendary":0.15}')")
-cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('legendary', 20000, 10, '{"common":0.05,"rare":0.15,"epic":0.35,"legendary":0.45}')")
+# Default pack types - FIXED SYNTAX WITH SINGLE QUOTES AROUND JSON
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('bronze', 500, 3, '{\"common\":0.7,\"rare\":0.25,\"epic\":0.04,\"legendary\":0.01}')")
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('silver', 1500, 5, '{\"common\":0.4,\"rare\":0.35,\"epic\":0.2,\"legendary\":0.05}')")
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('gold', 5000, 7, '{\"common\":0.15,\"rare\":0.35,\"epic\":0.35,\"legendary\":0.15}')")
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('legendary', 20000, 10, '{\"common\":0.05,\"rare\":0.15,\"epic\":0.35,\"legendary\":0.45}')")
 db.commit()
 
 FOOTBALL_CHANNEL = {}  # guild_id -> channel_id
@@ -4167,7 +4166,6 @@ def open_pack(user_id, pack_type):
                 chosen_rarity = rarity
                 break
         
-        # Filter players by rarity
         pool = [p for p in FOOTBALL_PLAYERS if p["rarity"] == chosen_rarity]
         if not pool:
             pool = [p for p in FOOTBALL_PLAYERS if p["rarity"] == "common"]
@@ -4216,7 +4214,6 @@ async def spawn(ctx):
             await ctx.send(embed=embed)
         return
     
-    # Cooldown: 5 minutes between spawns
     last_spawn = FOOTBALL_SPAWN_COOLDOWN.get(guild_id, 0)
     if time.time() - last_spawn < 300:
         remaining = int(300 - (time.time() - last_spawn))
@@ -4232,7 +4229,6 @@ async def spawn(ctx):
     
     FOOTBALL_SPAWN_COOLDOWN[guild_id] = time.time()
     
-    # Pick random player
     player = random.choice(FOOTBALL_PLAYERS)
     color = RARITY_COLORS.get(player["rarity"], 0x808080)
     
@@ -4247,7 +4243,6 @@ async def spawn(ctx):
     if channel:
         await channel.send(embed=embed)
         
-        # Store spawn for collection
         global current_spawn
         current_spawn = {"guild_id": guild_id, "player": player, "claimed_by": None, "claimed_at": None}
         
@@ -4421,7 +4416,6 @@ async def collection(ctx, member: discord.Member = None):
         color=discord.Color.blue()
     )
     
-    # Show top 10 cards
     top_cards = get_top_cards(target.id, 10)
     card_list = []
     for card in top_cards:
@@ -4454,7 +4448,6 @@ async def debate(ctx, member: discord.Member):
             await ctx.send(embed=embed)
         return
     
-    # Get top cards for both
     p1_cards = get_top_cards(ctx.author.id, 3)
     p2_cards = get_top_cards(member.id, 3)
     
@@ -4469,7 +4462,6 @@ async def debate(ctx, member: discord.Member):
             await ctx.send(embed=embed)
         return
     
-    # Calculate debate score
     p1_score = sum(card[6] for card in p1_cards) + len(p1_cards) * 2
     p2_score = sum(card[6] for card in p2_cards) + len(p2_cards) * 2
     
@@ -4557,7 +4549,6 @@ async def trade(ctx, member: discord.Member):
             await ctx.send(embed=embed)
         return
     
-    # Create trade view
     view = TradeView(ctx.author.id, member.id)
     embed = discord.Embed(
         title="🔄 Trade Request",
@@ -4619,7 +4610,6 @@ class TradeView(discord.ui.View):
         p1_cards = get_player_cards(self.proposer_id)
         p2_cards = get_player_cards(self.target_id)
         
-        # Update select options
         self.proposer_select.options = [
             discord.SelectOption(
                 label=f"{card[2]} ({card[5].upper()}) - {card[6]} OVR",
@@ -4675,8 +4665,6 @@ class TradeView(discord.ui.View):
             self.accepted = True
             await interaction.response.send_message("✅ Trade accepted by one party. Waiting for the other to accept...", ephemeral=True)
             
-            # Check if both accepted (track via view state)
-            # For simplicity, we just execute after 2 accepts
             embed = discord.Embed(
                 title="✅ Trade Finalized!",
                 description="Both parties have accepted the trade!",
@@ -4684,19 +4672,16 @@ class TradeView(discord.ui.View):
             )
             await interaction.message.edit(embed=embed, view=None)
             
-            # Execute trade
             if self.proposer_selected:
                 cursor.execute("DELETE FROM football_cards WHERE id = ? AND user_id = ?", (self.proposer_selected, self.proposer_id))
             if self.target_selected:
                 cursor.execute("DELETE FROM football_cards WHERE id = ? AND user_id = ?", (self.target_selected, self.target_id))
             
-            # Swap cards
             if self.proposer_selected:
                 cursor.execute("UPDATE football_cards SET user_id = ? WHERE id = ?", (self.target_id, self.proposer_selected))
             if self.target_selected:
                 cursor.execute("UPDATE football_cards SET user_id = ? WHERE id = ?", (self.proposer_id, self.target_selected))
             
-            # Transfer money
             if self.proposer_money > 0:
                 update_wallet(self.proposer_id, -self.proposer_money)
                 update_wallet(self.target_id, self.proposer_money)
