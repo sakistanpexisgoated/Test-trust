@@ -3504,8 +3504,7 @@ async def backup_load(ctx, backup_id: str):
 # =========================================================
 # NUKE COMMAND FOR DISCORD SERVERS AND KICK 
 # =========================================================
-    
-    class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
+class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
     confirm = discord.ui.TextInput(
         label="Type YES to confirm nuke",
         placeholder="YES",
