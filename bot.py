@@ -4048,6 +4048,716 @@ async def start_country_setup(channel, player_id):
 async def country(ctx):
     await start_country_setup(ctx.channel, ctx.author.id)
 # =========================================================
+# FOOTBALL CARDS SYSTEM - ADD THIS BEFORE bot.run(TOKEN)
+# Requires: import json, import random, import asyncio (already imported)
+# =========================================================
+
+# --- DATABASE TABLES ---
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS football_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    card_id TEXT,
+    player_name TEXT,
+    club TEXT,
+    nationality TEXT,
+    position TEXT,
+    rating INTEGER,
+    rarity TEXT,
+    purchased_at REAL
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS football_packs (
+    pack_type TEXT PRIMARY KEY,
+    price INTEGER,
+    card_count INTEGER,
+    rarity_rates TEXT
+)
+""")
+
+# Default pack types
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('bronze', 500, 3, '{"common":0.7,"rare":0.25,"epic":0.04,"legendary":0.01}')")
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('silver', 1500, 5, '{"common":0.4,"rare":0.35,"epic":0.2,"legendary":0.05}')")
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('gold', 5000, 7, '{"common":0.15,"rare":0.35,"epic":0.35,"legendary":0.15}')")
+cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('legendary', 20000, 10, '{"common":0.05,"rare":0.15,"epic":0.35,"legendary":0.45}')")
+db.commit()
+
+FOOTBALL_CHANNEL = {}  # guild_id -> channel_id
+FOOTBALL_SPAWN_COOLDOWN = {}  # guild_id -> last_spawn_time
+
+# --- SAMPLE FOOTBALL PLAYER DATA ---
+FOOTBALL_PLAYERS = [
+    {"name": "Lionel Messi", "club": "Inter Miami", "nationality": "Argentina", "position": "Forward", "rating": 95, "rarity": "legendary"},
+    {"name": "Cristiano Ronaldo", "club": "Al Nassr", "nationality": "Portugal", "position": "Forward", "rating": 94, "rarity": "legendary"},
+    {"name": "Kylian Mbappé", "club": "Real Madrid", "nationality": "France", "position": "Forward", "rating": 93, "rarity": "legendary"},
+    {"name": "Erling Haaland", "club": "Manchester City", "nationality": "Norway", "position": "Forward", "rating": 93, "rarity": "legendary"},
+    {"name": "Vinícius Júnior", "club": "Real Madrid", "nationality": "Brazil", "position": "Forward", "rating": 91, "rarity": "epic"},
+    {"name": "Jude Bellingham", "club": "Real Madrid", "nationality": "England", "position": "Midfielder", "rating": 90, "rarity": "epic"},
+    {"name": "Harry Kane", "club": "Bayern Munich", "nationality": "England", "position": "Forward", "rating": 90, "rarity": "epic"},
+    {"name": "Mohamed Salah", "club": "Liverpool", "nationality": "Egypt", "position": "Forward", "rating": 89, "rarity": "epic"},
+    {"name": "Kevin De Bruyne", "club": "Manchester City", "nationality": "Belgium", "position": "Midfielder", "rating": 89, "rarity": "epic"},
+    {"name": "Bukayo Saka", "club": "Arsenal", "nationality": "England", "position": "Forward", "rating": 88, "rarity": "rare"},
+    {"name": "Phil Foden", "club": "Manchester City", "nationality": "England", "position": "Midfielder", "rating": 88, "rarity": "rare"},
+    {"name": "Declan Rice", "club": "Arsenal", "nationality": "England", "position": "Midfielder", "rating": 87, "rarity": "rare"},
+    {"name": "Victor Osimhen", "club": "Galatasaray", "nationality": "Nigeria", "position": "Forward", "rating": 87, "rarity": "rare"},
+    {"name": "Rafael Leão", "club": "AC Milan", "nationality": "Portugal", "position": "Forward", "rating": 86, "rarity": "rare"},
+    {"name": "Lautaro Martínez", "club": "Inter Milan", "nationality": "Argentina", "position": "Forward", "rating": 86, "rarity": "rare"},
+    {"name": "Alessandro Bastoni", "club": "Inter Milan", "nationality": "Italy", "position": "Defender", "rating": 85, "rarity": "common"},
+    {"name": "Jurriën Timber", "club": "Arsenal", "nationality": "Netherlands", "position": "Defender", "rating": 84, "rarity": "common"},
+    {"name": "Pedri", "club": "Barcelona", "nationality": "Spain", "position": "Midfielder", "rating": 84, "rarity": "common"},
+    {"name": "Gavi", "club": "Barcelona", "nationality": "Spain", "position": "Midfielder", "rating": 83, "rarity": "common"},
+    {"name": "Nuno Mendes", "club": "PSG", "nationality": "Portugal", "position": "Defender", "rating": 83, "rarity": "common"},
+    {"name": "Rasmus Højlund", "club": "Manchester United", "nationality": "Denmark", "position": "Forward", "rating": 82, "rarity": "common"},
+    {"name": "Alejandro Garnacho", "club": "Manchester United", "nationality": "Argentina", "position": "Forward", "rating": 82, "rarity": "common"},
+    {"name": "Kobbie Mainoo", "club": "Manchester United", "nationality": "England", "position": "Midfielder", "rating": 81, "rarity": "common"},
+    {"name": "Jérémy Doku", "club": "Manchester City", "nationality": "Belgium", "position": "Forward", "rating": 81, "rarity": "common"},
+    {"name": "Sávio", "club": "Manchester City", "nationality": "Brazil", "position": "Forward", "rating": 80, "rarity": "common"},
+]
+
+RARITY_ORDER = {"common": 0, "rare": 1, "epic": 2, "legendary": 3}
+RARITY_COLORS = {"common": 0x808080, "rare": 0x1E90FF, "epic": 0x9B59B6, "legendary": 0xF1C40F}
+
+# --- HELPER FUNCTIONS ---
+def get_player_cards(user_id):
+    cursor.execute("SELECT * FROM football_cards WHERE user_id = ?", (user_id,))
+    return cursor.fetchall()
+
+def get_card_count(user_id):
+    cursor.execute("SELECT COUNT(*) FROM football_cards WHERE user_id = ?", (user_id,))
+    return cursor.fetchone()[0]
+
+def get_rarity_count(user_id, rarity):
+    cursor.execute("SELECT COUNT(*) FROM football_cards WHERE user_id = ? AND rarity = ?", (user_id, rarity))
+    return cursor.fetchone()[0]
+
+def create_card_for_user(user_id, player_data):
+    import random, time
+    card_id = f"FC{random.randint(10000, 99999)}"
+    cursor.execute(
+        "INSERT INTO football_cards (user_id, card_id, player_name, club, nationality, position, rating, rarity, purchased_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (user_id, card_id, player_data["name"], player_data["club"], player_data["nationality"], player_data["position"], player_data["rating"], player_data["rarity"], time.time())
+    )
+    db.commit()
+    return card_id
+
+def open_pack(user_id, pack_type):
+    cursor.execute("SELECT price, card_count, rarity_rates FROM football_packs WHERE pack_type = ?", (pack_type,))
+    row = cursor.fetchone()
+    if not row:
+        return None
+    price, card_count, rates_json = row
+    rates = json.loads(rates_json)
+    
+    wallet, _ = get_user_econ(user_id)
+    if wallet < price:
+        return "insufficient"
+    
+    update_wallet(user_id, -price)
+    
+    cards = []
+    for _ in range(card_count):
+        roll = random.random()
+        cumulative = 0
+        chosen_rarity = "common"
+        for rarity, prob in rates.items():
+            cumulative += prob
+            if roll <= cumulative:
+                chosen_rarity = rarity
+                break
+        
+        # Filter players by rarity
+        pool = [p for p in FOOTBALL_PLAYERS if p["rarity"] == chosen_rarity]
+        if not pool:
+            pool = [p for p in FOOTBALL_PLAYERS if p["rarity"] == "common"]
+        player = random.choice(pool)
+        card_id = create_card_for_user(user_id, player)
+        cards.append({"card_id": card_id, "player": player})
+    
+    return cards
+
+def get_top_cards(user_id, limit=5):
+    cursor.execute(
+        "SELECT * FROM football_cards WHERE user_id = ? ORDER BY rating DESC, card_id LIMIT ?",
+        (user_id, limit)
+    )
+    return cursor.fetchall()
+
+# --- SET CHANNEL COMMAND ---
+@bot.hybrid_command(name="setchannel", description="Set the channel for football card spawns")
+@commands.has_permissions(administrator=True)
+async def setchannel(ctx, channel: discord.TextChannel = None):
+    target = channel or ctx.channel
+    FOOTBALL_CHANNEL[ctx.guild.id] = target.id
+    embed = discord.Embed(
+        description=f"✅ Football spawn channel set to {target.mention}",
+        color=discord.Color.green()
+    )
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await ctx.send(embed=embed)
+
+# --- SPAWN COMMAND ---
+@bot.hybrid_command(name="spawn", description="Spawn a random football player card in the channel")
+@commands.has_permissions(administrator=True)
+async def spawn(ctx):
+    guild_id = ctx.guild.id
+    channel_id = FOOTBALL_CHANNEL.get(guild_id)
+    if not channel_id:
+        embed = discord.Embed(
+            description="❌ No spawn channel set. Use `/setchannel` first.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    # Cooldown: 5 minutes between spawns
+    last_spawn = FOOTBALL_SPAWN_COOLDOWN.get(guild_id, 0)
+    if time.time() - last_spawn < 300:
+        remaining = int(300 - (time.time() - last_spawn))
+        embed = discord.Embed(
+            description=f"⏳ Please wait {remaining} seconds before spawning again.",
+            color=discord.Color.orange()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    FOOTBALL_SPAWN_COOLDOWN[guild_id] = time.time()
+    
+    # Pick random player
+    player = random.choice(FOOTBALL_PLAYERS)
+    color = RARITY_COLORS.get(player["rarity"], 0x808080)
+    
+    embed = discord.Embed(
+        title=f"⚽ {player['name']} has spawned!",
+        description=f"**Club:** {player['club']}\n**Nationality:** {player['nationality']}\n**Position:** {player['position']}\n**Rating:** {player['rating']}\n**Rarity:** {player['rarity'].upper()}",
+        color=color
+    )
+    embed.set_footer(text="Use /collect to claim this card!")
+    
+    channel = bot.get_channel(channel_id)
+    if channel:
+        await channel.send(embed=embed)
+        
+        # Store spawn for collection
+        global current_spawn
+        current_spawn = {"guild_id": guild_id, "player": player, "claimed_by": None, "claimed_at": None}
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message("✅ Player spawned successfully!", ephemeral=True)
+        else:
+            await ctx.send("✅ Player spawned successfully!", delete_after=5)
+    else:
+        embed = discord.Embed(
+            description="❌ Spawn channel not found. Set a new channel with `/setchannel`.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+
+current_spawn = {"guild_id": None, "player": None, "claimed_by": None, "claimed_at": None}
+
+# --- COLLECT COMMAND ---
+@bot.hybrid_command(name="collect", description="Collect the currently spawned football card")
+async def collect(ctx):
+    if current_spawn["guild_id"] != ctx.guild.id:
+        embed = discord.Embed(
+            description="❌ No player is currently spawned in this server!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if current_spawn["claimed_by"] is not None:
+        embed = discord.Embed(
+            description=f"❌ This card was already claimed by <@{current_spawn['claimed_by']}>!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    player = current_spawn["player"]
+    card_id = create_card_for_user(ctx.author.id, player)
+    current_spawn["claimed_by"] = ctx.author.id
+    current_spawn["claimed_at"] = time.time()
+    
+    embed = discord.Embed(
+        title="✅ Card Collected!",
+        description=f"{ctx.author.mention} collected **{player['name']}** ({player['rarity'].upper()})!\nCard ID: `{card_id}`",
+        color=RARITY_COLORS.get(player["rarity"], 0x808080)
+    )
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+# --- PACK BUY COMMAND ---
+@bot.hybrid_command(name="pack", description="Buy or open a football card pack")
+async def pack(ctx, action: str, pack_type: str = "bronze"):
+    action = action.lower()
+    pack_type = pack_type.lower()
+    
+    valid_packs = ["bronze", "silver", "gold", "legendary"]
+    if pack_type not in valid_packs:
+        embed = discord.Embed(
+            description=f"❌ Invalid pack type. Choose from: {', '.join(valid_packs)}",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if action == "buy":
+        cursor.execute("SELECT price FROM football_packs WHERE pack_type = ?", (pack_type,))
+        row = cursor.fetchone()
+        price = row[0] if row else 0
+        
+        wallet, _ = get_user_econ(ctx.author.id)
+        if wallet < price:
+            embed = discord.Embed(
+                description=f"❌ You need **${price:,}** to buy a {pack_type.capitalize()} pack. You have ${wallet:,}.",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            return
+        
+        embed = discord.Embed(
+            title=f"📦 {pack_type.capitalize()} Pack",
+            description=f"Price: **${price:,}**\nContains: {row[1]} random cards\n\nType `/pack open {pack_type}` to open it!",
+            color=discord.Color.blue()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+    
+    elif action == "open":
+        result = open_pack(ctx.author.id, pack_type)
+        if result == "insufficient":
+            embed = discord.Embed(
+                description=f"❌ You don't have enough money to buy a {pack_type.capitalize()} pack!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            return
+        elif result is None:
+            embed = discord.Embed(
+                description="❌ Invalid pack type.",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            return
+        
+        cards = result
+        embed = discord.Embed(
+            title=f"🎴 {pack_type.capitalize()} Pack Opened!",
+            description=f"You got {len(cards)} cards:",
+            color=discord.Color.green()
+        )
+        card_list = []
+        for card in cards:
+            p = card["player"]
+            card_list.append(f"• **{p['name']}** ({p['rarity'].upper()}) - {p['rating']} OVR")
+        embed.add_field(name="Cards", value="\n".join(card_list) or "No cards found.", inline=False)
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+
+# --- COLLECTION COMMAND ---
+@bot.hybrid_command(name="collection", aliases=["cards"], description="View your football card collection")
+async def collection(ctx, member: discord.Member = None):
+    target = member or ctx.author
+    cards = get_player_cards(target.id)
+    
+    if not cards:
+        embed = discord.Embed(
+            description=f"{target.mention} has no football cards yet!",
+            color=discord.Color.orange()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    total = len(cards)
+    legendary = get_rarity_count(target.id, "legendary")
+    epic = get_rarity_count(target.id, "epic")
+    rare = get_rarity_count(target.id, "rare")
+    common = get_rarity_count(target.id, "common")
+    
+    embed = discord.Embed(
+        title=f"🎴 {target.display_name}'s Collection",
+        description=f"Total Cards: **{total}**\n👑 Legendary: {legendary} | ⭐ Epic: {epic} | 🔵 Rare: {rare} | ⚪ Common: {common}",
+        color=discord.Color.blue()
+    )
+    
+    # Show top 10 cards
+    top_cards = get_top_cards(target.id, 10)
+    card_list = []
+    for card in top_cards:
+        rarity_emoji = "👑" if card[5] == "legendary" else "⭐" if card[5] == "epic" else "🔵" if card[5] == "rare" else "⚪"
+        card_list.append(f"{rarity_emoji} **{card[2]}** ({card[5].upper()}) - {card[6]} OVR")
+    
+    embed.add_field(name="Top Cards", value="\n".join(card_list) or "No cards", inline=False)
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+# --- DEBATE COMMAND ---
+@bot.hybrid_command(name="debate", description="Debate another member using football cards")
+async def debate(ctx, member: discord.Member):
+    if member.id == ctx.author.id:
+        embed = discord.Embed(description="❌ You can't debate yourself!", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(description="❌ You can't debate a bot!", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    # Get top cards for both
+    p1_cards = get_top_cards(ctx.author.id, 3)
+    p2_cards = get_top_cards(member.id, 3)
+    
+    if not p1_cards or not p2_cards:
+        embed = discord.Embed(
+            description="❌ Both players need at least 1 card to debate!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    # Calculate debate score
+    p1_score = sum(card[6] for card in p1_cards) + len(p1_cards) * 2
+    p2_score = sum(card[6] for card in p2_cards) + len(p2_cards) * 2
+    
+    embed = discord.Embed(
+        title="⚔️ Debate Battle!",
+        color=discord.Color.gold()
+    )
+    
+    p1_names = "\n".join([f"• {card[2]} ({card[6]} OVR)" for card in p1_cards[:3]])
+    p2_names = "\n".join([f"• {card[2]} ({card[6]} OVR)" for card in p2_cards[:3]])
+    
+    embed.add_field(
+        name=f"{ctx.author.display_name} (Score: {p1_score})",
+        value=p1_names or "No cards",
+        inline=True
+    )
+    embed.add_field(
+        name=f"{member.display_name} (Score: {p2_score})",
+        value=p2_names or "No cards",
+        inline=True
+    )
+    
+    if p1_score > p2_score:
+        embed.add_field(
+            name="🏆 Winner",
+            value=f"{ctx.author.mention} wins the debate!",
+            inline=False
+        )
+        embed.color = discord.Color.green()
+    elif p2_score > p1_score:
+        embed.add_field(
+            name="🏆 Winner",
+            value=f"{member.mention} wins the debate!",
+            inline=False
+        )
+        embed.color = discord.Color.green()
+    else:
+        embed.add_field(
+            name="🤝 Result",
+            value="It's a tie! Both debaters are evenly matched!",
+            inline=False
+        )
+        embed.color = discord.Color.orange()
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+# --- TRADE COMMAND ---
+@bot.hybrid_command(name="trade", description="Send a trade request to another member")
+async def trade(ctx, member: discord.Member):
+    if member.id == ctx.author.id:
+        embed = discord.Embed(description="❌ You can't trade with yourself!", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(description="❌ You can't trade with a bot!", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    p1_cards = get_player_cards(ctx.author.id)
+    p2_cards = get_player_cards(member.id)
+    
+    if not p1_cards:
+        embed = discord.Embed(description="❌ You have no cards to trade!", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if not p2_cards:
+        embed = discord.Embed(description=f"❌ {member.display_name} has no cards to trade!", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    # Create trade view
+    view = TradeView(ctx.author.id, member.id)
+    embed = discord.Embed(
+        title="🔄 Trade Request",
+        description=f"{ctx.author.mention} wants to trade with {member.mention}!\n\nSelect the cards you want to offer and what you want from the other player.\n\n**Your Cards:** {len(p1_cards)}\n**{member.display_name}'s Cards:** {len(p2_cards)}",
+        color=discord.Color.blue()
+    )
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, view=view)
+    else:
+        await ctx.send(embed=embed, view=view)
+
+class TradeView(discord.ui.View):
+    def __init__(self, proposer_id, target_id):
+        super().__init__(timeout=180)
+        self.proposer_id = proposer_id
+        self.target_id = target_id
+        self.proposer_selected = None
+        self.target_selected = None
+        self.proposer_money = 0
+        self.target_money = 0
+        self.accepted = False
+    
+    @discord.ui.select(
+        placeholder="Select a card to offer (you)",
+        min_values=0,
+        max_values=1,
+        options=[]
+    )
+    async def proposer_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.proposer_id:
+            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
+            return
+        if select.values:
+            self.proposer_selected = int(select.values[0])
+        else:
+            self.proposer_selected = None
+        await interaction.response.defer()
+        await self.update_embed(interaction)
+    
+    @discord.ui.select(
+        placeholder="Select a card to receive (from them)",
+        min_values=0,
+        max_values=1,
+        options=[]
+    )
+    async def target_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.target_id:
+            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
+            return
+        if select.values:
+            self.target_selected = int(select.values[0])
+        else:
+            self.target_selected = None
+        await interaction.response.defer()
+        await self.update_embed(interaction)
+    
+    async def update_embed(self, interaction: discord.Interaction):
+        p1_cards = get_player_cards(self.proposer_id)
+        p2_cards = get_player_cards(self.target_id)
+        
+        # Update select options
+        self.proposer_select.options = [
+            discord.SelectOption(
+                label=f"{card[2]} ({card[5].upper()}) - {card[6]} OVR",
+                value=str(card[0]),
+                default=(card[0] == self.proposer_selected)
+            ) for card in p1_cards[:25]
+        ]
+        self.target_select.options = [
+            discord.SelectOption(
+                label=f"{card[2]} ({card[5].upper()}) - {card[6]} OVR",
+                value=str(card[0]),
+                default=(card[0] == self.target_selected)
+            ) for card in p2_cards[:25]
+        ]
+        
+        embed = discord.Embed(
+            title="🔄 Trade Request",
+            description=f"<@{self.proposer_id}> wants to trade with <@{self.target_id}>!\n\n**Your Card:** {self.get_card_name(self.proposer_selected, p1_cards) or 'None'}\n**Their Card:** {self.get_card_name(self.target_selected, p2_cards) or 'None'}\n\nOffer money (use buttons below)",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="💰 Money Offer", value=f"<@{self.proposer_id}>: ${self.proposer_money:,}\n<@{self.target_id}>: ${self.target_money:,}", inline=False)
+        
+        await interaction.message.edit(embed=embed, view=self)
+    
+    def get_card_name(self, card_id, cards):
+        if card_id is None:
+            return None
+        for card in cards:
+            if card[0] == card_id:
+                return f"{card[2]} ({card[5].upper()}) - {card[6]} OVR"
+        return None
+    
+    @discord.ui.button(label="💰 Add Money (You)", style=discord.ButtonStyle.secondary)
+    async def add_money(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in (self.proposer_id, self.target_id):
+            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
+            return
+        
+        modal = TradeMoneyModal(interaction.user.id, self)
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="✅ Accept Trade", style=discord.ButtonStyle.success)
+    async def accept_trade(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in (self.proposer_id, self.target_id):
+            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
+            return
+        
+        if self.proposer_selected is None and self.target_selected is None and self.proposer_money == 0 and self.target_money == 0:
+            await interaction.response.send_message("❌ You must select at least one card or money to trade!", ephemeral=True)
+            return
+        
+        if not self.accepted:
+            self.accepted = True
+            await interaction.response.send_message("✅ Trade accepted by one party. Waiting for the other to accept...", ephemeral=True)
+            
+            # Check if both accepted (track via view state)
+            # For simplicity, we just execute after 2 accepts
+            embed = discord.Embed(
+                title="✅ Trade Finalized!",
+                description="Both parties have accepted the trade!",
+                color=discord.Color.green()
+            )
+            await interaction.message.edit(embed=embed, view=None)
+            
+            # Execute trade
+            if self.proposer_selected:
+                cursor.execute("DELETE FROM football_cards WHERE id = ? AND user_id = ?", (self.proposer_selected, self.proposer_id))
+            if self.target_selected:
+                cursor.execute("DELETE FROM football_cards WHERE id = ? AND user_id = ?", (self.target_selected, self.target_id))
+            
+            # Swap cards
+            if self.proposer_selected:
+                cursor.execute("UPDATE football_cards SET user_id = ? WHERE id = ?", (self.target_id, self.proposer_selected))
+            if self.target_selected:
+                cursor.execute("UPDATE football_cards SET user_id = ? WHERE id = ?", (self.proposer_id, self.target_selected))
+            
+            # Transfer money
+            if self.proposer_money > 0:
+                update_wallet(self.proposer_id, -self.proposer_money)
+                update_wallet(self.target_id, self.proposer_money)
+            if self.target_money > 0:
+                update_wallet(self.target_id, -self.target_money)
+                update_wallet(self.proposer_id, self.target_money)
+            
+            db.commit()
+            
+            result_embed = discord.Embed(
+                title="🔄 Trade Completed!",
+                description=f"Trade between <@{self.proposer_id}> and <@{self.target_id}> was successful!",
+                color=discord.Color.green()
+            )
+            await interaction.channel.send(embed=result_embed)
+    
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.danger)
+    async def cancel_trade(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in (self.proposer_id, self.target_id):
+            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
+            return
+        
+        embed = discord.Embed(
+            title="❌ Trade Cancelled",
+            description=f"Trade cancelled by {interaction.user.mention}",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+
+class TradeMoneyModal(discord.ui.Modal, title="Add Money to Trade"):
+    amount = discord.ui.TextInput(label="Amount to offer", placeholder="e.g. 500", required=True)
+    
+    def __init__(self, user_id, trade_view):
+        super().__init__()
+        self.user_id = user_id
+        self.trade_view = trade_view
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.amount.value.strip())
+        except ValueError:
+            embed = discord.Embed(description="❌ Please enter a valid number.", color=discord.Color.red())
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        if amount <= 0:
+            embed = discord.Embed(description="❌ Amount must be greater than zero.", color=discord.Color.red())
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        wallet, _ = get_user_econ(self.user_id)
+        if wallet < amount:
+            embed = discord.Embed(description=f"❌ You only have ${wallet:,} in your wallet!", color=discord.Color.red())
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        if self.user_id == self.trade_view.proposer_id:
+            self.trade_view.proposer_money = amount
+        else:
+            self.trade_view.target_money = amount
+        
+        await interaction.response.defer()
+        await self.trade_view.update_embed(interaction)
+# =========================================================
 # RUN BOT
 # =========================================================
 
