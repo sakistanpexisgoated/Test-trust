@@ -3697,6 +3697,34 @@ async def nuke(interaction: discord.Interaction):
     
     await interaction.response.send_modal(NukeModal())
 # =========================================================
+# MEMEMS 
+# =========================================================
+MEME_DICT = {
+    "flight": "https://tenor.com/cuDVH1OeyIQ.gif",
+    "dance": "https://tenor.com/mAuO3q1eAkO.gif",
+    "giphy1": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeHFka3BwMndydXZmMHZ2Z3VkaDBhZ3ZsZG9laTcxaGpudWlwczhmOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/1rPynGFeM7zcvMwm4k/giphy.gif",
+    "tenor1": "https://tenor.com/iwIIhakbP3Y.gif",
+    "tenor2": "https://tenor.com/cuwllnVvePw.gif",
+    "tenor3": "https://tenor.com/bkqBWYygrnM.gif"
+}
+
+SPECIAL_MEME = "https://tenor.com/dsMfUIZkAba.gif"
+SPECIAL_CHANCE = 0.10
+
+@bot.tree.command(name="memes", description="Get a random meme GIF")
+async def memes(interaction: discord.Interaction):
+    if random.random() < SPECIAL_CHANCE:
+        embed = discord.Embed(title="🎉 SPECIAL MEME!", color=0xff0000)
+        embed.set_image(url=SPECIAL_MEME)
+        await interaction.response.send_message(embed=embed)
+        return
+    
+    tag = random.choice(list(MEME_DICT.keys()))
+    embed = discord.Embed(title="Random Meme", color=0x2b2d31)
+    embed.set_image(url=MEME_DICT[tag])
+    embed.set_footer(text=f"Tag: {tag}")
+    await interaction.response.send_message(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
