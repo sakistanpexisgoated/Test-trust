@@ -4048,7 +4048,7 @@ async def start_country_setup(channel, player_id):
 async def country(ctx):
     await start_country_setup(ctx.channel, ctx.author.id)
 # =========================================================
-# FOOTBALL CARDS SYSTEM - ADD THIS BEFORE bot.run(TOKEN)
+# FOOTBALL CARDS SYSTEM
 # =========================================================
 
 # --- DATABASE TABLES ---
@@ -4117,6 +4117,7 @@ FOOTBALL_PLAYERS = [
 
 RARITY_ORDER = {"common": 0, "rare": 1, "epic": 2, "legendary": 3}
 RARITY_COLORS = {"common": 0x808080, "rare": 0x1E90FF, "epic": 0x9B59B6, "legendary": 0xF1C40F}
+RARITY_SELL_PRICES = {"common": 50, "rare": 200, "epic": 800, "legendary": 5000}
 
 # --- HELPER FUNCTIONS ---
 def get_player_cards(user_id):
@@ -4181,6 +4182,15 @@ def get_top_cards(user_id, limit=5):
         (user_id, limit)
     )
     return cursor.fetchall()
+
+def get_card_by_id(card_id, user_id):
+    cursor.execute("SELECT * FROM football_cards WHERE id = ? AND user_id = ?", (card_id, user_id))
+    return cursor.fetchone()
+
+def delete_card(card_id, user_id):
+    cursor.execute("DELETE FROM football_cards WHERE id = ? AND user_id = ?", (card_id, user_id))
+    db.commit()
+    return cursor.rowcount > 0
 
 # --- SET CHANNEL COMMAND ---
 @bot.hybrid_command(name="setchannel", description="Set the channel for football card spawns")
@@ -4304,14 +4314,247 @@ async def collect(ctx):
 
 # --- PACK BUY COMMAND ---
 @bot.hybrid_command(name="pack", description="Buy or open a football card pack")
-async def pack(ctx, action: str, pack_type: str = "bronze"):
+async def pack(ctx, action: str, pack_type: str = None):
     action = action.lower()
-    pack_type = pack_type.lower()
     
-    valid_packs = ["bronze", "silver", "gold", "legendary"]
-    if pack_type not in valid_packs:
+    if action == "buy":
+        # Show pack selection menu
         embed = discord.Embed(
-            description=f"❌ Invalid pack type. Choose from: {', '.join(valid_packs)}",
+            title="📦 Buy a Pack",
+            description="Select a pack type from the dropdown below:",
+            color=discord.Color.blue()
+        )
+        
+        cursor.execute("SELECT pack_type, price, card_count FROM football_packs")
+        packs = cursor.fetchall()
+        
+        view = PackBuyView(ctx.author.id)
+        for pack in packs:
+            pack_name = pack[0].capitalize()
+            price = pack[1]
+            count = pack[2]
+            view.add_item(discord.ui.Button(
+                label=f"{pack_name} Pack (${price:,}) - {count} cards",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"buy_{pack[0]}"
+            ))
+        
+        # Add callback to buttons
+        async def button_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ This isn't your purchase!", ephemeral=True)
+                return
+            
+            pack_type = interaction.data["custom_id"].replace("buy_", "")
+            cursor.execute("SELECT price, card_count FROM football_packs WHERE pack_type = ?", (pack_type,))
+            row = cursor.fetchone()
+            if not row:
+                await interaction.response.send_message("❌ Invalid pack type!", ephemeral=True)
+                return
+            
+            price, count = row
+            wallet, _ = get_user_econ(ctx.author.id)
+            if wallet < price:
+                await interaction.response.send_message(f"❌ You need **${price:,}** to buy a {pack_type.capitalize()} pack. You have ${wallet:,}.", ephemeral=True)
+                return
+            
+            # Deduct money and store pack in inventory
+            update_wallet(ctx.author.id, -price)
+            
+            # Store pack in user's inventory (temporary storage)
+            cursor.execute("INSERT OR REPLACE INTO football_packs_inventory (user_id, pack_type, quantity) VALUES (?, ?, COALESCE((SELECT quantity FROM football_packs_inventory WHERE user_id = ? AND pack_type = ?), 0) + 1)", 
+                          (ctx.author.id, pack_type, ctx.author.id, pack_type))
+            db.commit()
+            
+            embed = discord.Embed(
+                title=f"✅ {pack_type.capitalize()} Pack Purchased!",
+                description=f"You bought a {pack_type.capitalize()} pack for **${price:,}**!\n\nUse `/pack open` to see your packs and open them.",
+                color=discord.Color.green()
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+        
+        for child in view.children:
+            child.callback = button_callback
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            await ctx.send(embed=embed, view=view)
+    
+    elif action == "open":
+        # Show user's packs
+        cursor.execute("SELECT pack_type, quantity FROM football_packs_inventory WHERE user_id = ? AND quantity > 0", (ctx.author.id,))
+        packs = cursor.fetchall()
+        
+        if not packs:
+            embed = discord.Embed(
+                description="❌ You don't have any packs! Use `/pack buy` to purchase some.",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            return
+        
+        embed = discord.Embed(
+            title="🎴 Your Packs",
+            description="Select a pack to open:",
+            color=discord.Color.blue()
+        )
+        
+        view = PackOpenView(ctx.author.id)
+        for pack_type, quantity in packs:
+            view.add_item(discord.ui.Button(
+                label=f"{pack_type.capitalize()} Pack (x{quantity})",
+                style=discord.ButtonStyle.success,
+                custom_id=f"open_{pack_type}"
+            ))
+        
+        async def open_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ This isn't your pack!", ephemeral=True)
+                return
+            
+            pack_type = interaction.data["custom_id"].replace("open_", "")
+            
+            # Check if user has this pack
+            cursor.execute("SELECT quantity FROM football_packs_inventory WHERE user_id = ? AND pack_type = ?", (ctx.author.id, pack_type))
+            row = cursor.fetchone()
+            if not row or row[0] <= 0:
+                await interaction.response.send_message("❌ You don't have any {pack_type.capitalize()} packs!", ephemeral=True)
+                return
+            
+            # Open the pack
+            result = open_pack(ctx.author.id, pack_type)
+            if result == "insufficient":
+                await interaction.response.send_message("❌ You don't have enough money to open this pack!", ephemeral=True)
+                return
+            elif result is None:
+                await interaction.response.send_message("❌ Invalid pack type!", ephemeral=True)
+                return
+            
+            # Decrease pack count
+            cursor.execute("UPDATE football_packs_inventory SET quantity = quantity - 1 WHERE user_id = ? AND pack_type = ?", (ctx.author.id, pack_type))
+            db.commit()
+            
+            cards = result
+            embed = discord.Embed(
+                title=f"🎴 {pack_type.capitalize()} Pack Opened!",
+                description=f"You got {len(cards)} cards:",
+                color=discord.Color.green()
+            )
+            card_list = []
+            for card in cards:
+                p = card["player"]
+                card_list.append(f"• **{p['name']}** ({p['rarity'].upper()}) - {p['rating']} OVR")
+            embed.add_field(name="Cards", value="\n".join(card_list) or "No cards found.", inline=False)
+            
+            await interaction.response.edit_message(embed=embed, view=None)
+        
+        for child in view.children:
+            child.callback = open_callback
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            await ctx.send(embed=embed, view=view)
+    
+    else:
+        embed = discord.Embed(
+            description="❌ Invalid action. Use `/pack buy` or `/pack open`.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+
+class PackBuyView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+
+class PackOpenView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+
+# --- SELL COMMAND ---
+@bot.hybrid_command(name="sell", description="Sell a football card for money")
+async def sell(ctx, card_id: str = None):
+    if card_id is None:
+        # Show user's cards to sell
+        cards = get_player_cards(ctx.author.id)
+        if not cards:
+            embed = discord.Embed(
+                description="❌ You don't have any cards to sell!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            return
+        
+        embed = discord.Embed(
+            title="💰 Sell a Card",
+            description="Select a card to sell from the dropdown below:",
+            color=discord.Color.gold()
+        )
+        
+        view = SellView(ctx.author.id)
+        options = []
+        for card in cards[:25]:
+            price = RARITY_SELL_PRICES.get(card[5], 50)
+            options.append(discord.SelectOption(
+                label=f"{card[2]} ({card[5].upper()}) - {card[6]} OVR",
+                description=f"Sell for ${price:,}",
+                value=str(card[0])
+            ))
+        
+        select = discord.ui.Select(placeholder="Select a card to sell...", options=options)
+        
+        async def select_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ This isn't your sale!", ephemeral=True)
+                return
+            
+            card_id = int(select.values[0])
+            card = get_card_by_id(card_id, ctx.author.id)
+            if not card:
+                await interaction.response.send_message("❌ Card not found!", ephemeral=True)
+                return
+            
+            price = RARITY_SELL_PRICES.get(card[5], 50)
+            
+            # Delete card and give money
+            if delete_card(card_id, ctx.author.id):
+                update_wallet(ctx.author.id, price)
+                embed = discord.Embed(
+                    title="💰 Card Sold!",
+                    description=f"You sold **{card[2]}** ({card[5].upper()}) for **${price:,}**!",
+                    color=discord.Color.green()
+                )
+                await interaction.response.edit_message(embed=embed, view=None)
+            else:
+                await interaction.response.send_message("❌ Failed to sell card!", ephemeral=True)
+        
+        select.callback = select_callback
+        view.add_item(select)
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            await ctx.send(embed=embed, view=view)
+        return
+    
+    # Sell specific card by ID
+    try:
+        card_id = int(card_id)
+    except ValueError:
+        embed = discord.Embed(
+            description="❌ Please provide a valid card ID.",
             color=discord.Color.red()
         )
         if ctx.interaction:
@@ -4320,72 +4563,45 @@ async def pack(ctx, action: str, pack_type: str = "bronze"):
             await ctx.send(embed=embed)
         return
     
-    if action == "buy":
-        cursor.execute("SELECT price FROM football_packs WHERE pack_type = ?", (pack_type,))
-        row = cursor.fetchone()
-        price = row[0] if row else 0
-        
-        wallet, _ = get_user_econ(ctx.author.id)
-        if wallet < price:
-            embed = discord.Embed(
-                description=f"❌ You need **${price:,}** to buy a {pack_type.capitalize()} pack. You have ${wallet:,}.",
-                color=discord.Color.red()
-            )
-            if ctx.interaction:
-                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
-            return
-        
+    card = get_card_by_id(card_id, ctx.author.id)
+    if not card:
         embed = discord.Embed(
-            title=f"📦 {pack_type.capitalize()} Pack",
-            description=f"Price: **${price:,}**\nContains: {row[1]} random cards\n\nType `/pack open {pack_type}` to open it!",
-            color=discord.Color.blue()
+            description="❌ Card not found! Use `/sell` to see your cards.",
+            color=discord.Color.red()
         )
         if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed)
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         else:
             await ctx.send(embed=embed)
+        return
     
-    elif action == "open":
-        result = open_pack(ctx.author.id, pack_type)
-        if result == "insufficient":
-            embed = discord.Embed(
-                description=f"❌ You don't have enough money to buy a {pack_type.capitalize()} pack!",
-                color=discord.Color.red()
-            )
-            if ctx.interaction:
-                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
-            return
-        elif result is None:
-            embed = discord.Embed(
-                description="❌ Invalid pack type.",
-                color=discord.Color.red()
-            )
-            if ctx.interaction:
-                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
-            return
-        
-        cards = result
+    price = RARITY_SELL_PRICES.get(card[5], 50)
+    
+    if delete_card(card_id, ctx.author.id):
+        update_wallet(ctx.author.id, price)
         embed = discord.Embed(
-            title=f"🎴 {pack_type.capitalize()} Pack Opened!",
-            description=f"You got {len(cards)} cards:",
+            title="💰 Card Sold!",
+            description=f"You sold **{card[2]}** ({card[5].upper()}) for **${price:,}**!",
             color=discord.Color.green()
         )
-        card_list = []
-        for card in cards:
-            p = card["player"]
-            card_list.append(f"• **{p['name']}** ({p['rarity'].upper()}) - {p['rating']} OVR")
-        embed.add_field(name="Cards", value="\n".join(card_list) or "No cards found.", inline=False)
-        
         if ctx.interaction:
             await ctx.interaction.response.send_message(embed=embed)
         else:
             await ctx.send(embed=embed)
+    else:
+        embed = discord.Embed(
+            description="❌ Failed to sell card!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+
+class SellView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=120)
+        self.user_id = user_id
 
 # --- COLLECTION COMMAND ---
 @bot.hybrid_command(name="collection", aliases=["cards"], description="View your football card collection")
