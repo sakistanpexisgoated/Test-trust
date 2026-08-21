@@ -3701,25 +3701,20 @@ async def nuke(interaction: discord.Interaction):
 async def memes(ctx):
     import random
     meme_list = [
-        "https://tenor.com/cuDVH1OeyIQ.gif",
-        "https://tenor.com/mAuO3q1eAkO.gif",
-        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeHFka3BwMndydXZmMHZ2Z3VkaDBhZ3ZsZG9laTcxaGpudWlwczhmOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/1rPynGFeM7zcvMwm4k/giphy.gif",
-        "https://tenor.com/iwIIhakbP3Y.gif",
-        "https://tenor.com/cuwllnVvePw.gif",
-        "https://tenor.com/bkqBWYygrnM.gif"
+        "https://cdn.tenor.com/cuDVH1OeyIQAAAAC/flight-burping.gif",
+        "https://cdn.tenor.com/mAuO3q1eAkOAAAAC/ishowspeed-dance.gif",
+        "https://media.giphy.com/media/1rPynGFeM7zcvMwm4k/giphy.gif",
+        "https://cdn.tenor.com/iwIIhakbP3YAAAAC/tenor.gif",
+        "https://cdn.tenor.com/cuwllnVvePwAAAAC/tenor.gif",
+        "https://cdn.tenor.com/bkqBWYygrnMAAAAC/tenor.gif"
     ]
-    special = "https://tenor.com/dsMfUIZkAba.gif"
+    special = "https://cdn.tenor.com/dsMfUIZkAbaAAAAC/tenor.gif"
     
     if random.random() < 0.10:
-        embed = discord.Embed(title="🎉 SPECIAL!", color=0xff0000)
-        embed.set_image(url=special)
-        await ctx.send(embed=embed)
+        await ctx.send(special)
         return
     
-    url = random.choice(meme_list)
-    embed = discord.Embed(title="Meme", color=0x2b2d31)
-    embed.set_image(url=url)
-    await ctx.send(embed=embed)
+    await ctx.send(random.choice(meme_list))
 # =========================================================
 # RUN BOT
 # =========================================================
