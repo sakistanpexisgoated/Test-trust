@@ -1465,7 +1465,7 @@ async def kiss(ctx, member: discord.Member = None):
         description=f"{ctx.author.mention} kisses {member.mention}! ❤️",
         color=discord.Color.from_rgb(255, 105, 180)
     )
-    embed.set_image(url="https://cdn.nekos.life/kiss/kiss_033.gif")
+    embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMXV3a29uZG05MjRmZml2czN2bDJvaWQxaDNkeHoyamMwYTZ1ZWU0aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FgWNX7NK6SpzqwmOWe/giphy.gif")
     
     await ctx.send(embed=embed)
 
