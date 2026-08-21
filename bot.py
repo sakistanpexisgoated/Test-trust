@@ -5048,6 +5048,46 @@ async def tape(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# PFPS COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# =========================================================
+
+# Add your image URLs to this list
+PFPS = [
+    "https://files.catbox.moe/wlhvgf.webp",
+    "https://files.catbox.moe/yqxxvh.png",
+    "https://files.catbox.moe/qdpzij.webp",
+    "https://files.catbox.moe/bvm4f5.webp",
+    "https://files.catbox.moe/rl1q92.webp"
+]
+
+@bot.hybrid_command(name="pfps", description="Get a random profile picture")
+async def pfps(ctx):
+    if not PFPS:
+        embed = discord.Embed(
+            description="❌ No PFPs have been added yet! Ask the bot owner to add some.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    pfp_url = random.choice(PFPS)
+    
+    embed = discord.Embed(
+        title="🖼️ Random PFP",
+        description=f"Here's a random profile picture for you!",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    embed.set_image(url=pfp_url)
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
