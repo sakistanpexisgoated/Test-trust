@@ -4959,6 +4959,51 @@ class TradeMoneyModal(discord.ui.Modal, title="Add Money to Trade"):
         await interaction.response.defer()
         await self.trade_view.update_embed(interaction)
 # =========================================================
+# PAT COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# =========================================================
+
+PAT_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDBuZWZkajg3cmw2cHA4dTZjcWo1aGFvMTFrem5mMm42cncwZnc5aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/ye7OTQgwmVuVy/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDBuZWZkajg3cmw2cHA4dTZjcWo1aGFvMTFrem5mMm42cncwZnc5aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/AomVL3N8lTxiuYtI2I/giphy.gif"
+]
+
+@bot.hybrid_command(name="pat", description="Pat someone with a cute GIF")
+async def pat(ctx, member: discord.Member = None):
+    if member is None:
+        embed = discord.Embed(
+            description="❌ You need to specify someone to pat!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.id == ctx.author.id:
+        embed = discord.Embed(
+            description="🫂 You pat yourself... that's kinda sad but okay!",
+            color=discord.Color.orange()
+        )
+        embed.set_image(url=random.choice(PAT_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    embed = discord.Embed(
+        description=f"🫳 {ctx.author.mention} pats {member.mention}! How wholesome!",
+        color=discord.Color.from_rgb(255, 182, 193)
+    )
+    embed.set_image(url=random.choice(PAT_GIFS))
+    embed.set_footer(text="Pat pat!")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
