@@ -5051,13 +5051,12 @@ async def tape(ctx, member: discord.Member = None):
 # PFPS COMMAND - ADD THIS BEFORE bot.run(TOKEN)
 # =========================================================
 
-# Add your image URLs to this list
 PFPS = [
-    "https://files.catbox.moe/wlhvgf.webp",
-    "https://files.catbox.moe/yqxxvh.png",
-    "https://files.catbox.moe/qdpzij.webp",
-    "https://files.catbox.moe/bvm4f5.webp",
-    "https://files.catbox.moe/rl1q92.webp"
+    "https://cdn.discordapp.com/attachments/1489131525743182008/1540485204093829200/7fe79c89936adbfbfdec5ae1dfff9a4b.png",
+    "https://cdn.discordapp.com/attachments/1489131525743182008/1540484967937740830/8f27a0cc3a0f2781ad74efd4008558a9.png",
+    "https://cdn.discordapp.com/attachments/1489131525743182008/1540485025127206952/18a826db626f61d6cda10c9d408ac1d2.png",
+    "https://cdn.discordapp.com/attachments/1489131525743182008/1540485132392206397/f546b535e5d9e9136b91256284887a58.png",
+    "https://cdn.discordapp.com/attachments/1489131525743182008/1540485265062363136/7b7f8abe8f534427053f9006f22c4e1e.png"
 ]
 
 @bot.hybrid_command(name="pfps", description="Get a random profile picture")
