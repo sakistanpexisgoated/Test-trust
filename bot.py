@@ -5004,6 +5004,50 @@ async def pat(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# TAPE COMMAND add this before the bot.run   
+# =========================================================
+
+TAPE_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZzduYnZ6ZDhwamNndTEwZXdoMm00MjQ4aTR4Nzd0Yjl5eDgwOWw4OCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3orieTvZ8aH6fQAg6c/giphy.gif"
+]
+
+@bot.hybrid_command(name="tape", description="Tape someone shut!")
+async def tape(ctx, member: discord.Member = None):
+    if member is None:
+        embed = discord.Embed(
+            description="❌ You need to specify someone to tape!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.id == ctx.author.id:
+        embed = discord.Embed(
+            description=f"🤐 {ctx.author.mention} tapes themselves... that's weird but okay!",
+            color=discord.Color.orange()
+        )
+        embed.set_image(url=random.choice(TAPE_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    embed = discord.Embed(
+        description=f"📼 {ctx.author.mention} taped {member.mention} 💤 shh",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    embed.set_image(url=random.choice(TAPE_GIFS))
+    embed.set_footer(text="Tape! Tape! Tape!")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
