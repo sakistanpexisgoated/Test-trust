@@ -3126,7 +3126,7 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
 
 @bot.hybrid_command(name="sync", description="Force sync slash commands")
 async def sync(ctx):
-    if ctx.author.id not in {1152424544557088849, 1531701933033787416}:
+    if ctx.author.id not in {1286560808528117820, 1531701933033787416}:
         return await ctx.send("❌ Only bot owners can use this.")
     
     try:
