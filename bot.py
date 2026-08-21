@@ -5101,10 +5101,8 @@ async def pfps(ctx):
     else:
         await ctx.send(embed=embed)
 # =========================================================
-# FANCY FONT COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# FRAKTUR COMMAND - ADD THIS BEFORE bot.run(TOKEN)
 # =========================================================
-
-import unicodedata
 
 # Fraktur style mapping (like 𝔫𝔦𝔤𝔤𝔞)
 FRAKTUR_MAP = {
@@ -5120,99 +5118,18 @@ FRAKTUR_MAP = {
     '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
 }
 
-# Bold Fraktur (like 𝖓𝖎𝖌𝖌𝖆)
-BOLD_FRAKTUR_MAP = {
-    'a': '𝖆', 'b': '𝖇', 'c': '𝖈', 'd': '𝖉', 'e': '𝖊', 'f': '𝖋', 'g': '𝖌',
-    'h': '𝖍', 'i': '𝖎', 'j': '𝖏', 'k': '𝖐', 'l': '𝖑', 'm': '𝖒', 'n': '𝖓',
-    'o': '𝖔', 'p': '𝖕', 'q': '𝖖', 'r': '𝖗', 's': '𝖘', 't': '𝖙', 'u': '𝖚',
-    'v': '𝖛', 'w': '𝖜', 'x': '𝖝', 'y': '𝖞', 'z': '𝖟',
-    'A': '𝕬', 'B': '𝕭', 'C': '𝕮', 'D': '𝕯', 'E': '𝕰', 'F': '𝕱', 'G': '𝕲',
-    'H': '𝕳', 'I': '𝕴', 'J': '𝕵', 'K': '𝕶', 'L': '𝕷', 'M': '𝕸', 'N': '𝕹',
-    'O': '𝕺', 'P': '𝕻', 'Q': '𝕼', 'R': '𝕽', 'S': '𝕾', 'T': '𝕿', 'U': '𝖀',
-    'V': '𝖁', 'W': '𝖂', 'X': '𝖃', 'Y': '𝖄', 'Z': '𝖅',
-    '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
-    '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
-}
-
-# Cursive/Mathematical Bold (like 𝗻𝗶𝗴𝗴𝗮)
-BOLD_MATH_MAP = {
-    'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴',
-    'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻',
-    'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂',
-    'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
-    'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚',
-    'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡',
-    'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨',
-    'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
-    '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
-    '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
-}
-
-def convert_to_font(text, font_map):
-    """Convert text to a fancy font using the provided mapping."""
+def convert_to_fraktur(text):
+    """Convert text to Fraktur style."""
     result = []
     for char in text:
-        if char in font_map:
-            result.append(font_map[char])
+        if char in FRAKTUR_MAP:
+            result.append(FRAKTUR_MAP[char])
         else:
             result.append(char)
     return ''.join(result)
 
-@bot.hybrid_command(name="fancyfont", aliases=["font", "fancy"], description="Convert text to a fancy font style")
-async def fancyfont(ctx, *, text: str):
-    """
-    Converts text to fancy fonts like Fraktur, Bold Fraktur, and Bold Math.
-    Usage: ,,fancyfont <text> or /fancyfont <text>
-    """
-    if not text:
-        embed = discord.Embed(
-            description="❌ Please provide some text to convert!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    # Generate all three font styles
-    fraktur = convert_to_font(text, FRAKTUR_MAP)
-    bold_fraktur = convert_to_font(text, BOLD_FRAKTUR_MAP)
-    bold_math = convert_to_font(text, BOLD_MATH_MAP)
-    
-    embed = discord.Embed(
-        title="✏️ Fancy Font Generator",
-        description=f"**Original:** {text}",
-        color=discord.Color.from_rgb(30, 31, 34)
-    )
-    embed.add_field(
-        name="𝔉𝔯𝔞𝔨𝔱𝔲𝔯",
-        value=f"```\n{fraktur}\n```",
-        inline=False
-    )
-    embed.add_field(
-        name="𝕭𝖔𝖑𝖉 𝕱𝖗𝖆𝖐𝖙𝖚𝖗",
-        value=f"```\n{bold_fraktur}\n```",
-        inline=False
-    )
-    embed.add_field(
-        name="𝗕𝗼𝗹𝗱 𝗠𝗮𝘁𝗵",
-        value=f"```\n{bold_math}\n```",
-        inline=False
-    )
-    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
-    else:
-        await ctx.send(embed=embed)
-
 @bot.hybrid_command(name="fraktur", description="Convert text to Fraktur style (like 𝔫𝔦𝔤𝔤𝔞)")
 async def fraktur(ctx, *, text: str):
-    """
-    Converts text to Fraktur style.
-    Usage: ,,fraktur <text> or /fraktur <text>
-    """
     if not text:
         embed = discord.Embed(
             description="❌ Please provide some text to convert!",
@@ -5224,17 +5141,20 @@ async def fraktur(ctx, *, text: str):
             await ctx.send(embed=embed)
         return
     
-    converted = convert_to_font(text, FRAKTUR_MAP)
-    embed = discord.Embed(
-        description=f"{converted}",
-        color=discord.Color.from_rgb(30, 31, 34)
-    )
-    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    converted = convert_to_fraktur(text)
     
+    # Delete the user's original message if it's a prefix command
+    if not ctx.interaction and ctx.message:
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
+    
+    # Send just the converted text, no embed
     if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
+        await ctx.interaction.response.send_message(converted)
     else:
-        await ctx.send(embed=embed)
+        await ctx.send(converted)
 # =========================================================
 # RUN BOT
 # =========================================================
