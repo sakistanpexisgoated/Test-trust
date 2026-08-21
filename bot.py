@@ -3696,32 +3696,29 @@ async def nuke(interaction: discord.Interaction):
         return await interaction.response.send_message(embed=embed, ephemeral=True)
     
     await interaction.response.send_modal(NukeModal())
-
-MEME_DICT = {
-    "flight": "https://tenor.com/cuDVH1OeyIQ.gif",
-    "dance": "https://tenor.com/mAuO3q1eAkO.gif",
-    "giphy1": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeHFka3BwMndydXZmMHZ2Z3VkaDBhZ3ZsZG9laTcxaGpudWlwczhmOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/1rPynGFeM7zcvMwm4k/giphy.gif",
-    "tenor1": "https://tenor.com/iwIIhakbP3Y.gif",
-    "tenor2": "https://tenor.com/cuwllnVvePw.gif",
-    "tenor3": "https://tenor.com/bkqBWYygrnM.gif"
-}
-
-SPECIAL_MEME = "https://tenor.com/dsMfUIZkAba.gif"
-SPECIAL_CHANCE = 0.10
-
+    
 @bot.hybrid_command(name="memes", description="Get a random meme GIF")
 async def memes(ctx):
     import random
-    if random.random() < SPECIAL_CHANCE:
-        embed = discord.Embed(title="🎉 SPECIAL MEME!", color=0xff0000)
-        embed.set_image(url=SPECIAL_MEME)
+    meme_list = [
+        "https://tenor.com/cuDVH1OeyIQ.gif",
+        "https://tenor.com/mAuO3q1eAkO.gif",
+        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeHFka3BwMndydXZmMHZ2Z3VkaDBhZ3ZsZG9laTcxaGpudWlwczhmOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/1rPynGFeM7zcvMwm4k/giphy.gif",
+        "https://tenor.com/iwIIhakbP3Y.gif",
+        "https://tenor.com/cuwllnVvePw.gif",
+        "https://tenor.com/bkqBWYygrnM.gif"
+    ]
+    special = "https://tenor.com/dsMfUIZkAba.gif"
+    
+    if random.random() < 0.10:
+        embed = discord.Embed(title="🎉 SPECIAL!", color=0xff0000)
+        embed.set_image(url=special)
         await ctx.send(embed=embed)
         return
     
-    tag = random.choice(list(MEME_DICT.keys()))
-    embed = discord.Embed(title="Random Meme", color=0x2b2d31)
-    embed.set_image(url=MEME_DICT[tag])
-    embed.set_footer(text=f"Tag: {tag}")
+    url = random.choice(meme_list)
+    embed = discord.Embed(title="Meme", color=0x2b2d31)
+    embed.set_image(url=url)
     await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
