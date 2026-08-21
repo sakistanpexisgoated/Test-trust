@@ -4,6 +4,7 @@ import json
 import time
 import random
 import sqlite3
+import unicodedata
 import asyncio
 from datetime import timedelta
 from typing import List
