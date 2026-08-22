@@ -6835,6 +6835,64 @@ async def pat(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# SLAP COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# =========================================================
+
+SLAP_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2pyc3c1eWRxaHExeXh6dzY4dzBpN3hsaGk2cjFidGFwZXZ2NnlteCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/opi5w0RNRsUfoBuiqk/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2pyc3c1eWRxaHExeXh6dzY4dzBpN3hsaGk2cjFidGFwZXZ2NnlteCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/AsTZ4GbuYhMKguskTu/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2pyc3c1eWRxaHExeXh6dzY4dzBpN3hsaGk2cjFidGFwZXZ2NnlteCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/6kXM5jGyo6Amu1Mt5l/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3am42ejZ6ejhvZ2pnaGNrYnN6NDQ2dnBwMHQ5dzhjdXN1ODBlZ2F2dSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/QZpDATBs8QzcLZo9uI/giphy.gif"
+]
+
+@bot.hybrid_command(name="slap", description="Slap someone!")
+async def slap(ctx, member: discord.Member = None):
+    if member is None:
+        embed = discord.Embed(
+            description="❌ You need to specify someone to slap!\nUsage: `R!slap @member`",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.id == ctx.author.id:
+        embed = discord.Embed(
+            description=f"✋ {ctx.author.mention} slaps themselves... that's just sad!",
+            color=discord.Color.orange()
+        )
+        embed.set_image(url=random.choice(SLAP_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(
+            description="❌ You can't slap a bot!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    embed = discord.Embed(
+        description=f"✋ {ctx.author.mention} slaps {member.mention}! 😳",
+        color=discord.Color.from_rgb(255, 182, 193)
+    )
+    embed.set_image(url=random.choice(SLAP_GIFS))
+    embed.set_footer(text="Slap!")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
