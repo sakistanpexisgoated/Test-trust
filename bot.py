@@ -520,7 +520,6 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
-    # Missing Required Argument
     if isinstance(error, commands.MissingRequiredArgument):
         msg = f"{ctx.author.mention} You are missing an argument."
         
@@ -531,7 +530,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Bad Argument
     if isinstance(error, commands.BadArgument):
         msg = f"{ctx.author.mention} You provided an invalid argument."
         
@@ -542,7 +540,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Missing Permissions
     if isinstance(error, commands.MissingPermissions):
         msg = f"{ctx.author.mention} You are missing the required permissions."
         
@@ -553,7 +550,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Bot Missing Permissions
     if isinstance(error, commands.BotMissingPermissions):
         msg = f"{ctx.author.mention} I am missing the required permissions."
         
@@ -564,7 +560,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Member Not Found
     if isinstance(error, commands.MemberNotFound):
         msg = f"{ctx.author.mention} I couldn't find that member."
         
@@ -575,7 +570,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Command On Cooldown
     if isinstance(error, commands.CommandOnCooldown):
         msg = f"{ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds."
         
@@ -586,7 +580,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Role Not Found
     if isinstance(error, commands.RoleNotFound):
         msg = f"{ctx.author.mention} I couldn't find that role."
         
@@ -597,7 +590,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Not Owner
     if isinstance(error, commands.NotOwner):
         msg = f"{ctx.author.mention} Only the bot owner can use this command."
         
@@ -608,7 +600,6 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # NSFW Channel Required
     if isinstance(error, commands.NSFWChannelRequired):
         msg = f"{ctx.author.mention} This command can only be used in NSFW channels."
         
@@ -619,7 +610,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    # Default Error
+    # Default
     msg = f"{ctx.author.mention} Something went wrong."
     
     if ctx.interaction:
