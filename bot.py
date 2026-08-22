@@ -200,65 +200,23 @@ async def on_message(message):
 async def help(ctx):
     embed = discord.Embed(
         title="📋 Rynx Bot Commands",
-        description="**Prefix:** `R!` or `/`\nUse `R!help` or `/help` to see this menu.",
+        description="**Prefix:** `R!` or `/`",
         color=discord.Color.from_rgb(30, 31, 34)
     )
-    
-    embed.add_field(
-        name="💰 Economy",
-        value="`balance`, `bal`, `daily`, `work`, `gamble`, `bet`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `dep`, `withdraw`, `with`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="🎉 Fun & Social",
-        value="`cf`, `coinflip`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `pat`, `tape`, `gif`, `hack`, `mock`, `fraktur`, `pfps`, `memes`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="🎮 Games",
-        value="`brainrot_dice`, `guess`, `country`, `debate`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="⚽ Football Cards",
-        value="`setchannel`, `spawn`, `collect`, `pack`, `sell`, `collection`, `cards`, `trade`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="🛡️ Moderation",
-        value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`, `stealurl`, `surl`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="👑 Admin/Owner",
-        value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `unblacklist`, `serverblacklist`, `serverunblacklist`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="💰 Admin Economy",
-        value="`adminpay`, `ownerspay`, `adminset`, `ownersset`, `adminsetbank`, `ownerssetbank`, `adminrob`, `ownersrob`, `adminrobamount`, `ownersrobamount`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="🎁 Giveaway",
-        value="`giveaway create`, `giveaway reroll`",
-        inline=False
-    )
-    
-    embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
+    embed.add_field(name="🎉 Fun", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `pat`, `tape`, `gif`, `hack`, `mock`, `fraktur`, `pfps`, `memes`", inline=False)
+    embed.add_field(name="🎮 Games", value="`brainrot_dice`, `guess`, `country`, `debate`", inline=False)
+    embed.add_field(name="⚽ Football", value="`setchannel`, `spawn`, `collect`, `pack`, `sell`, `collection`, `trade`", inline=False)
+    embed.add_field(name="🛡️ Moderation", value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`", inline=False)
+    embed.add_field(name="👑 Admin", value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `trollpanel`, `whitelist`, `ghostping`, `fakenuke`", inline=False)
+    embed.add_field(name="💰 Admin Pay", value="`adminpay`, `adminset`, `adminsetbank`, `adminrob`, `adminrobamount`", inline=False)
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
     
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         await ctx.send(embed=embed)
-
+        
     if message.mentions:
         for member in message.mentions:
             if member.id in afk_users:
