@@ -512,7 +512,6 @@ COMMAND_USAGE = {
     "adminrob": "R!adminrob <member>",
     "adminrobamount": "R!adminrobamount <member> <amount>"
 }
-
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandInvokeError):
@@ -527,6 +526,7 @@ async def on_command_error(ctx, error):
     # Missing Required Argument
     if isinstance(error, commands.MissingRequiredArgument):
         arg_name = error.param.name
+        
         # Find where the arg is in the usage string
         arrow_pos = usage.find(f"<{arg_name}>")
         if arrow_pos == -1:
@@ -534,6 +534,7 @@ async def on_command_error(ctx, error):
         if arrow_pos == -1:
             arrow_pos = len(usage)
         
+        # Build the exact same format as Carl-bot
         spaces = " " * arrow_pos
         msg = (
             f"`{usage}`\n"
@@ -645,17 +646,6 @@ async def on_command_error(ctx, error):
     # NSFW Channel Required
     if isinstance(error, commands.NSFWChannelRequired):
         msg = f"This command can only be used in NSFW channels."
-        
-        if ctx.interaction:
-            try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
-            except Exception:
-                return
-        return await ctx.send(msg)
-
-    # Max Concurrency Reached
-    if isinstance(error, commands.MaxConcurrencyReached):
-        msg = f"This command is already being used by someone else. Please wait."
         
         if ctx.interaction:
             try:
