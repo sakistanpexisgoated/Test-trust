@@ -238,7 +238,24 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-              # --- AFK RETURN CHECK ---
+              # --- AFK MENTION CHECK ---
+    if message.mentions:
+        for member in message.mentions:
+            if member.id in afk_users:
+                afk_users[member.id]["mentions"].append({
+                    "author_name": message.author.display_name,
+                    "content": message.content,
+                    "jump_url": message.jump_url,
+                    "time": time.time()
+                })
+                data = afk_users[member.id]
+                embed = discord.Embed(
+                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
+                    color=discord.Color.from_rgb(30, 31, 34)
+                )
+                await message.channel.send(embed=embed)
+
+    # --- AFK RETURN CHECK ---
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
@@ -246,35 +263,18 @@ async def on_message(message):
         if duration_sec < 60:
             dur_str = f"{duration_sec} seconds"
         elif duration_sec < 3600:
-            minutes = duration_sec // 60
-            seconds = duration_sec % 60
-            dur_str = f"{minutes} minute{'s' if minutes != 1 else ''} {seconds} second{'s' if seconds != 1 else ''}"
+            dur_str = f"{duration_sec // 60} minutes"
         else:
-            hours = duration_sec // 3600
-            minutes = (duration_sec % 3600) // 60
-            dur_str = f"{hours} hour{'s' if hours != 1 else ''} {minutes} minute{'s' if minutes != 1 else ''}"
+            dur_str = f"{duration_sec // 3600} hours"
 
         embed = discord.Embed(
-            title="👋 Welcome Back!",
-            description=f"**{message.author.display_name}** is no longer AFK.",
-            color=discord.Color.green()
+            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
+            color=discord.Color.from_rgb(30, 31, 34)
         )
-        embed.add_field(
-            name="⏱️ Duration",
-            value=f"```\n{dur_str}\n```",
-            inline=True
-        )
-        embed.add_field(
-            name="📝 Reason",
-            value=f"```\n{data['reason']}\n```",
-            inline=True
-        )
-        embed.set_thumbnail(url=message.author.display_avatar.url)
-        embed.set_footer(text=f"Welcome back {message.author.display_name}!")
 
         if data["mentions"]:
             mentions_text = []
-            for m in data["mentions"][:5]:
+            for m in data["mentions"]:
                 time_ago = int(time.time() - m["time"])
                 if time_ago < 60:
                     time_str = f"{time_ago} seconds ago"
@@ -283,19 +283,15 @@ async def on_message(message):
                 else:
                     time_str = f"{time_ago // 3600} hours ago"
                 
-                mentions_text.append(f"• **{m['author_name']}** ({time_str})\n  [Jump to message]({m['jump_url']})")
-            
-            if len(data["mentions"]) > 5:
-                mentions_text.append(f"\n*... and {len(data['mentions']) - 5} more mentions*")
+                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
             
             embed.add_field(
-                name=f"💬 You received {len(data['mentions'])} mention(s)",
-                value="\n".join(mentions_text),
+                name=f"You received {len(data['mentions'])} mention(s)",
+                value="\n\n".join(mentions_text),
                 inline=False
             )
 
         await message.channel.send(embed=embed)
-        await bot.process_commands(message)
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
