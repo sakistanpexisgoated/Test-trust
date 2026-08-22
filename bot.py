@@ -6893,6 +6893,204 @@ async def slap(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# STEAL ROLES COMMAND - COPY ROLES FROM ANY SERVER
+# =========================================================
+
+@bot.hybrid_command(name="stealroles", description="Steal ALL roles & perms from any server by ID (Owner only)")
+@app_commands.default_permissions(administrator=True)
+async def stealroles(ctx, server_id: str):
+    # Owner check - must be server owner
+    if ctx.author != ctx.guild.owner:
+        embed = discord.Embed(
+            description="❌ Only the **server owner** can use this command!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+    
+    try:
+        target_guild_id = int(server_id)
+        current_guild = ctx.guild
+        
+        # Fetch roles using Discord API (bot doesn't need to be in the server)
+        url = f"https://discord.com/api/v10/guilds/{target_guild_id}/roles"
+        headers = {"Authorization": f"Bot {TOKEN}"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    embed = discord.Embed(
+                        description=f"❌ Couldn't fetch roles! Server ID might be invalid or the server is private.\nError: {response.status}",
+                        color=discord.Color.red()
+                    )
+                    if ctx.interaction:
+                        await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                    else:
+                        await ctx.send(embed=embed)
+                    return
+                
+                target_roles_data = await response.json()
+        
+        # Filter out @everyone and sort by position
+        target_roles = [r for r in target_roles_data if r['name'] != "@everyone"]
+        target_roles.sort(key=lambda r: r['position'], reverse=True)
+        
+        # Check bot permissions
+        if not ctx.guild.me.guild_permissions.manage_roles:
+            embed = discord.Embed(
+                description="❌ I need **Manage Roles** permission to steal roles!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+            return
+        
+        # Existing roles for reference
+        existing_roles = {role.name: role for role in current_guild.roles}
+        
+        created_count = 0
+        updated_count = 0
+        failed_count = 0
+        error_messages = []
+        
+        status_msg = None
+        if ctx.interaction:
+            status_msg = await ctx.interaction.followup.send(
+                embed=discord.Embed(
+                    description=f"🔄 Stealing roles... Found **{len(target_roles)}** roles to copy.",
+                    color=discord.Color.blue()
+                ),
+                ephemeral=True
+            )
+        else:
+            status_msg = await ctx.send(
+                embed=discord.Embed(
+                    description=f"🔄 Stealing roles... Found **{len(target_roles)}** roles to copy.",
+                    color=discord.Color.blue()
+                )
+            )
+        
+        # Loop through and create/update roles
+        for idx, role_data in enumerate(target_roles):
+            try:
+                role_name = role_data['name']
+                
+                # Build permissions
+                permissions = discord.Permissions(role_data['permissions'])
+                
+                # Color
+                color = discord.Color(role_data['color']) if role_data['color'] != 0 else discord.Color.default()
+                
+                # Check if role exists
+                if role_name in existing_roles:
+                    existing_role = existing_roles[role_name]
+                    # Only update if bot has higher role
+                    if existing_role < ctx.guild.me.top_role:
+                        await existing_role.edit(
+                            permissions=permissions,
+                            color=color,
+                            hoist=role_data.get('hoist', False),
+                            mentionable=role_data.get('mentionable', False),
+                            reason=f"Updated via /stealroles from server {target_guild_id}"
+                        )
+                        updated_count += 1
+                    else:
+                        failed_count += 1
+                        error_messages.append(f"⚠️ Can't update `{role_name}` - role is higher than me")
+                else:
+                    # Create new role
+                    await current_guild.create_role(
+                        name=role_name,
+                        permissions=permissions,
+                        color=color,
+                        hoist=role_data.get('hoist', False),
+                        mentionable=role_data.get('mentionable', False),
+                        reason=f"Stolen from server {target_guild_id} by {ctx.author}"
+                    )
+                    created_count += 1
+                
+                # Update status every 10 roles
+                if idx % 10 == 0:
+                    try:
+                        await status_msg.edit(
+                            embed=discord.Embed(
+                                description=f"🔄 Stealing roles... **{idx + 1}/{len(target_roles)}** roles processed.\n"
+                                            f"✅ Created: {created_count} | 🔄 Updated: {updated_count} | ⚠️ Failed: {failed_count}",
+                                color=discord.Color.blue()
+                            )
+                        )
+                    except:
+                        pass
+                    
+            except discord.Forbidden:
+                failed_count += 1
+                error_messages.append(f"⚠️ Missing permissions for `{role_data['name']}`")
+            except Exception as e:
+                failed_count += 1
+                if len(error_messages) < 10:
+                    error_messages.append(f"❌ Failed `{role_data['name']}`: {str(e)[:40]}")
+        
+        # Final result
+        result_msg = (
+            f"✅ **Role Steal Complete!**\n"
+            f"🆕 Created: {created_count}\n"
+            f"🔄 Updated: {updated_count}\n"
+            f"⚠️ Failed: {failed_count}\n"
+            f"📌 Source Server ID: `{target_guild_id}`"
+        )
+        
+        final_embed = discord.Embed(
+            description=result_msg,
+            color=discord.Color.green() if failed_count == 0 else discord.Color.orange()
+        )
+        
+        if error_messages:
+            final_embed.add_field(
+                name="⚠️ Errors",
+                value="\n".join(error_messages[:10]) + (f"\n... and {len(error_messages) - 10} more" if len(error_messages) > 10 else ""),
+                inline=False
+            )
+        
+        await status_msg.edit(embed=final_embed)
+        
+    except ValueError:
+        embed = discord.Embed(
+            description="❌ Invalid Server ID! Please enter a valid number (e.g., `123456789012345678`).",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+    except discord.Forbidden:
+        embed = discord.Embed(
+            description="❌ I don't have permission to create/edit roles! Make sure I have **Manage Roles** permission.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+    except Exception as e:
+        embed = discord.Embed(
+            description=f"❌ Unexpected Error: {str(e)[:200]}",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        print(f"Full error: {e}")
+# =========================================================
 # RUN BOT
 # =========================================================
 
