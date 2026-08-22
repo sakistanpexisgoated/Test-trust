@@ -482,78 +482,104 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
-    cmd_name = ctx.command.name if ctx.command else "command"
-
     if isinstance(error, commands.MissingRequiredArgument):
-        arg_name = error.param.name
-        usage_str = COMMAND_USAGE.get(cmd_name, f",,{cmd_name} <{arg_name}>")
-        embed = discord.Embed(
-            description=(
-                f"```\n{usage_str}\n"
-                f"{' ' * max(0, usage_str.find('<') if '<' in usage_str else 0)}"
-                f"^^^^^^^^^\n\n"
-                f"{arg_name} is a required argument that is missing.\n```"
-            ),
-            color=discord.Color.from_rgb(47, 49, 54)
-        )
+        msg = f"{ctx.author.mention} You are missing an argument."
+        
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     if isinstance(error, commands.BadArgument):
-        usage_str = COMMAND_USAGE.get(cmd_name, f",,{cmd_name}")
-        embed = discord.Embed(
-            description=f"```\n{usage_str}\n\nInvalid argument. Please check the command format.\n```",
-            color=discord.Color.from_rgb(47, 49, 54)
-        )
+        msg = f"{ctx.author.mention} You provided an invalid argument."
+        
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     if isinstance(error, commands.MissingPermissions):
-        embed = discord.Embed(
-            title="🛡️ Permission Denied",
-            description="Only **server administrators or moderators** can use this command.",
-            color=discord.Color.red()
-        )
+        msg = f"{ctx.author.mention} You are missing the required permissions."
+        
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     if isinstance(error, commands.BotMissingPermissions):
-        embed = discord.Embed(
-            title="Bot is Missing Permissions",
-            description="I don't have the Discord permissions required to perform this command.",
-            color=discord.Color.red()
-        )
+        msg = f"{ctx.author.mention} I am missing the required permissions."
+        
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
-    embed = discord.Embed(
-        title="⚠️ Command Error",
-        description=f"Something went wrong: `{str(error)[:900]}`",
-        color=discord.Color.red()
-    )
+    if isinstance(error, commands.MemberNotFound):
+        msg = f"{ctx.author.mention} I couldn't find that member."
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(msg)
+
+    if isinstance(error, commands.CommandOnCooldown):
+        msg = f"{ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds."
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(msg)
+
+    if isinstance(error, commands.RoleNotFound):
+        msg = f"{ctx.author.mention} I couldn't find that role."
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(msg)
+
+    if isinstance(error, commands.NotOwner):
+        msg = f"{ctx.author.mention} Only the bot owner can use this command."
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(msg)
+
+    if isinstance(error, commands.NSFWChannelRequired):
+        msg = f"{ctx.author.mention} This command can only be used in NSFW channels."
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(msg)
+
+    msg = f"{ctx.author.mention} Something went wrong."
+    
     if ctx.interaction:
         try:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(msg, ephemeral=True)
         except Exception:
             return
-    return await ctx.send(embed=embed)
-
+    return await ctx.send(msg)
 # =========================================================
 # ALLOWED LINKS COMMANDS - UPDATED WITH SIMPLER UI
 # =========================================================
