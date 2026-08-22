@@ -238,7 +238,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-              # --- AFK MENTION CHECK ---
+    # --- AFK MENTION CHECK ---
     if message.mentions:
         for member in message.mentions:
             if member.id in afk_users:
@@ -292,6 +292,59 @@ async def on_message(message):
             )
 
         await message.channel.send(embed=embed)
+
+    # --- LINK FILTERING ---
+    if message.guild and link_check_enabled.get(message.guild.id, False):
+        url_pattern = r'https?://[^\s]+|www\.[^\s]+'
+        links = re.findall(url_pattern, message.content)
+        
+        if links:
+            cursor.execute("SELECT link_domain FROM allowed_links WHERE guild_id = ?", (message.guild.id,))
+            allowed = [row[0] for row in cursor.fetchall()]
+            
+            for link in links:
+                domain = extract_domain(link)
+                if domain and domain not in allowed:
+                    cursor.execute("SELECT mute_duration FROM link_punishment WHERE guild_id = ?", (message.guild.id,))
+                    row = cursor.fetchone()
+                    duration = row[0] if row else 300
+                    
+                    try:
+                        await message.delete()
+                        await message.author.timeout(timedelta(seconds=duration), reason=f"Sent unauthorized link: {domain}")
+                        await message.channel.send(f"🔇 {message.author.mention} was muted for {format_duration(duration)} for sending an unauthorized link: `{domain}`")
+                    except Exception as e:
+                        await message.channel.send(f"❌ Failed to mute {message.author.mention}: {e}")
+                    break
+
+    # --- THIS MUST BE THE VERY LAST LINE ---
+    await bot.process_commands(message)
+
+# =========================================================
+# HELP COMMAND
+# =========================================================
+@bot.hybrid_command(name="help", description="Display all available commands")
+async def help(ctx):
+    embed = discord.Embed(
+        title="📋 Rynx Bot Commands",
+        description="**Prefix:** `R!` or `/`",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
+    embed.add_field(name="🎉 Fun", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `pat`, `tape`, `gif`, `hack`, `mock`, `fraktur`, `pfps`, `memes`", inline=False)
+    embed.add_field(name="🎮 Games", value="`brainrot_dice`, `guess`, `country`, `debate`", inline=False)
+    embed.add_field(name="⚽ Football", value="`setchannel`, `spawn`, `collect`, `pack`, `sell`, `collection`, `trade`", inline=False)
+    embed.add_field(name="🛡️ Moderation", value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`", inline=False)
+    embed.add_field(name="👑 Admin", value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `trollpanel`, `whitelist`, `ghostping`, `fakenuke`", inline=False)
+    embed.add_field(name="💰 Admin Pay", value="`adminpay`, `adminset`, `adminsetbank`, `adminrob`, `adminrobamount`", inline=False)
+    embed.add_field(name="🔗 Link Filter", value="`allowed add`, `allowed remove`, `allowed list`, `allowed enable`, `allowed disable`, `allowed time`", inline=False)
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await ctx.send(embed=embed)
+
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
@@ -364,101 +417,63 @@ async def globally_block_blacklisted(ctx):
                 pass
         return False
     return True
+
 # =========================================================
 # ERROR HANDLER & COMMAND LISTINGS
 # =========================================================
 
 COMMAND_USAGE = {
-    "ban": "R!ban <member> [reason]",
-    "kick": "R!kick <member> [reason]",
-    "mute": "R!mute <member> <duration> [reason]",
-    "unmute": "R!unmute <member>",
-    "warn": "R!warn <member> [reason]",
-    "clear": "R!clear <amount>",
-    "purge": "R!purge <amount>",
-    "slowmode": "R!slowmode <seconds>",
-    "poll": "R!poll <question>",
-    "say": "R!say <message>",
-    "embed": "R!embed <title> | <description>",
-    "role": "R!role <member> <role_name>",
-    "steal": "R!steal <emoji_link_or_id>",
-    "stealroles": "R!stealroles <server_id>",
-    "blacklist": "R!blacklist <user_id> [reason]",
-    "unblacklist": "R!unblacklist <user_id>",
-    "serverblacklist": "R!serverblacklist <guild_id> [reason]",
-    "serverunblacklist": "R!serverunblacklist <guild_id>",
-    "whitelist": "R!whitelist <member>",
-    "unwhitelist": "R!unwhitelist <member>",
-    "ghostping": "R!ghostping <member> [times] [message]",
-    "masscreate": "R!masscreate <count> <name>",
-    "setup": "R!setup [style]",
-    "trollpanel": "R!trollpanel",
-    "mock": "R!mock <text>",
-    "fakenuke": "R!fakenuke [member]",
-    "goon": "R!goon <member>",
-    "sync": "R!sync",
-    "nuke": "R!nuke",
-    "backup": "R!backup create/info/load",
-    "allowed": "R!allowed link/unlink/list/enable/disable/time <value>",
-    "linkshelp": "R!linkshelp",
-    "cf": "R!cf",
-    "gayrate": "R!gayrate [member]",
-    "8ball": "R!8ball <question>",
-    "pp": "R!pp [member]",
-    "roast": "R!roast [member1] [member2] [member3]",
-    "iq": "R!iq [member]",
-    "kiss": "R!kiss <member>",
-    "gif": "R!gif <search_term>",
-    "hack": "R!hack <member>",
-    "snipe": "R!snipe [amount]",
-    "editsnipe": "R!editsnipe",
-    "avatar": "R!avatar [member]",
-    "afk": "R!afk [reason]",
-    "balance": "R!balance [member]",
-    "deposit": "R!deposit <amount/all>",
-    "withdraw": "R!withdraw <amount/all>",
-    "daily": "R!daily",
-    "work": "R!work",
-    "gamble": "R!gamble <amount>",
-    "dice": "R!dice <amount>",
-    "slots": "R!slots <amount>",
-    "crime": "R!crime",
-    "rob": "R!rob <member>",
-    "pay": "R!pay <member> <amount>",
-    "marry": "R!marry <member>",
-    "divorce": "R!divorce",
-    "brainrot_dice": "R!brainrot_dice [amount]",
-    "guess": "R!guess",
-    "country": "R!country",
-    "debate": "R!debate <member>",
-    "setchannel": "R!setchannel [#channel]",
-    "spawn": "R!spawn",
-    "collect": "R!collect",
-    "pack": "R!pack buy/open [pack_type]",
-    "sell": "R!sell [card_id]",
-    "collection": "R!collection [member]",
-    "trade": "R!trade <member>",
-    "pat": "R!pat <member>",
-    "tape": "R!tape <member>",
-    "spank": "R!spank <member>",
-    "bendover": "R!bendover <member>",
-    "slap": "R!slap <member>",
-    "rape": "R!rape <member>",
-    "pfps": "R!pfps",
-    "fraktur": "R!fraktur <text>",
-    "memes": "R!memes",
-    "hide": "R!hide <member>",
-    "seek": "R!seek #channel",
-    "hideleaderboard": "R!hideleaderboard",
-    "hidestats": "R!hidestats [member]",
-    "endhide": "R!endhide",
-    "giveaway": "R!giveaway create/reroll",
-    "adminpay": "R!adminpay <member> <amount>",
-    "adminset": "R!adminset <member> <amount>",
-    "adminsetbank": "R!adminsetbank <member> <amount>",
-    "adminrob": "R!adminrob <member>",
-    "adminrobamount": "R!adminrobamount <member> <amount>"
+    "help": ",,help",
+    "afk": ",,afk [reason]",
+    "ban": ",,ban <member> [reason]",
+    "unban": ",,unban <user_id>",
+    "mute": ",,mute <member> [duration] [reason]",
+    "kick": ",,kick <member> [reason]",
+    "warn": ",,warn <member> [reason]",
+    "pay": ",,pay <member> <amount>",
+    "gamble": ",,gamble <amount>",
+    "dice": ",,dice <amount>",
+    "slots": ",,slots <amount>",
+    "crime": ",,crime",
+    "rob": ",,rob <member>",
+    "work": ",,work",
+    "deposit": ",,deposit <amount>",
+    "withdraw": ",,withdraw <amount>",
+    "marry": ",,marry <member>",
+    "divorce": ",,divorce",
+    "avatar": ",,avatar [member]",
+    "cf": ",,cf",
+    "gayrate": ",,gayrate [member]",
+    "8ball": ",,8ball <question>",
+    "pp": ",,pp [member]",
+    "roast": ",,roast [member1] [member2] [member3]",
+    "iq": ",,iq [member]",
+    "kiss": ",,kiss <member>",
+    "gif": ",,gif <search_term>",
+    "snipe": ",,snipe [number]",
+    "editsnipe": ",,editsnipe",
+    "hack": ",,hack <member>",
+    "poll": ",,poll <question>",
+    "say": ",,say <message>",
+    "embed": ",,embed <title> | <description>",
+    "clear": ",,clear <amount>",
+    "purge": ",,purge <amount>",
+    "slowmode": ",,slowmode <seconds>",
+    "brainrot_dice": ",,brainrot_dice [amount]",
+    "blacklist": ",,blacklist <user_id_or_mention> [reason]",
+    "unblacklist": ",,unblacklist <user_id>",
+    "serverblacklist": ",,serverblacklist <guild_id> [reason]",
+    "serverunblacklist": ",,serverunblacklist <guild_id>",
+    "trollpanel": ",,trollpanel",
+    "whitelist": ",,whitelist <member>",
+    "unwhitelist": ",,unwhitelist <member>",
+    "ghostping": ",,ghostping <member>",
+    "mock": ",,mock <text>",
+    "fakenuke": ",,fakenuke [member]",
+    "masscreate": ",,masscreate <count> <name>",
+    "setup": ",,setup [style]"
 }
+
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandInvokeError):
@@ -467,105 +482,78 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
+    cmd_name = ctx.command.name if ctx.command else "command"
+
     if isinstance(error, commands.MissingRequiredArgument):
-        msg = f"{ctx.author.mention} You are missing an argument."
-        
+        arg_name = error.param.name
+        usage_str = COMMAND_USAGE.get(cmd_name, f",,{cmd_name} <{arg_name}>")
+        embed = discord.Embed(
+            description=(
+                f"```\n{usage_str}\n"
+                f"{' ' * max(0, usage_str.find('<') if '<' in usage_str else 0)}"
+                f"^^^^^^^^^\n\n"
+                f"{arg_name} is a required argument that is missing.\n```"
+            ),
+            color=discord.Color.from_rgb(47, 49, 54)
+        )
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(msg)
+        return await ctx.send(embed=embed)
 
     if isinstance(error, commands.BadArgument):
-        msg = f"{ctx.author.mention} You provided an invalid argument."
-        
+        usage_str = COMMAND_USAGE.get(cmd_name, f",,{cmd_name}")
+        embed = discord.Embed(
+            description=f"```\n{usage_str}\n\nInvalid argument. Please check the command format.\n```",
+            color=discord.Color.from_rgb(47, 49, 54)
+        )
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(msg)
+        return await ctx.send(embed=embed)
 
     if isinstance(error, commands.MissingPermissions):
-        msg = f"{ctx.author.mention} You are missing the required permissions."
-        
+        embed = discord.Embed(
+            title="🛡️ Permission Denied",
+            description="Only **server administrators or moderators** can use this command.",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(msg)
+        return await ctx.send(embed=embed)
 
     if isinstance(error, commands.BotMissingPermissions):
-        msg = f"{ctx.author.mention} I am missing the required permissions."
-        
+        embed = discord.Embed(
+            title="Bot is Missing Permissions",
+            description="I don't have the Discord permissions required to perform this command.",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(msg)
+        return await ctx.send(embed=embed)
 
-    if isinstance(error, commands.MemberNotFound):
-        msg = f"{ctx.author.mention} I couldn't find that member."
-        
-        if ctx.interaction:
-            try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
-            except Exception:
-                return
-        return await ctx.send(msg)
-
-    if isinstance(error, commands.CommandOnCooldown):
-        msg = f"{ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds."
-        
-        if ctx.interaction:
-            try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
-            except Exception:
-                return
-        return await ctx.send(msg)
-
-    if isinstance(error, commands.RoleNotFound):
-        msg = f"{ctx.author.mention} I couldn't find that role."
-        
-        if ctx.interaction:
-            try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
-            except Exception:
-                return
-        return await ctx.send(msg)
-
-    if isinstance(error, commands.NotOwner):
-        msg = f"{ctx.author.mention} Only the bot owner can use this command."
-        
-        if ctx.interaction:
-            try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
-            except Exception:
-                return
-        return await ctx.send(msg)
-
-    if isinstance(error, commands.NSFWChannelRequired):
-        msg = f"{ctx.author.mention} This command can only be used in NSFW channels."
-        
-        if ctx.interaction:
-            try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
-            except Exception:
-                return
-        return await ctx.send(msg)
-
-    # Default
-    msg = f"{ctx.author.mention} Something went wrong."
-    
+    embed = discord.Embed(
+        title="⚠️ Command Error",
+        description=f"Something went wrong: `{str(error)[:900]}`",
+        color=discord.Color.red()
+    )
     if ctx.interaction:
         try:
-            return await ctx.interaction.followup.send(msg, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         except Exception:
             return
-    return await ctx.send(msg)
+    return await ctx.send(embed=embed)
+
 # =========================================================
 # ALLOWED LINKS COMMANDS - UPDATED WITH SIMPLER UI
 # =========================================================
@@ -6904,204 +6892,6 @@ async def slap(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
-# =========================================================
-# STEAL ROLES COMMAND - COPY ROLES FROM ANY SERVER
-# =========================================================
-
-@bot.hybrid_command(name="stealroles", description="Steal ALL roles & perms from any server by ID (Owner only)")
-@app_commands.default_permissions(administrator=True)
-async def stealroles(ctx, server_id: str):
-    # Owner check - must be server owner
-    if ctx.author != ctx.guild.owner:
-        embed = discord.Embed(
-            description="❌ Only the **server owner** can use this command!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-
-    if ctx.interaction:
-        await ctx.interaction.response.defer(ephemeral=True)
-    
-    try:
-        target_guild_id = int(server_id)
-        current_guild = ctx.guild
-        
-        # Fetch roles using Discord API (bot doesn't need to be in the server)
-        url = f"https://discord.com/api/v10/guilds/{target_guild_id}/roles"
-        headers = {"Authorization": f"Bot {TOKEN}"}
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    embed = discord.Embed(
-                        description=f"❌ Couldn't fetch roles! Server ID might be invalid or the server is private.\nError: {response.status}",
-                        color=discord.Color.red()
-                    )
-                    if ctx.interaction:
-                        await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-                    else:
-                        await ctx.send(embed=embed)
-                    return
-                
-                target_roles_data = await response.json()
-        
-        # Filter out @everyone and sort by position
-        target_roles = [r for r in target_roles_data if r['name'] != "@everyone"]
-        target_roles.sort(key=lambda r: r['position'], reverse=True)
-        
-        # Check bot permissions
-        if not ctx.guild.me.guild_permissions.manage_roles:
-            embed = discord.Embed(
-                description="❌ I need **Manage Roles** permission to steal roles!",
-                color=discord.Color.red()
-            )
-            if ctx.interaction:
-                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
-            return
-        
-        # Existing roles for reference
-        existing_roles = {role.name: role for role in current_guild.roles}
-        
-        created_count = 0
-        updated_count = 0
-        failed_count = 0
-        error_messages = []
-        
-        status_msg = None
-        if ctx.interaction:
-            status_msg = await ctx.interaction.followup.send(
-                embed=discord.Embed(
-                    description=f"🔄 Stealing roles... Found **{len(target_roles)}** roles to copy.",
-                    color=discord.Color.blue()
-                ),
-                ephemeral=True
-            )
-        else:
-            status_msg = await ctx.send(
-                embed=discord.Embed(
-                    description=f"🔄 Stealing roles... Found **{len(target_roles)}** roles to copy.",
-                    color=discord.Color.blue()
-                )
-            )
-        
-        # Loop through and create/update roles
-        for idx, role_data in enumerate(target_roles):
-            try:
-                role_name = role_data['name']
-                
-                # Build permissions
-                permissions = discord.Permissions(int(role_data['permissions']))
-                
-                # Color
-                color = discord.Color(role_data['color']) if role_data['color'] != 0 else discord.Color.default()
-                
-                # Check if role exists
-                if role_name in existing_roles:
-                    existing_role = existing_roles[role_name]
-                    # Only update if bot has higher role
-                    if existing_role < ctx.guild.me.top_role:
-                        await existing_role.edit(
-                            permissions=permissions,
-                            color=color,
-                            hoist=role_data.get('hoist', False),
-                            mentionable=role_data.get('mentionable', False),
-                            reason=f"Updated via /stealroles from server {target_guild_id}"
-                        )
-                        updated_count += 1
-                    else:
-                        failed_count += 1
-                        error_messages.append(f"⚠️ Can't update `{role_name}` - role is higher than me")
-                else:
-                    # Create new role
-                    await current_guild.create_role(
-                        name=role_name,
-                        permissions=permissions,
-                        color=color,
-                        hoist=role_data.get('hoist', False),
-                        mentionable=role_data.get('mentionable', False),
-                        reason=f"Stolen from server {target_guild_id} by {ctx.author}"
-                    )
-                    created_count += 1
-                
-                # Update status every 10 roles
-                if idx % 10 == 0:
-                    try:
-                        await status_msg.edit(
-                            embed=discord.Embed(
-                                description=f"🔄 Stealing roles... **{idx + 1}/{len(target_roles)}** roles processed.\n"
-                                            f"✅ Created: {created_count} | 🔄 Updated: {updated_count} | ⚠️ Failed: {failed_count}",
-                                color=discord.Color.blue()
-                            )
-                        )
-                    except:
-                        pass
-                    
-            except discord.Forbidden:
-                failed_count += 1
-                error_messages.append(f"⚠️ Missing permissions for `{role_data['name']}`")
-            except Exception as e:
-                failed_count += 1
-                if len(error_messages) < 10:
-                    error_messages.append(f"❌ Failed `{role_data['name']}`: {str(e)[:40]}")
-        
-        # Final result
-        result_msg = (
-            f"✅ **Role Steal Complete!**\n"
-            f"🆕 Created: {created_count}\n"
-            f"🔄 Updated: {updated_count}\n"
-            f"⚠️ Failed: {failed_count}\n"
-            f"📌 Source Server ID: `{target_guild_id}`"
-        )
-        
-        final_embed = discord.Embed(
-            description=result_msg,
-            color=discord.Color.green() if failed_count == 0 else discord.Color.orange()
-        )
-        
-        if error_messages:
-            final_embed.add_field(
-                name="⚠️ Errors",
-                value="\n".join(error_messages[:10]) + (f"\n... and {len(error_messages) - 10} more" if len(error_messages) > 10 else ""),
-                inline=False
-            )
-        
-        await status_msg.edit(embed=final_embed)
-        
-    except ValueError:
-        embed = discord.Embed(
-            description="❌ Invalid Server ID! Please enter a valid number (e.g., `123456789012345678`).",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-    except discord.Forbidden:
-        embed = discord.Embed(
-            description="❌ I don't have permission to create/edit roles! Make sure I have **Manage Roles** permission.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-    except Exception as e:
-        embed = discord.Embed(
-            description=f"❌ Unexpected Error: {str(e)[:200]}",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        print(f"Full error: {e}")
 # =========================================================
 # RUN BOT
 # =========================================================
