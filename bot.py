@@ -6231,7 +6231,73 @@ async def bendover(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+# =========================================================
+# LINKS HELP COMMAND
+# =========================================================
 
+@bot.hybrid_command(name="linkshelp", aliases=["linkhelp", "lh"], description="Show help for link filtering commands")
+@commands.has_permissions(administrator=True)
+async def linkshelp(ctx):
+    embed = discord.Embed(
+        title="🔗 Link Filtering Commands",
+        description="**Manage allowed links and link filtering settings**",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    
+    embed.add_field(
+        name="📥 Add a Link",
+        value="`R!allowed link <domain>`\nExample: `R!allowed link roblox.com`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📤 Remove a Link",
+        value="`R!allowed unlink <domain>`\nExample: `R!allowed unlink roblox.com`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📋 List Allowed Links",
+        value="`R!allowed list`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🟢 Enable Filtering",
+        value="`R!allowed enable`\nTurns on link filtering. Unallowed links will get muted.",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🔴 Disable Filtering",
+        value="`R!allowed disable`\nTurns off link filtering. All links are allowed.",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="⏱️ Set Mute Duration",
+        value="`R!allowed time <duration>`\nOptions: `5m`, `10m`, `15m`, `20m`, `30m`, `1h`\nExample: `R!allowed time 10m`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📊 Check Status",
+        value="`R!allowed`\nShows current filtering status and mute duration",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🔄 How It Works",
+        value="1. Add allowed links with `R!allowed link`\n2. Enable filtering with `R!allowed enable`\n3. Users sending unallowed links get muted\n4. Set mute time with `R!allowed time`",
+        inline=False
+    )
+    
+    embed.set_footer(text="Admin only commands • Use R!allowed for quick status")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
