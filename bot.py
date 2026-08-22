@@ -5982,6 +5982,78 @@ async def stealurl(ctx, *, input_text: str):
         else:
             await ctx.send(embed=embed)
 # =========================================================
+# ROLE COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# =========================================================
+
+@bot.hybrid_command(name="role", description="Add a role to a member")
+@commands.has_permissions(manage_roles=True)
+async def role(ctx, member: discord.Member, *, role_name: str):
+    # Check if target is server owner
+    if ctx.guild.owner_id == member.id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot add roles to the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot add roles to the server owner.")
+    
+    # Check if target is staff (has kick/ban/manage roles perms)
+    if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
+        if ctx.author.id != ctx.guild.owner_id:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot add roles to a staff member.", ephemeral=True)
+            return await ctx.send(f"❌ {ctx.author.mention} you cannot add roles to a staff member.")
+    
+    # Check if bot can add roles to the target
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.")
+    
+    # Find the role by name
+    role = discord.utils.get(ctx.guild.roles, name=role_name)
+    
+    if not role:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ Role `{role_name}` not found.", ephemeral=True)
+        return await ctx.send(f"❌ Role `{role_name}` not found.")
+    
+    # Check if the bot can add this role (bot's role must be higher than the target role)
+    if ctx.guild.me and role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ I cannot add the role `{role_name}` because it's higher or equal to my highest role.", ephemeral=True)
+        return await ctx.send(f"❌ I cannot add the role `{role_name}` because it's higher or equal to my highest role.")
+    
+    # Check if the user already has the role
+    if role in member.roles:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} already has the role `{role_name}`.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} already has the role `{role_name}`.")
+    
+    try:
+        await member.add_roles(role, reason=f"Added by {ctx.author}")
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"✅ Added **{role_name}** to {member.mention}")
+        else:
+            await ctx.send(f"✅ Added **{role_name}** to {member.mention}")
+            
+    except Exception as e:
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ Failed to add role: {e}", ephemeral=True)
+        else:
+            await ctx.send(f"❌ Failed to add role: {e}")
+
+@role.error
+async def role_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Manage Roles permission.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ {ctx.author.mention} You are missing Manage Roles permission.")
+    if isinstance(error, commands.MemberNotFound):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ Member not found.")
+# =========================================================
 # RUN BOT
 # =========================================================
 
