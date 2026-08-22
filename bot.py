@@ -555,51 +555,69 @@ async def on_command_error(ctx, error):
     return await ctx.send(embed=embed)
 
 # =========================================================
-# ALLOWED LINKS COMMANDS
+# ALLOWED LINKS COMMANDS - UPDATED WITH SIMPLER UI
 # =========================================================
 
-@bot.hybrid_command(name="allowedlinks", aliases=["allowed"], description="Manage allowed links for the server")
+@bot.hybrid_command(name="allowed", aliases=["links"], description="Manage allowed links for the server")
 @commands.has_permissions(administrator=True)
-async def allowedlinks(ctx, action: str = None, *, link: str = None):
+async def allowed(ctx, action: str = None, *, link: str = None):
+    """
+    Simplified Usage:
+    R!allowed link <link> - Add a link to whitelist
+    R!allowed unlink <link> - Remove a link from whitelist
+    R!allowed list - Show all allowed links
+    R!allowed enable - Turn on link filtering
+    R!allowed disable - Turn off link filtering
+    R!allowed time <duration> - Set mute time (e.g. 10m, 30m, 1h)
+    """
     guild_id = ctx.guild.id
     
     if action is None:
         embed = discord.Embed(
-            title="🔗 Allowed Links Commands",
-            description="**Usage:**\n`R!allowed add <link>` - Add a domain to whitelist\n`R!allowed remove <link>` - Remove a domain\n`R!allowed list` - Show all allowed domains\n`R!allowed enable` - Enable link filtering\n`R!allowed disable` - Disable link filtering\n`R!allowed time <duration>` - Set mute time (e.g. 5m, 10m, 1h)",
+            title="🔗 Allowed Links",
+            description="**Commands:**\n`R!allowed link <url>` - Add a link\n`R!allowed unlink <url>` - Remove a link\n`R!allowed list` - Show allowed links\n`R!allowed enable` - Turn ON filtering\n`R!allowed disable` - Turn OFF filtering\n`R!allowed time <duration>` - Set mute time",
             color=discord.Color.blue()
         )
+        # Check current status
+        status = "✅ ENABLED" if link_check_enabled.get(guild_id, False) else "❌ DISABLED"
+        cursor.execute("SELECT mute_duration FROM link_punishment WHERE guild_id = ?", (guild_id,))
+        row = cursor.fetchone()
+        duration = format_duration(row[0]) if row else "5m (default)"
+        embed.add_field(name="Status", value=status, inline=True)
+        embed.add_field(name="Mute Duration", value=duration, inline=True)
+        embed.set_footer(text="Server admins only")
+        
         if ctx.interaction:
             await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         else:
             await ctx.send(embed=embed)
         return
     
-    if action.lower() == "add":
+    if action.lower() == "link":
         if not link:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message("❌ Please provide a link to add.", ephemeral=True)
-            return await ctx.send("❌ Please provide a link to add.")
+                return await ctx.interaction.response.send_message("❌ Please provide a link to add.\nExample: `R!allowed link roblox.com`", ephemeral=True)
+            return await ctx.send("❌ Please provide a link to add.\nExample: `R!allowed link roblox.com`")
         
         domain = extract_domain(link)
         if not domain:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message("❌ Invalid link format.", ephemeral=True)
-            return await ctx.send("❌ Invalid link format.")
+                return await ctx.interaction.response.send_message("❌ Invalid link format. Try: `R!allowed link roblox.com`", ephemeral=True)
+            return await ctx.send("❌ Invalid link format. Try: `R!allowed link roblox.com`")
         
         cursor.execute("INSERT OR IGNORE INTO allowed_links (guild_id, link_domain) VALUES (?, ?)", (guild_id, domain))
         db.commit()
         
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"✅ Added `{domain}` to allowed links.")
+            await ctx.interaction.response.send_message(f"✅ `{domain}` added to allowed links!")
         else:
-            await ctx.send(f"✅ Added `{domain}` to allowed links.")
+            await ctx.send(f"✅ `{domain}` added to allowed links!")
     
-    elif action.lower() == "remove":
+    elif action.lower() == "unlink":
         if not link:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message("❌ Please provide a link to remove.", ephemeral=True)
-            return await ctx.send("❌ Please provide a link to remove.")
+                return await ctx.interaction.response.send_message("❌ Please provide a link to remove.\nExample: `R!allowed unlink roblox.com`", ephemeral=True)
+            return await ctx.send("❌ Please provide a link to remove.\nExample: `R!allowed unlink roblox.com`")
         
         domain = extract_domain(link)
         if not domain:
@@ -611,9 +629,9 @@ async def allowedlinks(ctx, action: str = None, *, link: str = None):
         db.commit()
         
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"✅ Removed `{domain}` from allowed links.")
+            await ctx.interaction.response.send_message(f"✅ `{domain}` removed from allowed links!")
         else:
-            await ctx.send(f"✅ Removed `{domain}` from allowed links.")
+            await ctx.send(f"✅ `{domain}` removed from allowed links!")
     
     elif action.lower() == "list":
         cursor.execute("SELECT link_domain FROM allowed_links WHERE guild_id = ?", (guild_id,))
@@ -621,17 +639,18 @@ async def allowedlinks(ctx, action: str = None, *, link: str = None):
         
         if not rows:
             if ctx.interaction:
-                await ctx.interaction.response.send_message("📋 No allowed links set for this server.", ephemeral=True)
+                await ctx.interaction.response.send_message("📋 No links are allowed. All links will be blocked.", ephemeral=True)
             else:
-                await ctx.send("📋 No allowed links set for this server.")
+                await ctx.send("📋 No links are allowed. All links will be blocked.")
             return
         
-        domains = "\n".join([f"• {row[0]}" for row in rows])
+        domains = "\n".join([f"• `{row[0]}`" for row in rows])
         embed = discord.Embed(
-            title="🔗 Allowed Links",
+            title="📋 Allowed Links",
             description=domains,
-            color=discord.Color.blue()
+            color=discord.Color.green()
         )
+        embed.set_footer(text=f"Total: {len(rows)} allowed links")
         if ctx.interaction:
             await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         else:
@@ -640,54 +659,53 @@ async def allowedlinks(ctx, action: str = None, *, link: str = None):
     elif action.lower() == "enable":
         link_check_enabled[guild_id] = True
         if ctx.interaction:
-            await ctx.interaction.response.send_message("✅ Link filtering has been **enabled**.")
+            await ctx.interaction.response.send_message("✅ Link filtering **ENABLED**! Links not in the whitelist will be muted.")
         else:
-            await ctx.send("✅ Link filtering has been **enabled**.")
+            await ctx.send("✅ Link filtering **ENABLED**! Links not in the whitelist will be muted.")
     
     elif action.lower() == "disable":
         link_check_enabled[guild_id] = False
         if ctx.interaction:
-            await ctx.interaction.response.send_message("✅ Link filtering has been **disabled**.")
+            await ctx.interaction.response.send_message("✅ Link filtering **DISABLED**! All links are allowed.")
         else:
-            await ctx.send("✅ Link filtering has been **disabled**.")
+            await ctx.send("✅ Link filtering **DISABLED**! All links are allowed.")
     
     elif action.lower() == "time":
         if not link:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message("❌ Please provide a duration (e.g. 5m, 10m, 30m, 1h).", ephemeral=True)
-            return await ctx.send("❌ Please provide a duration (e.g. 5m, 10m, 30m, 1h).")
+                return await ctx.interaction.response.send_message("❌ Please provide a duration.\nExample: `R!allowed time 10m`", ephemeral=True)
+            return await ctx.send("❌ Please provide a duration.\nExample: `R!allowed time 10m`")
         
         seconds = parse_duration(link)
         if not seconds:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message("❌ Invalid duration. Use e.g. `5m`, `10m`, `30m`, `1h`.", ephemeral=True)
-            return await ctx.send("❌ Invalid duration. Use e.g. `5m`, `10m`, `30m`, `1h`.")
+                return await ctx.interaction.response.send_message("❌ Invalid duration. Use: `10m`, `30m`, `1h`", ephemeral=True)
+            return await ctx.send("❌ Invalid duration. Use: `10m`, `30m`, `1h`")
         
         if seconds < 60:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message("❌ Minimum mute time is 1 minute.", ephemeral=True)
-            return await ctx.send("❌ Minimum mute time is 1 minute.")
+                return await ctx.interaction.response.send_message("❌ Minimum is 1 minute.", ephemeral=True)
+            return await ctx.send("❌ Minimum is 1 minute.")
         
         if seconds > 3600:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message("❌ Maximum mute time is 1 hour.", ephemeral=True)
-            return await ctx.send("❌ Maximum mute time is 1 hour.")
+                return await ctx.interaction.response.send_message("❌ Maximum is 1 hour.", ephemeral=True)
+            return await ctx.send("❌ Maximum is 1 hour.")
         
         cursor.execute("INSERT OR REPLACE INTO link_punishment (guild_id, mute_duration) VALUES (?, ?)", (guild_id, seconds))
         db.commit()
         
         duration_str = format_duration(seconds)
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"✅ Fake link mute duration set to **{duration_str}**.")
+            await ctx.interaction.response.send_message(f"✅ Mute duration set to **{duration_str}**!")
         else:
-            await ctx.send(f"✅ Fake link mute duration set to **{duration_str}**.")
+            await ctx.send(f"✅ Mute duration set to **{duration_str}**!")
     
     else:
         if ctx.interaction:
-            await ctx.interaction.response.send_message("❌ Invalid action. Use `add`, `remove`, `list`, `enable`, `disable`, or `time`.", ephemeral=True)
+            await ctx.interaction.response.send_message("❌ Invalid command.\nUse: `link`, `unlink`, `list`, `enable`, `disable`, or `time`", ephemeral=True)
         else:
-            await ctx.send("❌ Invalid action. Use `add`, `remove`, `list`, `enable`, `disable`, or `time`.")
-
+            await ctx.send("❌ Invalid command.\nUse: `link`, `unlink`, `list`, `enable`, `disable`, or `time`")
 # =========================================================
 # TROLL PANEL MODALS & VIEW
 # =========================================================
