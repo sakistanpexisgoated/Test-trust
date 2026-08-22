@@ -118,6 +118,22 @@ CREATE TABLE IF NOT EXISTS giveaways (
 )
 """)
 
+# ALLOWED LINKS TABLES
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS allowed_links (
+    guild_id INTEGER,
+    link_domain TEXT,
+    PRIMARY KEY (guild_id, link_domain)
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS link_punishment (
+    guild_id INTEGER PRIMARY KEY,
+    mute_duration INTEGER DEFAULT 300
+)
+""")
+
 for _owner_id in OWNER_IDS:
     cursor.execute(
         "INSERT OR IGNORE INTO troll_whitelist (user_id, added_by) VALUES (?, ?)",
@@ -133,10 +149,9 @@ db.commit()
 sniped_messages = {}
 edited_messages = {}
 afk_users = {}
-
 troll_settings = {}
-
 server_backups = {}
+link_check_enabled = {}
 
 def is_troll_whitelisted(user_id):
     if user_id in OWNER_IDS:
@@ -152,6 +167,24 @@ def _is_server_mod(member: discord.Member) -> bool:
         return True
     mod_role_names = {"Moderator", "Admin", "Owner"}
     return any(role.name in mod_role_names for role in member.roles)
+
+def extract_domain(link: str) -> str:
+    """Extract domain from a URL."""
+    clean = re.sub(r'^https?://', '', link)
+    clean = re.sub(r'^www\.', '', clean)
+    domain = clean.split('/')[0].split('?')[0].split('#')[0]
+    return domain.lower() if domain else None
+
+def format_duration(seconds: int) -> str:
+    """Format seconds into readable duration."""
+    if seconds < 60:
+        return f"{seconds}s"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        return f"{minutes}m"
+    else:
+        hours = seconds // 3600
+        return f"{hours}h"
 
 @bot.event
 async def on_message_delete(message):
@@ -260,10 +293,35 @@ async def on_message(message):
 
         await message.channel.send(embed=embed)
 
+    # --- LINK FILTERING ---
+    if message.guild and link_check_enabled.get(message.guild.id, False):
+        url_pattern = r'https?://[^\s]+|www\.[^\s]+'
+        links = re.findall(url_pattern, message.content)
+        
+        if links:
+            cursor.execute("SELECT link_domain FROM allowed_links WHERE guild_id = ?", (message.guild.id,))
+            allowed = [row[0] for row in cursor.fetchall()]
+            
+            for link in links:
+                domain = extract_domain(link)
+                if domain and domain not in allowed:
+                    cursor.execute("SELECT mute_duration FROM link_punishment WHERE guild_id = ?", (message.guild.id,))
+                    row = cursor.fetchone()
+                    duration = row[0] if row else 300
+                    
+                    try:
+                        await message.delete()
+                        await message.author.timeout(timedelta(seconds=duration), reason=f"Sent unauthorized link: {domain}")
+                        await message.channel.send(f"🔇 {message.author.mention} was muted for {format_duration(duration)} for sending an unauthorized link: `{domain}`")
+                    except Exception as e:
+                        await message.channel.send(f"❌ Failed to mute {message.author.mention}: {e}")
+                    break
+
     # --- THIS MUST BE THE VERY LAST LINE ---
     await bot.process_commands(message)
+
 # =========================================================
-# HELP COMMAND - REPLACE YOUR EXISTING HELP COMMAND
+# HELP COMMAND
 # =========================================================
 @bot.hybrid_command(name="help", description="Display all available commands")
 async def help(ctx):
@@ -279,12 +337,14 @@ async def help(ctx):
     embed.add_field(name="🛡️ Moderation", value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`", inline=False)
     embed.add_field(name="👑 Admin", value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `trollpanel`, `whitelist`, `ghostping`, `fakenuke`", inline=False)
     embed.add_field(name="💰 Admin Pay", value="`adminpay`, `adminset`, `adminsetbank`, `adminrob`, `adminrobamount`", inline=False)
+    embed.add_field(name="🔗 Link Filter", value="`allowed add`, `allowed remove`, `allowed list`, `allowed enable`, `allowed disable`, `allowed time`", inline=False)
     embed.set_footer(text=f"Requested by {ctx.author.display_name}")
     
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
@@ -493,6 +553,140 @@ async def on_command_error(ctx, error):
         except Exception:
             return
     return await ctx.send(embed=embed)
+
+# =========================================================
+# ALLOWED LINKS COMMANDS
+# =========================================================
+
+@bot.hybrid_command(name="allowedlinks", aliases=["allowed"], description="Manage allowed links for the server")
+@commands.has_permissions(administrator=True)
+async def allowedlinks(ctx, action: str = None, *, link: str = None):
+    guild_id = ctx.guild.id
+    
+    if action is None:
+        embed = discord.Embed(
+            title="🔗 Allowed Links Commands",
+            description="**Usage:**\n`R!allowed add <link>` - Add a domain to whitelist\n`R!allowed remove <link>` - Remove a domain\n`R!allowed list` - Show all allowed domains\n`R!allowed enable` - Enable link filtering\n`R!allowed disable` - Disable link filtering\n`R!allowed time <duration>` - Set mute time (e.g. 5m, 10m, 1h)",
+            color=discord.Color.blue()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if action.lower() == "add":
+        if not link:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Please provide a link to add.", ephemeral=True)
+            return await ctx.send("❌ Please provide a link to add.")
+        
+        domain = extract_domain(link)
+        if not domain:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Invalid link format.", ephemeral=True)
+            return await ctx.send("❌ Invalid link format.")
+        
+        cursor.execute("INSERT OR IGNORE INTO allowed_links (guild_id, link_domain) VALUES (?, ?)", (guild_id, domain))
+        db.commit()
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"✅ Added `{domain}` to allowed links.")
+        else:
+            await ctx.send(f"✅ Added `{domain}` to allowed links.")
+    
+    elif action.lower() == "remove":
+        if not link:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Please provide a link to remove.", ephemeral=True)
+            return await ctx.send("❌ Please provide a link to remove.")
+        
+        domain = extract_domain(link)
+        if not domain:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Invalid link format.", ephemeral=True)
+            return await ctx.send("❌ Invalid link format.")
+        
+        cursor.execute("DELETE FROM allowed_links WHERE guild_id = ? AND link_domain = ?", (guild_id, domain))
+        db.commit()
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"✅ Removed `{domain}` from allowed links.")
+        else:
+            await ctx.send(f"✅ Removed `{domain}` from allowed links.")
+    
+    elif action.lower() == "list":
+        cursor.execute("SELECT link_domain FROM allowed_links WHERE guild_id = ?", (guild_id,))
+        rows = cursor.fetchall()
+        
+        if not rows:
+            if ctx.interaction:
+                await ctx.interaction.response.send_message("📋 No allowed links set for this server.", ephemeral=True)
+            else:
+                await ctx.send("📋 No allowed links set for this server.")
+            return
+        
+        domains = "\n".join([f"• {row[0]}" for row in rows])
+        embed = discord.Embed(
+            title="🔗 Allowed Links",
+            description=domains,
+            color=discord.Color.blue()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+    
+    elif action.lower() == "enable":
+        link_check_enabled[guild_id] = True
+        if ctx.interaction:
+            await ctx.interaction.response.send_message("✅ Link filtering has been **enabled**.")
+        else:
+            await ctx.send("✅ Link filtering has been **enabled**.")
+    
+    elif action.lower() == "disable":
+        link_check_enabled[guild_id] = False
+        if ctx.interaction:
+            await ctx.interaction.response.send_message("✅ Link filtering has been **disabled**.")
+        else:
+            await ctx.send("✅ Link filtering has been **disabled**.")
+    
+    elif action.lower() == "time":
+        if not link:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Please provide a duration (e.g. 5m, 10m, 30m, 1h).", ephemeral=True)
+            return await ctx.send("❌ Please provide a duration (e.g. 5m, 10m, 30m, 1h).")
+        
+        seconds = parse_duration(link)
+        if not seconds:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Invalid duration. Use e.g. `5m`, `10m`, `30m`, `1h`.", ephemeral=True)
+            return await ctx.send("❌ Invalid duration. Use e.g. `5m`, `10m`, `30m`, `1h`.")
+        
+        if seconds < 60:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Minimum mute time is 1 minute.", ephemeral=True)
+            return await ctx.send("❌ Minimum mute time is 1 minute.")
+        
+        if seconds > 3600:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message("❌ Maximum mute time is 1 hour.", ephemeral=True)
+            return await ctx.send("❌ Maximum mute time is 1 hour.")
+        
+        cursor.execute("INSERT OR REPLACE INTO link_punishment (guild_id, mute_duration) VALUES (?, ?)", (guild_id, seconds))
+        db.commit()
+        
+        duration_str = format_duration(seconds)
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"✅ Fake link mute duration set to **{duration_str}**.")
+        else:
+            await ctx.send(f"✅ Fake link mute duration set to **{duration_str}**.")
+    
+    else:
+        if ctx.interaction:
+            await ctx.interaction.response.send_message("❌ Invalid action. Use `add`, `remove`, `list`, `enable`, `disable`, or `time`.", ephemeral=True)
+        else:
+            await ctx.send("❌ Invalid action. Use `add`, `remove`, `list`, `enable`, `disable`, or `time`.")
 
 # =========================================================
 # TROLL PANEL MODALS & VIEW
@@ -1476,8 +1670,9 @@ async def iq(ctx, member: discord.Member = None):
     score = random.randint(40, 160)
     embed = discord.Embed(description=f"🧠 **{target.display_name}'s IQ:** {score}", color=discord.Color.blurple())
     await ctx.send(embed=embed)
+
 # =========================================================
-# KISS COMMAND - REPLACE YOUR EXISTING KISS COMMAND
+# KISS COMMAND
 # =========================================================
 
 KISS_GIFS = [
@@ -1669,6 +1864,7 @@ async def ban_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Ban Members permission.", ephemeral=True)
         else:
             await ctx.send(f"❌ {ctx.author.mention} You are missing Ban Members permission.")
+
 # =========================================================
 # UNBAN COMMAND
 # =========================================================
@@ -1735,6 +1931,7 @@ async def fake_ban(ctx, member: discord.Member, *, reason: str = "No reason prov
     embed.set_footer(text=f"tottaly real trust by {ctx.author.display_name}")
 
     await ctx.send(embed=embed)
+
 # =========================================================
 # KICK COMMAND
 # =========================================================
@@ -1780,6 +1977,7 @@ async def kick_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Kick Members permission.", ephemeral=True)
         else:
             await ctx.send(f"❌ {ctx.author.mention} You are missing Kick Members permission.")
+
 # =========================================================
 # MUTE COMMAND
 # =========================================================
@@ -1787,20 +1985,17 @@ async def kick_error(ctx, error):
 @bot.hybrid_command(name="mute", description="Mute a member")
 @commands.has_permissions(manage_roles=True)
 async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str = "No reason provided"):
-    # Check if target is server owner
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
             return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot mute the server owner.", ephemeral=True)
         return await ctx.send(f"❌ {ctx.author.mention} you cannot mute the server owner.")
     
-    # Check if target is staff (has kick/ban/manage roles perms)
     if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
         if ctx.author.id != ctx.guild.owner_id:
             if ctx.interaction:
                 return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot mute a staff member.", ephemeral=True)
             return await ctx.send(f"❌ {ctx.author.mention} you cannot mute a staff member.")
     
-    # Check bot role hierarchy
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         if ctx.interaction:
             return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot mute them.", ephemeral=True)
@@ -1842,6 +2037,7 @@ async def mute_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Mute Perms.", ephemeral=True)
         else:
             await ctx.send(f"❌ {ctx.author.mention} You are missing Mute permissions.")
+
 # =========================================================
 # UNMUTE COMMAND
 # =========================================================
@@ -1892,6 +2088,7 @@ async def unmute_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
         else:
             await ctx.send(f"❌ Member not found.")
+
 # =========================================================
 # WARN COMMAND
 # =========================================================
@@ -2702,7 +2899,7 @@ async def setup(ctx, style: str = "┃"):
         await ctx.send(success_text)
 
 # =========================================================
-# GUESS A NUMBER COMMAND & UI - FIXED WITH PROPER BOT GUESSING
+# GUESS A NUMBER COMMAND & UI
 # =========================================================
 
 guess_number_games = {}
@@ -3023,7 +3220,6 @@ class GuessModal(discord.ui.Modal, title="Enter Your Guess"):
         remaining_secs = max(0, 200 - elapsed)
         remaining_time = f"{remaining_secs // 60}:{remaining_secs % 60:02d}"
 
-        # Send "Bot's turn" message
         turn_embed = discord.Embed(
             description="🤖 **Bot's turn!**",
             color=discord.Color.blurple()
@@ -3072,18 +3268,15 @@ async def guess(ctx):
 async def giveaway_group(ctx):
     pass
 
-# Persistent entry view (button has a fixed custom_id so we can re-register the view on startup)
 class GiveawayEntryView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)  # persistent view
+        super().__init__(timeout=None)
 
     @discord.ui.button(label="Enter Giveaway 🎉", style=discord.ButtonStyle.primary, custom_id="giveaway_enter")
     async def enter_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Quick guard
         if interaction.user.bot:
             return await interaction.response.send_message("Bots can't join giveaways.", ephemeral=True)
 
-        # Ack immediately so Discord doesn't show "didn't respond in time"
         try:
             await interaction.response.send_message("✅ You've been entered into the giveaway! Good luck!", ephemeral=True)
         except Exception:
@@ -3092,7 +3285,6 @@ class GiveawayEntryView(discord.ui.View):
             except Exception:
                 pass
 
-        # Do DB work in background to avoid blocking interaction
         async def do_join(message_id: int, user_id: int):
             try:
                 cursor.execute("SELECT entrants FROM giveaways WHERE message_id = ?", (message_id,))
@@ -3111,9 +3303,7 @@ class GiveawayEntryView(discord.ui.View):
                 cursor.execute("UPDATE giveaways SET entrants = ? WHERE message_id = ?", (json.dumps(entrants), message_id))
                 db.commit()
 
-                # Best-effort: update the giveaway embed Entrants field
                 try:
-                    # fetch channel id from DB
                     cursor.execute("SELECT channel_id FROM giveaways WHERE message_id = ?", (message_id,))
                     chrow = cursor.fetchone()
                     if chrow:
@@ -3136,7 +3326,6 @@ class GiveawayEntryView(discord.ui.View):
             except Exception:
                 pass
 
-        # use interaction.message.id as the giveaway message id
         message_id = interaction.message.id if interaction.message else None
         if message_id:
             bot.loop.create_task(do_join(message_id, interaction.user.id))
@@ -3150,12 +3339,6 @@ async def giveaway_create(
     prize: str,
     channel: discord.TextChannel = None
 ):
-    """
-    duration: e.g. 1h, 30m, 2h, 1d
-    winners: number of winners (int)
-    prize: prize string
-    channel: optional channel (defaults to current channel)
-    """
     if ctx.guild is None:
         return await ctx.send(embed=discord.Embed(description="This command must be used in a server.", color=discord.Color.red()))
     if not ctx.author.guild_permissions.manage_guild and ctx.author.id not in OWNER_IDS:
@@ -3194,14 +3377,12 @@ async def giveaway_create(
     except Exception as e:
         return await ctx.send(embed=discord.Embed(description=f"Failed to post giveaway: {e}", color=discord.Color.red()))
 
-    # Persist giveaway (store host_id; entrants/winners_list empty)
     cursor.execute(
         "INSERT INTO giveaways (message_id, channel_id, guild_id, prize, host_id, end_time, winners, entrants, winners_list) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (giveaway_msg.id, target_channel.id, ctx.guild.id, prize, ctx.author.id, end_ts, winners, json.dumps([]), json.dumps([]))
     )
     db.commit()
 
-    # Add Entrants field to embed
     try:
         embed.add_field(name="Entrants", value="0", inline=True)
         await giveaway_msg.edit(embed=embed, view=view)
@@ -3214,16 +3395,13 @@ async def giveaway_create(
     else:
         await ctx.send(embed=confirm, delete_after=10)
 
-    # Spawn background task (pass host id)
     bot.loop.create_task(_handle_giveaway_end(giveaway_msg.id, target_channel.id, ctx.guild.id, prize, winners, end_ts, ctx.author.id))
 
 
 async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, prize: str, winners_count: int, end_time_unix: int, host_id: int):
-    # Sleep until giveaway end (handles negative/late cases)
     wait_for = max(0, end_time_unix - int(time.time()))
     await asyncio.sleep(wait_for)
 
-    # Try to fetch channel and message
     try:
         channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
     except Exception:
@@ -3234,7 +3412,6 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
     except Exception:
         return
 
-    # Load entrants from DB
     cursor.execute("SELECT entrants, winners_list FROM giveaways WHERE message_id = ?", (message_id,))
     row = cursor.fetchone()
     entrants: List[int] = []
@@ -3249,7 +3426,6 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
         except Exception:
             previous_winners = []
 
-    # Decide winners
     winner_mentions = "None"
     winners = []
     if not entrants:
@@ -3260,7 +3436,6 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
         winners = random.sample(entrants, k=pick_count)
         winner_mentions = ", ".join(f"<@{w}>" for w in winners)
 
-        # Record winners (overwrite winners_list to current winners)
         cursor.execute("UPDATE giveaways SET winners_list = ? WHERE message_id = ?", (json.dumps(winners), message_id))
         db.commit()
 
@@ -3272,7 +3447,6 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
         result_embed.add_field(name="Host", value=f"<@{host_id}>", inline=True)
         result_embed.add_field(name="Entrants", value=str(len(entrants)), inline=True)
 
-        # DM winners with requested message
         for uid in winners:
             try:
                 user = await bot.fetch_user(uid)
@@ -3283,7 +3457,6 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
 
         await channel.send(embed=result_embed)
 
-    # Edit original giveaway message to mark ended and disable the button
     try:
         if message.embeds:
             ended_embed = message.embeds[0]
@@ -3295,18 +3468,9 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
     except Exception:
         pass
 
-    # Do NOT delete DB row so host can reroll later. If you want auto-delete, uncomment the lines below:
-    # cursor.execute("DELETE FROM giveaways WHERE message_id = ?", (message_id,))
-    # db.commit()
-
 
 @giveaway_group.command(name="reroll", description="Reroll winners for a giveaway by message ID (host only)")
 async def giveaway_reroll(ctx, message_id: int, count: int = 1):
-    """
-    Example: ,,giveaway reroll 123456789012345678 1
-    Only the host or bot owners can reroll.
-    count: how many new winners to pick (default 1)
-    """
     cursor.execute("SELECT channel_id, prize, host_id, entrants, winners_list FROM giveaways WHERE message_id = ?", (message_id,))
     row = cursor.fetchone()
     if not row:
@@ -3328,7 +3492,6 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
     if not entrants:
         return await ctx.send(embed=discord.Embed(description="No entrants to pick from.", color=discord.Color.orange()))
 
-    # Build pool excluding previous winners if possible
     pool = [u for u in entrants if u not in previous_winners]
     if not pool:
         pool = entrants.copy()
@@ -3336,12 +3499,10 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
     pick_count = max(1, min(count, len(pool)))
     new_winners = random.sample(pool, k=pick_count)
 
-    # Update winners_list (append new winners to previous list)
     updated_winners = previous_winners + new_winners
     cursor.execute("UPDATE giveaways SET winners_list = ? WHERE message_id = ?", (json.dumps(updated_winners), message_id))
     db.commit()
 
-    # Announce new winner(s) in original channel and DM them
     try:
         channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
         mentions = ", ".join(f"<@{w}>" for w in new_winners)
@@ -3358,7 +3519,6 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
 
         await channel.send(embed=reroll_embed)
 
-        # DM each new winner with the requested DM format
         for uid in new_winners:
             try:
                 user = await bot.fetch_user(uid)
@@ -3367,7 +3527,6 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
             except Exception:
                 pass
 
-        # Also append reroll winners to original giveaway message (best-effort)
         try:
             original_msg = await channel.fetch_message(message_id)
             if original_msg and original_msg.embeds:
@@ -3380,10 +3539,9 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
         await ctx.send(embed=discord.Embed(description=f"Rerolled — new winner(s): {mentions}", color=discord.Color.green()))
     except Exception as e:
         await ctx.send(embed=discord.Embed(description=f"Failed to announce reroll: {e}", color=discord.Color.red()))
-# ---------- END GIVEAWAY BLOCK ----------
 
 # =========================================================
-# SYNC COMMAND - FIX SLASH COMMANDS
+# SYNC COMMAND
 # =========================================================
 
 @bot.hybrid_command(name="sync", description="Force sync slash commands")
@@ -3396,6 +3554,7 @@ async def sync(ctx):
         await ctx.send("✅ Commands have been synced globally!")
     except Exception as e:
         await ctx.send(f"❌ Sync failed: {e}")
+
 # =========================================================
 # GOON COMMAND
 # =========================================================
@@ -3432,8 +3591,6 @@ async def goon(ctx, member: discord.Member):
 
 from discord.ui import View, Select
 
-# --- VIEW CLASSES FOR INTERACTIVE MENUS ---
-
 class RestoreSelectView(View):
     def __init__(self, ctx, backup_data):
         super().__init__(timeout=180)
@@ -3441,7 +3598,6 @@ class RestoreSelectView(View):
         self.backup_data = backup_data
         self.selected_options = ["Delete Roles", "Delete Channels", "Load Roles", "Load Channels", "Load Settings", "Load Messages"]
 
-        # Add interactive dropdown matching the layout in your screenshots
         self.select = Select(
             placeholder="Select options to load from backup...",
             min_values=1,
@@ -3469,7 +3625,6 @@ class RestoreSelectView(View):
         if interaction.user != self.ctx.author:
             return await interaction.response.send_message("This menu isn't for you!", ephemeral=True)
         
-        # Move to confirmation step view
         confirm_view = ConfirmRestoreView(self.ctx, self.backup_data, self.selected_options)
         
         roles_up = "will be updated" if "Load Roles" in self.selected_options else "will be skipped"
@@ -3496,7 +3651,6 @@ class RestoreSelectView(View):
         embed = discord.Embed(title="❌ Restore Cancelled", description="Server restoration was aborted safely.", color=discord.Color.red())
         await interaction.response.edit_message(embed=embed, view=None)
 
-
 class ConfirmRestoreView(View):
     def __init__(self, ctx, backup_data, options):
         super().__init__(timeout=180)
@@ -3513,14 +3667,12 @@ class ConfirmRestoreView(View):
         await interaction.response.edit_message(embed=discord.Embed(title="♻️ Restoring Server...", description="Processing backup payload. Please wait...", color=discord.Color.blue()), view=None)
 
         try:
-            # 1. Server Settings
             if "Load Settings" in self.options:
                 try:
                     await guild.edit(name=self.backup_data.get("name", guild.name))
                 except Exception:
                     pass
 
-            # 2. Delete Channels
             if "Delete Channels" in self.options:
                 for channel in guild.channels:
                     try:
@@ -3529,7 +3681,6 @@ class ConfirmRestoreView(View):
                     except Exception:
                         pass
 
-            # 3. Delete Roles
             if "Delete Roles" in self.options:
                 for role in guild.roles:
                     if role != guild.default_role and not role.managed and role < guild.me.top_role:
@@ -3539,8 +3690,7 @@ class ConfirmRestoreView(View):
                         except Exception:
                             pass
 
-            # 4. Load Roles
-            role_mapping = {} # old_name -> new_role object
+            role_mapping = {}
             if "Load Roles" in self.options:
                 for r_data in self.backup_data["roles"]:
                     try:
@@ -3557,12 +3707,10 @@ class ConfirmRestoreView(View):
                     except Exception:
                         pass
 
-            # 5. Load Channels & Categories
-            category_mapping = {} # old_category_name -> new category object
-            channel_mapping = {} # old_channel_name -> new channel object
+            category_mapping = {}
+            channel_mapping = {}
 
             if "Load Channels" in self.options:
-                # First pass: Create categories
                 for c_data in self.backup_data["channels"]:
                     if c_data["type"] == "category":
                         try:
@@ -3573,7 +3721,6 @@ class ConfirmRestoreView(View):
                         except Exception:
                             pass
 
-                # Second pass: Create text & voice channels inside categories
                 for c_data in self.backup_data["channels"]:
                     if c_data["type"] == "text":
                         cat = category_mapping.get(c_data["category"]) if c_data["category"] else None
@@ -3592,18 +3739,15 @@ class ConfirmRestoreView(View):
                         except Exception:
                             pass
 
-            # 6. Load Messages
             if "Load Messages" in self.options and "messages" in self.backup_data:
                 for ch_name, msgs in self.backup_data["messages"].items():
                     target_ch = channel_mapping.get(ch_name)
                     if target_ch and isinstance(target_ch, discord.TextChannel):
-                        # Reverse to send oldest messages first
                         for m in reversed(msgs):
                             try:
                                 author_tag = m["author"]
                                 content = f"**[Backup Archive] {author_tag}:** {m['content']}"
                                 
-                                # Include attachments or embeds text notation if present
                                 if m.get("attachments"):
                                     content += "\n" + "\n".join(m["attachments"])
                                     
@@ -3629,9 +3773,6 @@ class ConfirmRestoreView(View):
             return await interaction.response.send_message("This menu isn't for you!", ephemeral=True)
         await interaction.response.edit_message(embed=discord.Embed(title="❌ Cancelled", description="Restoration cancelled.", color=discord.Color.red()), view=None)
 
-
-# --- COMMANDS ---
-
 @bot.hybrid_group(name="backup", description="Server backup management commands")
 async def backup(ctx):
     if ctx.invoked_subcommand is None:
@@ -3646,11 +3787,9 @@ async def backup_create(ctx, message_count: int = 25):
     if ctx.interaction:
         await ctx.interaction.response.defer(ephemeral=True)
 
-    # Generate unique backup ID tag
     import random, string, datetime
     backup_id = "".join(random.choices(string.ascii_uppercase + string.digits, k=11))
     
-    # Backup channels
     channels_data = []
     for c in sorted(guild.channels, key=lambda x: x.position):
         channels_data.append({
@@ -3660,7 +3799,6 @@ async def backup_create(ctx, message_count: int = 25):
             "position": c.position
         })
 
-    # Backup roles
     roles_data = []
     for r in guild.roles:
         if r != guild.default_role and not r.managed:
@@ -3672,7 +3810,6 @@ async def backup_create(ctx, message_count: int = 25):
                 "mentionable": r.mentionable
             })
 
-    # Backup messages if requested
     messages_data = {}
     if message_count > 0:
         for channel in guild.text_channels:
@@ -3717,7 +3854,6 @@ async def backup_create(ctx, message_count: int = 25):
     else:
         await ctx.send(embed=embed)
 
-
 @backup.command(name="info", description="View details of a specific backup id")
 async def backup_info(ctx, backup_id: str):
     bdata = server_backups.get(backup_id)
@@ -3736,7 +3872,6 @@ async def backup_info(ctx, backup_id: str):
         color=discord.Color.blue()
     )
     await ctx.send(embed=embed, ephemeral=True)
-
 
 @backup.command(name="load", description="Load and restore a backup into the current server")
 async def backup_load(ctx, backup_id: str):
@@ -3762,9 +3897,11 @@ async def backup_load(ctx, backup_id: str):
         await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     else:
         await ctx.send(embed=embed, view=view)
+
 # =========================================================
-# NUKE COMMAND FOR DISCORD SERVERS AND KICK 
+# NUKE COMMAND
 # =========================================================
+
 class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
     confirm = discord.ui.TextInput(
         label="Type YES to confirm nuke",
@@ -3992,6 +4129,10 @@ async def memes(ctx):
     
     await ctx.send(random.choice(meme_list))
 
+# =========================================================
+# COUNTRY FLAGS GAME
+# =========================================================
+
 country_flags = {
     "easy": [
         {"name": "United States", "flag": "🇺🇸"},
@@ -4179,7 +4320,6 @@ class CountryGuessView(discord.ui.View):
 
 async def start_new_round(channel, difficulty, player_id, total_rounds, current_round, correct_count, round_history):
     if current_round > total_rounds:
-        # Game over - clear used countries for this player
         if player_id in used_countries:
             del used_countries[player_id]
         
@@ -4209,13 +4349,11 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
     import random
     import copy
     
-    # Get available countries (not used yet for this player)
     if player_id not in used_countries:
         used_countries[player_id] = []
     
     available = [c for c in country_flags[difficulty] if c["name"] not in used_countries[player_id]]
     
-    # If no countries left, reset the used list
     if not available:
         used_countries[player_id] = []
         available = country_flags[difficulty]
@@ -4249,7 +4387,6 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
             break
 
 async def start_country_setup(channel, player_id):
-    # Clear used countries for new game
     if player_id in used_countries:
         del used_countries[player_id]
     
@@ -4269,7 +4406,6 @@ async def start_country_setup(channel, player_id):
             if interaction2.user.id != player_id:
                 await interaction2.response.send_message("❌ Not your game!", ephemeral=True)
                 return
-            # Check if enough countries exist for the selected rounds
             if rounds > len(country_flags[diff]):
                 await interaction2.response.send_message(
                     f"❌ Not enough countries in **{diff.upper()}** mode for {rounds} rounds. Max: {len(country_flags[diff])}",
@@ -4308,11 +4444,11 @@ async def start_country_setup(channel, player_id):
 @bot.hybrid_command(name="country", description="Start a country flag guessing game")
 async def country(ctx):
     await start_country_setup(ctx.channel, ctx.author.id)
+
 # =========================================================
 # FOOTBALL CARDS SYSTEM
 # =========================================================
 
-# --- DATABASE TABLES ---
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS football_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4337,17 +4473,15 @@ CREATE TABLE IF NOT EXISTS football_packs (
 )
 """)
 
-# Default pack types - FIXED SYNTAX WITH SINGLE QUOTES AROUND JSON
 cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('bronze', 500, 3, '{\"common\":0.7,\"rare\":0.25,\"epic\":0.04,\"legendary\":0.01}')")
 cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('silver', 1500, 5, '{\"common\":0.4,\"rare\":0.35,\"epic\":0.2,\"legendary\":0.05}')")
 cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('gold', 5000, 7, '{\"common\":0.15,\"rare\":0.35,\"epic\":0.35,\"legendary\":0.15}')")
 cursor.execute("INSERT OR IGNORE INTO football_packs VALUES ('legendary', 20000, 10, '{\"common\":0.05,\"rare\":0.15,\"epic\":0.35,\"legendary\":0.45}')")
 db.commit()
 
-FOOTBALL_CHANNEL = {}  # guild_id -> channel_id
-FOOTBALL_SPAWN_COOLDOWN = {}  # guild_id -> last_spawn_time
+FOOTBALL_CHANNEL = {}
+FOOTBALL_SPAWN_COOLDOWN = {}
 
-# --- SAMPLE FOOTBALL PLAYER DATA ---
 FOOTBALL_PLAYERS = [
     {"name": "Lionel Messi", "club": "Inter Miami", "nationality": "Argentina", "position": "Forward", "rating": 95, "rarity": "legendary"},
     {"name": "Cristiano Ronaldo", "club": "Al Nassr", "nationality": "Portugal", "position": "Forward", "rating": 94, "rarity": "legendary"},
@@ -4380,7 +4514,6 @@ RARITY_ORDER = {"common": 0, "rare": 1, "epic": 2, "legendary": 3}
 RARITY_COLORS = {"common": 0x808080, "rare": 0x1E90FF, "epic": 0x9B59B6, "legendary": 0xF1C40F}
 RARITY_SELL_PRICES = {"common": 50, "rare": 200, "epic": 800, "legendary": 5000}
 
-# --- HELPER FUNCTIONS ---
 def get_player_cards(user_id):
     cursor.execute("SELECT * FROM football_cards WHERE user_id = ?", (user_id,))
     return cursor.fetchall()
@@ -4453,7 +4586,6 @@ def delete_card(card_id, user_id):
     db.commit()
     return cursor.rowcount > 0
 
-# --- SET CHANNEL COMMAND ---
 @bot.hybrid_command(name="setchannel", description="Set the channel for football card spawns")
 @commands.has_permissions(administrator=True)
 async def setchannel(ctx, channel: discord.TextChannel = None):
@@ -4468,7 +4600,6 @@ async def setchannel(ctx, channel: discord.TextChannel = None):
     else:
         await ctx.send(embed=embed)
 
-# --- SPAWN COMMAND ---
 @bot.hybrid_command(name="spawn", description="Spawn a random football player card in the channel")
 @commands.has_permissions(administrator=True)
 async def spawn(ctx):
@@ -4533,7 +4664,6 @@ async def spawn(ctx):
 
 current_spawn = {"guild_id": None, "player": None, "claimed_by": None, "claimed_at": None}
 
-# --- COLLECT COMMAND ---
 @bot.hybrid_command(name="collect", description="Collect the currently spawned football card")
 async def collect(ctx):
     if current_spawn["guild_id"] != ctx.guild.id:
@@ -4573,13 +4703,11 @@ async def collect(ctx):
     else:
         await ctx.send(embed=embed)
 
-# --- PACK BUY COMMAND ---
 @bot.hybrid_command(name="pack", description="Buy or open a football card pack")
 async def pack(ctx, action: str, pack_type: str = None):
     action = action.lower()
     
     if action == "buy":
-        # Show pack selection menu
         embed = discord.Embed(
             title="📦 Buy a Pack",
             description="Select a pack type from the dropdown below:",
@@ -4600,7 +4728,6 @@ async def pack(ctx, action: str, pack_type: str = None):
                 custom_id=f"buy_{pack[0]}"
             ))
         
-        # Add callback to buttons
         async def button_callback(interaction: discord.Interaction):
             if interaction.user.id != ctx.author.id:
                 await interaction.response.send_message("❌ This isn't your purchase!", ephemeral=True)
@@ -4619,10 +4746,8 @@ async def pack(ctx, action: str, pack_type: str = None):
                 await interaction.response.send_message(f"❌ You need **${price:,}** to buy a {pack_type.capitalize()} pack. You have ${wallet:,}.", ephemeral=True)
                 return
             
-            # Deduct money and store pack in inventory
             update_wallet(ctx.author.id, -price)
             
-            # Store pack in user's inventory (temporary storage)
             cursor.execute("INSERT OR REPLACE INTO football_packs_inventory (user_id, pack_type, quantity) VALUES (?, ?, COALESCE((SELECT quantity FROM football_packs_inventory WHERE user_id = ? AND pack_type = ?), 0) + 1)", 
                           (ctx.author.id, pack_type, ctx.author.id, pack_type))
             db.commit()
@@ -4643,7 +4768,6 @@ async def pack(ctx, action: str, pack_type: str = None):
             await ctx.send(embed=embed, view=view)
     
     elif action == "open":
-        # Show user's packs
         cursor.execute("SELECT pack_type, quantity FROM football_packs_inventory WHERE user_id = ? AND quantity > 0", (ctx.author.id,))
         packs = cursor.fetchall()
         
@@ -4679,14 +4803,12 @@ async def pack(ctx, action: str, pack_type: str = None):
             
             pack_type = interaction.data["custom_id"].replace("open_", "")
             
-            # Check if user has this pack
             cursor.execute("SELECT quantity FROM football_packs_inventory WHERE user_id = ? AND pack_type = ?", (ctx.author.id, pack_type))
             row = cursor.fetchone()
             if not row or row[0] <= 0:
                 await interaction.response.send_message("❌ You don't have any {pack_type.capitalize()} packs!", ephemeral=True)
                 return
             
-            # Open the pack
             result = open_pack(ctx.author.id, pack_type)
             if result == "insufficient":
                 await interaction.response.send_message("❌ You don't have enough money to open this pack!", ephemeral=True)
@@ -4695,7 +4817,6 @@ async def pack(ctx, action: str, pack_type: str = None):
                 await interaction.response.send_message("❌ Invalid pack type!", ephemeral=True)
                 return
             
-            # Decrease pack count
             cursor.execute("UPDATE football_packs_inventory SET quantity = quantity - 1 WHERE user_id = ? AND pack_type = ?", (ctx.author.id, pack_type))
             db.commit()
             
@@ -4741,11 +4862,9 @@ class PackOpenView(discord.ui.View):
         super().__init__(timeout=120)
         self.user_id = user_id
 
-# --- SELL COMMAND ---
 @bot.hybrid_command(name="sell", description="Sell a football card for money")
 async def sell(ctx, card_id: str = None):
     if card_id is None:
-        # Show user's cards to sell
         cards = get_player_cards(ctx.author.id)
         if not cards:
             embed = discord.Embed(
@@ -4789,7 +4908,6 @@ async def sell(ctx, card_id: str = None):
             
             price = RARITY_SELL_PRICES.get(card[5], 50)
             
-            # Delete card and give money
             if delete_card(card_id, ctx.author.id):
                 update_wallet(ctx.author.id, price)
                 embed = discord.Embed(
@@ -4810,7 +4928,6 @@ async def sell(ctx, card_id: str = None):
             await ctx.send(embed=embed, view=view)
         return
     
-    # Sell specific card by ID
     try:
         card_id = int(card_id)
     except ValueError:
@@ -4864,7 +4981,6 @@ class SellView(discord.ui.View):
         super().__init__(timeout=120)
         self.user_id = user_id
 
-# --- COLLECTION COMMAND ---
 @bot.hybrid_command(name="collection", aliases=["cards"], description="View your football card collection")
 async def collection(ctx, member: discord.Member = None):
     target = member or ctx.author
@@ -4906,7 +5022,6 @@ async def collection(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 
-# --- DEBATE COMMAND ---
 @bot.hybrid_command(name="debate", description="Debate another member using football cards")
 async def debate(ctx, member: discord.Member):
     if member.id == ctx.author.id:
@@ -4988,7 +5103,6 @@ async def debate(ctx, member: discord.Member):
     else:
         await ctx.send(embed=embed)
 
-# --- TRADE COMMAND ---
 @bot.hybrid_command(name="trade", description="Send a trade request to another member")
 async def trade(ctx, member: discord.Member):
     if member.id == ctx.author.id:
@@ -5219,8 +5333,9 @@ class TradeMoneyModal(discord.ui.Modal, title="Add Money to Trade"):
         
         await interaction.response.defer()
         await self.trade_view.update_embed(interaction)
+
 # =========================================================
-# PAT COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# PAT COMMAND
 # =========================================================
 
 PAT_GIFS = [
@@ -5264,8 +5379,9 @@ async def pat(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
-# TAPE COMMAND add this before the bot.run   
+# TAPE COMMAND
 # =========================================================
 
 TAPE_GIFS = [
@@ -5308,8 +5424,9 @@ async def tape(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
-# PFPS COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# PFPS COMMAND
 # =========================================================
 
 PFPS = [
@@ -5360,11 +5477,11 @@ async def pfps(ctx):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
-# FRAKTUR COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# FRAKTUR COMMAND
 # =========================================================
 
-# Fraktur style mapping (like 𝔫𝔦𝔤𝔤𝔞)
 FRAKTUR_MAP = {
     'a': '𝔞', 'b': '𝔟', 'c': '𝔠', 'd': '𝔡', 'e': '𝔢', 'f': '𝔣', 'g': '𝔤',
     'h': '𝔥', 'i': '𝔦', 'j': '𝔧', 'k': '𝔨', 'l': '𝔩', 'm': '𝔪', 'n': '𝔫',
@@ -5375,11 +5492,10 @@ FRAKTUR_MAP = {
     'O': '𝔒', 'P': '𝔓', 'Q': '𝔔', 'R': 'ℜ', 'S': '𝔖', 'T': '𝔗', 'U': '𝔘',
     'V': '𝔙', 'W': '𝔚', 'X': '𝔛', 'Y': '𝔜', 'Z': 'ℨ',
     '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
-    '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
+    '5': '5', '6': '6', '7': '7', '8': '8', '9': '9
 }
 
 def convert_to_fraktur(text):
-    """Convert text to Fraktur style."""
     result = []
     for char in text:
         if char in FRAKTUR_MAP:
@@ -5403,32 +5519,25 @@ async def fraktur(ctx, *, text: str):
     
     converted = convert_to_fraktur(text)
     
-    # Delete the user's original message if it's a prefix command
     if not ctx.interaction and ctx.message:
         try:
             await ctx.message.delete()
         except Exception:
             pass
     
-    # Send just the converted text, no embed
     if ctx.interaction:
         await ctx.interaction.response.send_message(converted)
     else:
         await ctx.send(converted)
+
 # =========================================================
-# ADMIN PAY COMMANDS - ADD THIS BEFORE bot.run(TOKEN)
+# ADMIN PAY COMMANDS
 # =========================================================
 
-# Owner IDs who can use this command
 ADMIN_PAY_USERS = {1286560808528117820, 1152424544557088849}
 
 @bot.hybrid_command(name="adminpay", aliases=["ownerspay"], description="Admin command to give money to any user")
 async def adminpay(ctx, member: discord.Member, amount: int):
-    """
-    Admin command to give money to any user.
-    Usage: ,,adminpay @member 1000 or /adminpay @member 1000
-    """
-    # Check if the command user is authorized
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
             description="❌ You do not have permission to use this command!",
@@ -5440,7 +5549,6 @@ async def adminpay(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Validate amount
     if amount <= 0:
         embed = discord.Embed(
             description="❌ Amount must be greater than zero.",
@@ -5452,10 +5560,8 @@ async def adminpay(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Give the money
     update_wallet(member.id, amount)
     
-    # Get updated balance
     new_wallet, new_bank = get_user_econ(member.id)
     
     embed = discord.Embed(
@@ -5482,11 +5588,6 @@ async def adminpay(ctx, member: discord.Member, amount: int):
 
 @bot.hybrid_command(name="adminset", aliases=["ownersset"], description="Admin command to set a user's exact wallet balance (including 0)")
 async def adminset(ctx, member: discord.Member, amount: int):
-    """
-    Admin command to set a user's wallet balance exactly (can be 0).
-    Usage: ,,adminset @member 5000 or /adminset @member 5000
-    """
-    # Check if the command user is authorized
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
             description="❌ You do not have permission to use this command!",
@@ -5498,7 +5599,6 @@ async def adminset(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Validate amount (can be 0 or more)
     if amount < 0:
         embed = discord.Embed(
             description="❌ Amount cannot be negative.",
@@ -5510,14 +5610,11 @@ async def adminset(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Get current balances
     wallet, bank = get_user_econ(member.id)
     
-    # Set wallet to exact amount (keeping bank unchanged)
     cursor.execute("UPDATE users SET wallet = ? WHERE user_id = ?", (amount, member.id))
     db.commit()
     
-    # Get updated balance
     new_wallet, new_bank = get_user_econ(member.id)
     
     embed = discord.Embed(
@@ -5544,11 +5641,6 @@ async def adminset(ctx, member: discord.Member, amount: int):
 
 @bot.hybrid_command(name="adminsetbank", aliases=["ownerssetbank"], description="Admin command to set a user's exact bank balance (including 0)")
 async def adminsetbank(ctx, member: discord.Member, amount: int):
-    """
-    Admin command to set a user's bank balance exactly (can be 0).
-    Usage: ,,adminsetbank @member 5000 or /adminsetbank @member 5000
-    """
-    # Check if the command user is authorized
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
             description="❌ You do not have permission to use this command!",
@@ -5560,7 +5652,6 @@ async def adminsetbank(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Validate amount (can be 0 or more)
     if amount < 0:
         embed = discord.Embed(
             description="❌ Amount cannot be negative.",
@@ -5572,11 +5663,9 @@ async def adminsetbank(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Set bank to exact amount (keeping wallet unchanged)
     cursor.execute("UPDATE users SET bank = ? WHERE user_id = ?", (amount, member.id))
     db.commit()
     
-    # Get updated balance
     new_wallet, new_bank = get_user_econ(member.id)
     
     embed = discord.Embed(
@@ -5603,11 +5692,6 @@ async def adminsetbank(ctx, member: discord.Member, amount: int):
 
 @bot.hybrid_command(name="adminrob", aliases=["ownersrob"], description="Admin command to rob any user (never fails) - steals from wallet AND bank")
 async def adminrob(ctx, member: discord.Member):
-    """
-    Admin command to rob any user - steals from both wallet and bank.
-    Usage: ,,adminrob @member or /adminrob @member
-    """
-    # Check if the command user is authorized
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
             description="❌ You do not have permission to use this command!",
@@ -5619,7 +5703,6 @@ async def adminrob(ctx, member: discord.Member):
             await ctx.send(embed=embed)
         return
     
-    # Can't rob yourself
     if member.id == ctx.author.id:
         embed = discord.Embed(
             description="❌ You can't rob yourself!",
@@ -5631,10 +5714,7 @@ async def adminrob(ctx, member: discord.Member):
             await ctx.send(embed=embed)
         return
     
-    # Get current balances
     wallet, bank = get_user_econ(member.id)
-    
-    # Calculate total money (wallet + bank)
     total_money = wallet + bank
     
     if total_money <= 0:
@@ -5648,21 +5728,15 @@ async def adminrob(ctx, member: discord.Member):
             await ctx.send(embed=embed)
         return
     
-    # Steal ALL money from wallet
     stolen_wallet = wallet
-    
-    # Steal ALL money from bank
     stolen_bank = bank
     
-    # Set wallet and bank to 0
     cursor.execute("UPDATE users SET wallet = 0, bank = 0 WHERE user_id = ?", (member.id,))
     db.commit()
     
-    # Add stolen money to the admin's wallet (command user)
     total_stolen = stolen_wallet + stolen_bank
     update_wallet(ctx.author.id, total_stolen)
     
-    # Get admin's new balance
     admin_wallet, admin_bank = get_user_econ(ctx.author.id)
     
     embed = discord.Embed(
@@ -5699,11 +5773,6 @@ async def adminrob(ctx, member: discord.Member):
 
 @bot.hybrid_command(name="adminrobamount", aliases=["ownersrobamount"], description="Admin command to rob a specific amount from a user's wallet only")
 async def adminrobamount(ctx, member: discord.Member, amount: int):
-    """
-    Admin command to rob a specific amount from a user's wallet (never fails).
-    Usage: ,,adminrobamount @member 500 or /adminrobamount @member 500
-    """
-    # Check if the command user is authorized
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
             description="❌ You do not have permission to use this command!",
@@ -5715,7 +5784,6 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Can't rob yourself
     if member.id == ctx.author.id:
         embed = discord.Embed(
             description="❌ You can't rob yourself!",
@@ -5727,7 +5795,6 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Validate amount
     if amount <= 0:
         embed = discord.Embed(
             description="❌ Amount must be greater than zero.",
@@ -5739,10 +5806,8 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Get current balances
     wallet, bank = get_user_econ(member.id)
     
-    # Check if the user has enough money in wallet
     if wallet < amount:
         embed = discord.Embed(
             description=f"❌ {member.mention} only has **${wallet:,}** in their wallet, not enough to steal **${amount:,}**.",
@@ -5754,14 +5819,11 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    # Take money from victim's wallet
     cursor.execute("UPDATE users SET wallet = wallet - ? WHERE user_id = ?", (amount, member.id))
     db.commit()
     
-    # Give money to the admin
     update_wallet(ctx.author.id, amount)
     
-    # Get updated balances
     new_victim_wallet, new_victim_bank = get_user_econ(member.id)
     admin_wallet, admin_bank = get_user_econ(ctx.author.id)
     
@@ -5791,8 +5853,9 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
             except Exception:
                 pass
         await ctx.send(embed=embed)
+
 # =========================================================
-# EMOJI STEALER COMMAND - FIXED WITH AUTO-RENAME
+# EMOJI STEALER COMMAND
 # =========================================================
 
 @bot.hybrid_command(name="stealurl", aliases=["surl", "steal"], description="Steal an emoji using its Discord link, ID, or the emoji itself")
@@ -5814,7 +5877,6 @@ async def stealurl(ctx, *, input_text: str):
             await ctx.send(embed=embed)
         return
     
-    # Defer response for slash commands
     if ctx.interaction:
         await ctx.interaction.response.defer()
     
@@ -5822,7 +5884,6 @@ async def stealurl(ctx, *, input_text: str):
     image_url = None
     emoji_name = None
     
-    # Check if it's a Discord CDN URL
     if "cdn.discordapp.com/emojis/" in input_text or "media.discordapp.net/emojis/" in input_text:
         image_url = input_text.split('?')[0]
         filename = image_url.split('/')[-1]
@@ -5830,7 +5891,6 @@ async def stealurl(ctx, *, input_text: str):
         if emoji_name.isdigit():
             emoji_name = "emoji"
     
-    # Check if it's a custom emoji format <:name:id>
     elif '<' in input_text and '>' in input_text:
         match = re.search(r'<a?:([^:]+):(\d+)>', input_text)
         if match:
@@ -5840,13 +5900,11 @@ async def stealurl(ctx, *, input_text: str):
             ext = ".gif" if is_animated else ".png"
             image_url = f"https://cdn.discordapp.com/emojis/{emoji_id}{ext}"
     
-    # Check if it's a numeric ID only
     elif input_text.isdigit():
         emoji_id = input_text
         image_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
         emoji_name = "emoji"
     
-    # Check if it's an emoji name
     else:
         emoji_name = input_text
         existing_emoji = discord.utils.get(ctx.guild.emojis, name=emoji_name)
@@ -5877,7 +5935,6 @@ async def stealurl(ctx, *, input_text: str):
             await ctx.send(embed=embed)
         return
     
-    # Clean emoji name
     if emoji_name:
         emoji_name = re.sub(r'[^a-zA-Z0-9_]', '_', emoji_name)
         if not emoji_name or emoji_name.isdigit():
@@ -5888,19 +5945,16 @@ async def stealurl(ctx, *, input_text: str):
     if len(emoji_name) > 32:
         emoji_name = emoji_name[:32]
     
-    # --- AUTO-RENAME IF NAME ALREADY EXISTS ---
     original_name = emoji_name
     counter = 1
     while discord.utils.get(ctx.guild.emojis, name=emoji_name):
         emoji_name = f"{original_name}_{counter}"
         counter += 1
-        # Safety limit
         if counter > 100:
             emoji_name = f"emoji_{int(time.time())}"
             break
     
     try:
-        # Download the emoji
         async with aiohttp.ClientSession() as session:
             async with session.get(image_url, timeout=10) as resp:
                 if resp.status == 200:
@@ -5926,14 +5980,12 @@ async def stealurl(ctx, *, input_text: str):
                             await ctx.send(embed=embed)
                         return
         
-        # Create the emoji
         new_emoji = await ctx.guild.create_custom_emoji(
             name=emoji_name[:32],
             image=image_data,
             reason=f"Stolen by {ctx.author.display_name}"
         )
         
-        # Check if name was changed
         name_changed = original_name != emoji_name
         name_message = f" (renamed to `:{emoji_name}:` because `:{original_name}:` already existed)" if name_changed else ""
         
@@ -5981,33 +6033,30 @@ async def stealurl(ctx, *, input_text: str):
             await ctx.interaction.followup.send(embed=embed)
         else:
             await ctx.send(embed=embed)
+
 # =========================================================
-# ROLE COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# ROLE COMMAND
 # =========================================================
 
 @bot.hybrid_command(name="role", description="Add a role to a member")
 @commands.has_permissions(manage_roles=True)
 async def role(ctx, member: discord.Member, *, role_name: str):
-    # Check if target is server owner
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
             return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot add roles to the server owner.", ephemeral=True)
         return await ctx.send(f"❌ {ctx.author.mention} you cannot add roles to the server owner.")
     
-    # Check if target is staff (has kick/ban/manage roles perms)
     if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
         if ctx.author.id != ctx.guild.owner_id:
             if ctx.interaction:
                 return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot add roles to a staff member.", ephemeral=True)
             return await ctx.send(f"❌ {ctx.author.mention} you cannot add roles to a staff member.")
     
-    # Check if bot can add roles to the target
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         if ctx.interaction:
             return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.", ephemeral=True)
         return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.")
     
-    # Find the role by name
     role = discord.utils.get(ctx.guild.roles, name=role_name)
     
     if not role:
@@ -6015,13 +6064,11 @@ async def role(ctx, member: discord.Member, *, role_name: str):
             return await ctx.interaction.response.send_message(f"❌ Role `{role_name}` not found.", ephemeral=True)
         return await ctx.send(f"❌ Role `{role_name}` not found.")
     
-    # Check if the bot can add this role (bot's role must be higher than the target role)
     if ctx.guild.me and role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         if ctx.interaction:
             return await ctx.interaction.response.send_message(f"❌ I cannot add the role `{role_name}` because it's higher or equal to my highest role.", ephemeral=True)
         return await ctx.send(f"❌ I cannot add the role `{role_name}` because it's higher or equal to my highest role.")
     
-    # Check if the user already has the role
     if role in member.roles:
         if ctx.interaction:
             return await ctx.interaction.response.send_message(f"❌ {member.mention} already has the role `{role_name}`.", ephemeral=True)
@@ -6053,8 +6100,9 @@ async def role_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
         else:
             await ctx.send(f"❌ Member not found.")
-            # =========================================================
-# SPANK COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+
+# =========================================================
+# SPANK COMMAND
 # =========================================================
 
 SPANK_GIFS = [
@@ -6109,8 +6157,9 @@ async def spank(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
-# BENDOVER COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# BENDOVER COMMAND
 # =========================================================
 
 BENDOVER_GIFS = [
@@ -6164,6 +6213,7 @@ async def bendover(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
 # RUN BOT
 # =========================================================
