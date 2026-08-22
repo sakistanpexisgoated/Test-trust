@@ -238,7 +238,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-          # --- AFK RETURN CHECK ---
+              # --- AFK RETURN CHECK ---
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
@@ -295,6 +295,7 @@ async def on_message(message):
             )
 
         await message.channel.send(embed=embed)
+        await bot.process_commands(message)
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
