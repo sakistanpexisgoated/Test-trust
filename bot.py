@@ -6784,7 +6784,7 @@ async def endhide(ctx):
 # =========================================================
 
 RAPE_GIFS = [
-    "https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif"
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGJhM3FmcWN2ZWJ2dTEyMGppN2puOTM2a3l5d2ozOHNwYzV3MmxwNCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/OGXilB8foNFIs/giphy.gif"
 ]
 
 @bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
@@ -6805,7 +6805,7 @@ async def pat(ctx, member: discord.Member = None):
             description=f"🫂 {ctx.author.mention} rapes themselves... that's kinda sad but okay!",
             color=discord.Color.orange()
         )
-        embed.set_image(url=random.choice(PAT_GIFS))
+        embed.set_image(url=random.choice(RAPE_GIFS))
         if ctx.interaction:
             await ctx.interaction.response.send_message(embed=embed)
         else:
@@ -6824,7 +6824,7 @@ async def pat(ctx, member: discord.Member = None):
         return
     
     embed = discord.Embed(
-        description=f"🍑 {ctx.author.mention} rapes {member.mention}! How wholesome! 🍆",
+        description=f"🍑 {ctx.author.mention} rapes {member.mention}!🍆",
         color=discord.Color.from_rgb(255, 182, 193)
     )
     embed.set_image(url=random.choice(RAPE_GIFS))
