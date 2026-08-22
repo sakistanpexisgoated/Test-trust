@@ -422,95 +422,95 @@ async def globally_block_blacklisted(ctx):
 # =========================================================
 
 COMMAND_USAGE = {
-    "ban": "R!ban @member reason",
-    "kick": "R!kick @member reason",
-    "mute": "R!mute @member duration reason",
-    "unmute": "R!unmute @member",
-    "warn": "R!warn @member reason",
-    "clear": "R!clear amount",
-    "purge": "R!purge amount",
-    "slowmode": "R!slowmode seconds",
-    "poll": "R!poll question",
-    "say": "R!say message",
-    "embed": "R!embed title | description",
-    "role": "R!role @member role_name",
-    "steal": "R!steal emoji_link_or_id",
-    "stealroles": "R!stealroles server_id",
-    "blacklist": "R!blacklist user_id reason",
-    "unblacklist": "R!unblacklist user_id",
-    "serverblacklist": "R!serverblacklist guild_id reason",
-    "serverunblacklist": "R!serverunblacklist guild_id",
-    "whitelist": "R!whitelist @member",
-    "unwhitelist": "R!unwhitelist @member",
-    "ghostping": "R!ghostping @member times message",
-    "masscreate": "R!masscreate count name",
-    "setup": "R!setup style",
+    "ban": "R!ban <member> [reason]",
+    "kick": "R!kick <member> [reason]",
+    "mute": "R!mute <member> <duration> [reason]",
+    "unmute": "R!unmute <member>",
+    "warn": "R!warn <member> [reason]",
+    "clear": "R!clear <amount>",
+    "purge": "R!purge <amount>",
+    "slowmode": "R!slowmode <seconds>",
+    "poll": "R!poll <question>",
+    "say": "R!say <message>",
+    "embed": "R!embed <title> | <description>",
+    "role": "R!role <member> <role_name>",
+    "steal": "R!steal <emoji_link_or_id>",
+    "stealroles": "R!stealroles <server_id>",
+    "blacklist": "R!blacklist <user_id> [reason]",
+    "unblacklist": "R!unblacklist <user_id>",
+    "serverblacklist": "R!serverblacklist <guild_id> [reason]",
+    "serverunblacklist": "R!serverunblacklist <guild_id>",
+    "whitelist": "R!whitelist <member>",
+    "unwhitelist": "R!unwhitelist <member>",
+    "ghostping": "R!ghostping <member> [times] [message]",
+    "masscreate": "R!masscreate <count> <name>",
+    "setup": "R!setup [style]",
     "trollpanel": "R!trollpanel",
-    "mock": "R!mock text",
-    "fakenuke": "R!fakenuke @member",
-    "goon": "R!goon @member",
+    "mock": "R!mock <text>",
+    "fakenuke": "R!fakenuke [member]",
+    "goon": "R!goon <member>",
     "sync": "R!sync",
     "nuke": "R!nuke",
     "backup": "R!backup create/info/load",
-    "allowed": "R!allowed link/unlink/list/enable/disable/time value",
+    "allowed": "R!allowed link/unlink/list/enable/disable/time <value>",
     "linkshelp": "R!linkshelp",
     "cf": "R!cf",
-    "gayrate": "R!gayrate @member",
-    "8ball": "R!8ball question",
-    "pp": "R!pp @member",
-    "roast": "R!roast @member1 @member2 @member3",
-    "iq": "R!iq @member",
-    "kiss": "R!kiss @member",
-    "gif": "R!gif search_term",
-    "hack": "R!hack @member",
-    "snipe": "R!snipe amount",
+    "gayrate": "R!gayrate [member]",
+    "8ball": "R!8ball <question>",
+    "pp": "R!pp [member]",
+    "roast": "R!roast [member1] [member2] [member3]",
+    "iq": "R!iq [member]",
+    "kiss": "R!kiss <member>",
+    "gif": "R!gif <search_term>",
+    "hack": "R!hack <member>",
+    "snipe": "R!snipe [amount]",
     "editsnipe": "R!editsnipe",
-    "avatar": "R!avatar @member",
-    "afk": "R!afk reason",
-    "balance": "R!balance @member",
-    "deposit": "R!deposit amount",
-    "withdraw": "R!withdraw amount",
+    "avatar": "R!avatar [member]",
+    "afk": "R!afk [reason]",
+    "balance": "R!balance [member]",
+    "deposit": "R!deposit <amount/all>",
+    "withdraw": "R!withdraw <amount/all>",
     "daily": "R!daily",
     "work": "R!work",
-    "gamble": "R!gamble amount",
-    "dice": "R!dice amount",
-    "slots": "R!slots amount",
+    "gamble": "R!gamble <amount>",
+    "dice": "R!dice <amount>",
+    "slots": "R!slots <amount>",
     "crime": "R!crime",
-    "rob": "R!rob @member",
-    "pay": "R!pay @member amount",
-    "marry": "R!marry @member",
+    "rob": "R!rob <member>",
+    "pay": "R!pay <member> <amount>",
+    "marry": "R!marry <member>",
     "divorce": "R!divorce",
-    "brainrot_dice": "R!brainrot_dice amount",
+    "brainrot_dice": "R!brainrot_dice [amount]",
     "guess": "R!guess",
     "country": "R!country",
-    "debate": "R!debate @member",
-    "setchannel": "R!setchannel #channel",
+    "debate": "R!debate <member>",
+    "setchannel": "R!setchannel [#channel]",
     "spawn": "R!spawn",
     "collect": "R!collect",
-    "pack": "R!pack buy/open",
-    "sell": "R!sell card_id",
-    "collection": "R!collection @member",
-    "trade": "R!trade @member",
-    "pat": "R!pat @member",
-    "tape": "R!tape @member",
-    "spank": "R!spank @member",
-    "bendover": "R!bendover @member",
-    "slap": "R!slap @member",
-    "rape": "R!rape @member",
+    "pack": "R!pack buy/open [pack_type]",
+    "sell": "R!sell [card_id]",
+    "collection": "R!collection [member]",
+    "trade": "R!trade <member>",
+    "pat": "R!pat <member>",
+    "tape": "R!tape <member>",
+    "spank": "R!spank <member>",
+    "bendover": "R!bendover <member>",
+    "slap": "R!slap <member>",
+    "rape": "R!rape <member>",
     "pfps": "R!pfps",
-    "fraktur": "R!fraktur text",
+    "fraktur": "R!fraktur <text>",
     "memes": "R!memes",
-    "hide": "R!hide @member",
+    "hide": "R!hide <member>",
     "seek": "R!seek #channel",
     "hideleaderboard": "R!hideleaderboard",
-    "hidestats": "R!hidestats @member",
+    "hidestats": "R!hidestats [member]",
     "endhide": "R!endhide",
     "giveaway": "R!giveaway create/reroll",
-    "adminpay": "R!adminpay @member amount",
-    "adminset": "R!adminset @member amount",
-    "adminsetbank": "R!adminsetbank @member amount",
-    "adminrob": "R!adminrob @member",
-    "adminrobamount": "R!adminrobamount @member amount"
+    "adminpay": "R!adminpay <member> <amount>",
+    "adminset": "R!adminset <member> <amount>",
+    "adminsetbank": "R!adminsetbank <member> <amount>",
+    "adminrob": "R!adminrob <member>",
+    "adminrobamount": "R!adminrobamount <member> <amount>"
 }
 
 @bot.event
@@ -527,182 +527,155 @@ async def on_command_error(ctx, error):
     # Missing Required Argument
     if isinstance(error, commands.MissingRequiredArgument):
         arg_name = error.param.name
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** You are missing the `{arg_name}` argument.",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="📖 Correct Usage",
-            value=f"```\n{usage}\n```",
-            inline=False
+        # Find where the arg is in the usage string
+        arrow_pos = usage.find(f"<{arg_name}>")
+        if arrow_pos == -1:
+            arrow_pos = usage.find(f"[{arg_name}]")
+        if arrow_pos == -1:
+            arrow_pos = len(usage)
+        
+        spaces = " " * arrow_pos
+        msg = (
+            f"`{usage}`\n"
+            f"`{spaces}^`\n"
+            f"`{arg_name}` is a required argument that is missing."
         )
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # Bad Argument
     if isinstance(error, commands.BadArgument):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** You provided an invalid argument.",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="📖 Correct Usage",
-            value=f"```\n{usage}\n```",
-            inline=False
+        msg = (
+            f"`{usage}`\n\n"
+            f"Invalid argument provided. Please check the command format."
         )
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # Missing Permissions
     if isinstance(error, commands.MissingPermissions):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** You are missing the required permissions.",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="📖 Correct Usage",
-            value=f"```\n{usage}\n```",
-            inline=False
+        missing = ", ".join(error.missing_permissions).replace("_", " ").title()
+        msg = (
+            f"`{usage}`\n\n"
+            f"You are missing the following permission(s): `{missing}`"
         )
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # Bot Missing Permissions
     if isinstance(error, commands.BotMissingPermissions):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** I am missing the required permissions.",
-            color=discord.Color.orange()
-        )
-        embed.add_field(
-            name="📖 Correct Usage",
-            value=f"```\n{usage}\n```",
-            inline=False
+        missing = ", ".join(error.missing_permissions).replace("_", " ").title()
+        msg = (
+            f"`{usage}`\n\n"
+            f"I am missing the following permission(s): `{missing}`"
         )
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # Member Not Found
     if isinstance(error, commands.MemberNotFound):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** I couldn't find that member.",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="📖 Correct Usage",
-            value=f"```\n{usage}\n```",
-            inline=False
+        msg = (
+            f"`{usage}`\n\n"
+            f"I couldn't find that member. Please mention a valid user."
         )
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # Command On Cooldown
     if isinstance(error, commands.CommandOnCooldown):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** Please wait `{error.retry_after:.1f}` seconds.",
-            color=discord.Color.orange()
-        )
+        msg = f"⏳ Please wait `{error.retry_after:.1f}` seconds before using this command again."
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # Role Not Found
     if isinstance(error, commands.RoleNotFound):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** I couldn't find that role.",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="📖 Correct Usage",
-            value=f"```\n{usage}\n```",
-            inline=False
+        msg = (
+            f"`{usage}`\n\n"
+            f"I couldn't find that role. Please check the role name."
         )
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # Not Owner
     if isinstance(error, commands.NotOwner):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** Only the bot owner can use this command.",
-            color=discord.Color.red()
-        )
+        msg = f"Only the bot owner can use this command."
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
 
     # NSFW Channel Required
     if isinstance(error, commands.NSFWChannelRequired):
-        embed = discord.Embed(
-            description=f"**@{ctx.author.display_name}** This command can only be used in NSFW channels.",
-            color=discord.Color.red()
-        )
+        msg = f"This command can only be used in NSFW channels."
         
         if ctx.interaction:
             try:
-                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
             except Exception:
                 return
-        return await ctx.send(embed=embed)
+        return await ctx.send(msg)
+
+    # Max Concurrency Reached
+    if isinstance(error, commands.MaxConcurrencyReached):
+        msg = f"This command is already being used by someone else. Please wait."
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(msg)
 
     # Default Error
-    embed = discord.Embed(
-        description=f"**@{ctx.author.display_name}** Something went wrong.",
-        color=discord.Color.red()
-    )
-    embed.add_field(
-        name="📖 Correct Usage",
-        value=f"```\n{usage}\n```",
-        inline=False
-    )
-    embed.add_field(
-        name="❌ Error",
-        value=f"```\n{str(error)[:100]}\n```",
-        inline=False
+    msg = (
+        f"`{usage}`\n\n"
+        f"❌ Error: `{str(error)[:100]}`"
     )
     
     if ctx.interaction:
         try:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(msg, ephemeral=True)
         except Exception:
             return
-    return await ctx.send(embed=embed)
+    return await ctx.send(msg)
 # =========================================================
 # ALLOWED LINKS COMMANDS - UPDATED WITH SIMPLER UI
 # =========================================================
