@@ -1451,27 +1451,72 @@ async def iq(ctx, member: discord.Member = None):
     score = random.randint(40, 160)
     embed = discord.Embed(description=f"🧠 **{target.display_name}'s IQ:** {score}", color=discord.Color.blurple())
     await ctx.send(embed=embed)
+# =========================================================
+# KISS COMMAND - REPLACE YOUR EXISTING KISS COMMAND
+# =========================================================
+
+KISS_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMXV3a29uZG05MjRmZml2czN2bDJvaWQxaDNkeHoyamMwYTZ1ZWU0aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FgWNX7NK6SpzqwmOWe/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWx3YTB2NTJyMmF6YXN0YWFybHRtNG44YzlhbHliZ2t4NGJzeDMweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/2fLX7xDEhleyubyBmv/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWx3YTB2NTJyMmF6YXN0YWFybHRtNG44YzlhbHliZ2t4NGJzeDMweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Mo122cd9G2xmKymanO/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWx3YTB2NTJyMmF6YXN0YWFybHRtNG44YzlhbHliZ2t4NGJzeDMweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/zkppEMFvRX5FC/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWx3YTB2NTJyMmF6YXN0YWFybHRtNG44YzlhbHliZ2t4NGJzeDMweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/vUrwEOLtBUnJe/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3azBmYWpwMWZ0dGo1Y3JrNmdzd29xZ20yODIyazFoa3R4ajQycDN1MSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Ka2NAhphLdqXC/giphy.gif"
+]
 
 @bot.hybrid_command(name="kiss", description="Kiss another user")
 async def kiss(ctx, member: discord.Member = None):
     if not member:
-        embed = discord.Embed(description="You need to specify someone to kiss!", color=discord.Color.red())
-        return await ctx.send(embed=embed)
+        embed = discord.Embed(
+            description="❌ You need to specify someone to kiss!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
     if member.id == ctx.author.id:
-        embed = discord.Embed(description="You can't kiss yourself!", color=discord.Color.red())
-        return await ctx.send(embed=embed)
+        embed = discord.Embed(
+            description=f"😘 {ctx.author.mention} kisses themselves... that's a bit weird but okay!",
+            color=discord.Color.orange()
+        )
+        embed.set_image(url=random.choice(KISS_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
     if member.bot:
-        embed = discord.Embed(description="You can't kiss a bot!", color=discord.Color.red())
-        return await ctx.send(embed=embed)
+        embed = discord.Embed(
+            description="❌ You can't kiss a bot!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
     
     embed = discord.Embed(
-        description=f"{ctx.author.mention} kisses {member.mention}! ❤️",
+        description=f"💋 {ctx.author.mention} kisses {member.mention}! ❤️",
         color=discord.Color.from_rgb(255, 105, 180)
     )
-    embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMXV3a29uZG05MjRmZml2czN2bDJvaWQxaDNkeHoyamMwYTZ1ZWU0aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FgWNX7NK6SpzqwmOWe/giphy.gif")
+    embed.set_image(url=random.choice(KISS_GIFS))
+    embed.set_footer(text="Kiss kiss!")
     
-    await ctx.send(embed=embed)
-
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        if ctx.message:
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        await ctx.send(embed=embed)
+        
 @bot.hybrid_command(name="gif", description="Search and send a GIF")
 async def gif(ctx, *, search: str):
     import aiohttp
