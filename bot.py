@@ -6780,6 +6780,61 @@ async def endhide(ctx):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# Rape command - ADD THIS BEFORE bot.run(TOKEN)
+# =========================================================
+
+RAPE_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWxmZ21xd3pwcXpoaW40YzZ5cHRzMHI3MXozMzl6NWR0cWE0c3p6dyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/TJ7hXERD1NmrS/giphy.gif"
+]
+
+@bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
+async def pat(ctx, member: discord.Member = None):
+    if member is None:
+        embed = discord.Embed(
+            description="❌ You need to specify someone to rape!\nUsage: `R!pat @member`",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.id == ctx.author.id:
+        embed = discord.Embed(
+            description=f"🫂 {ctx.author.mention} rapes themselves... that's kinda sad but okay!",
+            color=discord.Color.orange()
+        )
+        embed.set_image(url=random.choice(PAT_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(
+            description="❌ You can't rape a bot werido!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    embed = discord.Embed(
+        description=f"🍑 {ctx.author.mention} rapes {member.mention}! How wholesome! 🍆",
+        color=discord.Color.from_rgb(255, 182, 193)
+    )
+    embed.set_image(url=random.choice(RAPE_GIFS))
+    embed.set_footer(text="get graped!")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
