@@ -1505,16 +1505,10 @@ async def kiss(ctx, member: discord.Member = None):
         color=discord.Color.from_rgb(255, 105, 180)
     )
     embed.set_image(url=random.choice(KISS_GIFS))
-    embed.set_footer(text="Kiss kiss!")
     
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed)
     else:
-        if ctx.message:
-            try:
-                await ctx.message.delete()
-            except Exception:
-                pass
         await ctx.send(embed=embed)
         
 @bot.hybrid_command(name="gif", description="Search and send a GIF")
