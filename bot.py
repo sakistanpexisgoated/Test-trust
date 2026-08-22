@@ -520,27 +520,9 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
-    cmd_name = ctx.command.name if ctx.command else "command"
-    usage = COMMAND_USAGE.get(cmd_name, f"R!{cmd_name}")
-
     # Missing Required Argument
     if isinstance(error, commands.MissingRequiredArgument):
-        arg_name = error.param.name
-        
-        # Find where the arg is in the usage string
-        arrow_pos = usage.find(f"<{arg_name}>")
-        if arrow_pos == -1:
-            arrow_pos = usage.find(f"[{arg_name}]")
-        if arrow_pos == -1:
-            arrow_pos = len(usage)
-        
-        # Build the exact same format as Carl-bot
-        spaces = " " * arrow_pos
-        msg = (
-            f"`{usage}`\n"
-            f"`{spaces}^`\n"
-            f"`{arg_name}` is a required argument that is missing."
-        )
+        msg = f"{ctx.author.mention} You are missing an argument."
         
         if ctx.interaction:
             try:
@@ -551,10 +533,7 @@ async def on_command_error(ctx, error):
 
     # Bad Argument
     if isinstance(error, commands.BadArgument):
-        msg = (
-            f"`{usage}`\n\n"
-            f"Invalid argument provided. Please check the command format."
-        )
+        msg = f"{ctx.author.mention} You provided an invalid argument."
         
         if ctx.interaction:
             try:
@@ -565,11 +544,7 @@ async def on_command_error(ctx, error):
 
     # Missing Permissions
     if isinstance(error, commands.MissingPermissions):
-        missing = ", ".join(error.missing_permissions).replace("_", " ").title()
-        msg = (
-            f"`{usage}`\n\n"
-            f"You are missing the following permission(s): `{missing}`"
-        )
+        msg = f"{ctx.author.mention} You are missing the required permissions."
         
         if ctx.interaction:
             try:
@@ -580,11 +555,7 @@ async def on_command_error(ctx, error):
 
     # Bot Missing Permissions
     if isinstance(error, commands.BotMissingPermissions):
-        missing = ", ".join(error.missing_permissions).replace("_", " ").title()
-        msg = (
-            f"`{usage}`\n\n"
-            f"I am missing the following permission(s): `{missing}`"
-        )
+        msg = f"{ctx.author.mention} I am missing the required permissions."
         
         if ctx.interaction:
             try:
@@ -595,10 +566,7 @@ async def on_command_error(ctx, error):
 
     # Member Not Found
     if isinstance(error, commands.MemberNotFound):
-        msg = (
-            f"`{usage}`\n\n"
-            f"I couldn't find that member. Please mention a valid user."
-        )
+        msg = f"{ctx.author.mention} I couldn't find that member."
         
         if ctx.interaction:
             try:
@@ -609,7 +577,7 @@ async def on_command_error(ctx, error):
 
     # Command On Cooldown
     if isinstance(error, commands.CommandOnCooldown):
-        msg = f"⏳ Please wait `{error.retry_after:.1f}` seconds before using this command again."
+        msg = f"{ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds."
         
         if ctx.interaction:
             try:
@@ -620,10 +588,7 @@ async def on_command_error(ctx, error):
 
     # Role Not Found
     if isinstance(error, commands.RoleNotFound):
-        msg = (
-            f"`{usage}`\n\n"
-            f"I couldn't find that role. Please check the role name."
-        )
+        msg = f"{ctx.author.mention} I couldn't find that role."
         
         if ctx.interaction:
             try:
@@ -634,7 +599,7 @@ async def on_command_error(ctx, error):
 
     # Not Owner
     if isinstance(error, commands.NotOwner):
-        msg = f"Only the bot owner can use this command."
+        msg = f"{ctx.author.mention} Only the bot owner can use this command."
         
         if ctx.interaction:
             try:
@@ -645,7 +610,7 @@ async def on_command_error(ctx, error):
 
     # NSFW Channel Required
     if isinstance(error, commands.NSFWChannelRequired):
-        msg = f"This command can only be used in NSFW channels."
+        msg = f"{ctx.author.mention} This command can only be used in NSFW channels."
         
         if ctx.interaction:
             try:
@@ -655,10 +620,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     # Default Error
-    msg = (
-        f"`{usage}`\n\n"
-        f"❌ Error: `{str(error)[:100]}`"
-    )
+    msg = f"{ctx.author.mention} Something went wrong."
     
     if ctx.interaction:
         try:
