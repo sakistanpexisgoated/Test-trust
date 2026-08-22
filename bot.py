@@ -5533,169 +5533,134 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
                 pass
         await ctx.send(embed=embed)
 # =========================================================
-# EMOJI STEALER COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# EMOJI STEALER BY URL/ID - ADD THIS TO YOUR EXISTING CODE
 # =========================================================
 
-import aiohttp
-import io
-
-@bot.hybrid_command(name="stealemoji", aliases=["semoji", "emoji"], description="Steal emojis from any server by ID or directly from this server")
+@bot.hybrid_command(name="stealurl", aliases=["surl", "steal"], description="Steal an emoji using its Discord link or the emoji itself")
 @commands.has_permissions(administrator=True)
-async def stealemoji(ctx, emoji_input: str, custom_name: str = None):
+async def stealurl(ctx, *, input_text: str):
     """
-    Steal emojis from any server or copy from this server.
-    Usage: ,,stealemoji :emoji: <custom_name>
-           ,,stealemoji <emoji_id> <custom_name>
-           ,,stealemoji <server_id> --all
+    Steal any emoji by pasting the emoji, its link, or its ID.
+    Usage: 
+    ,,stealurl :pepe:
+    ,,stealurl https://cdn.discordapp.com/emojis/123456789.png
+    ,,stealurl <:pepe:123456789>
     """
-    guild = ctx.guild
-    
     if not ctx.author.guild_permissions.administrator:
         embed = discord.Embed(
-            description="❌ You need Administrator permissions to use this command!",
+            description="❌ You need Administrator permissions!",
             color=discord.Color.red()
         )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
         return
     
-    # Check if the bot has permission to create emojis
     if not ctx.guild.me.guild_permissions.manage_emojis:
         embed = discord.Embed(
-            description="❌ I need the **Manage Emojis** permission to steal emojis!",
+            description="❌ I need **Manage Emojis** permission!",
             color=discord.Color.red()
         )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
         return
     
-    # Check if user wants to steal ALL emojis from a server
-    if emoji_input == "--all" or emoji_input == "-a":
-        await steal_all_server_emojis(ctx)
-        return
-    
-    # Check if input is a server ID (numeric)
-    if emoji_input.isdigit() and len(emoji_input) >= 17:
-        await steal_emojis_from_server(ctx, int(emoji_input))
-        return
-    
-    # Try to parse the emoji input
-    emoji = None
+    # Try to extract emoji ID and URL from the input
+    image_url = None
     emoji_name = None
     
-    # If it's a custom emoji from Discord (like :emoji: or <:emoji:id>)
-    if '<' in emoji_input and '>' in emoji_input:
-        # Parse custom emoji
-        try:
-            # Handle animated emojis
-            if '<a:' in emoji_input:
-                parts = emoji_input.split(':')
-                emoji_id = parts[2].replace('>', '')
-                emoji_name = parts[1]
-                emoji_animated = True
-            else:
-                parts = emoji_input.split(':')
-                emoji_id = parts[2].replace('>', '')
-                emoji_name = parts[1]
-                emoji_animated = False
-            
-            # Try to get the emoji from the current server
-            emoji = discord.utils.get(ctx.guild.emojis, id=int(emoji_id))
-            
-            if not emoji:
-                # Try to get from any server the bot is in
-                for guild in bot.guilds:
-                    emoji = discord.utils.get(guild.emojis, id=int(emoji_id))
-                    if emoji:
-                        break
-            
-            if not emoji:
-                embed = discord.Embed(
-                    description="❌ Could not find that emoji in any server I'm in!",
-                    color=discord.Color.red()
-                )
-                if ctx.interaction:
-                    await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-                else:
-                    await ctx.send(embed=embed)
-                return
-                
-        except Exception as e:
-            embed = discord.Embed(
-                description=f"❌ Invalid emoji format: {str(e)[:50]}",
-                color=discord.Color.red()
-            )
-            if ctx.interaction:
-                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
-            return
-    else:
-        # Try to find emoji by name in the current server
-        emoji = discord.utils.get(ctx.guild.emojis, name=emoji_input)
-        
-        if not emoji:
-            # Try to find in any server
+    # Check if it's a Discord CDN URL
+    if "cdn.discordapp.com/emojis/" in input_text or "media.discordapp.net/emojis/" in input_text:
+        # Clean the URL (remove ? and everything after)
+        image_url = input_text.split('?')[0]
+        # Try to get name from the URL
+        filename = image_url.split('/')[-1]
+        emoji_name = filename.split('.')[0]
+        if emoji_name.isdigit():  # If it's just numbers, use "emoji" as name
+            emoji_name = "emoji"
+    
+    # Check if it's a custom emoji in Discord format (<:name:id> or <a:name:id>)
+    elif '<' in input_text and '>' in input_text:
+        # Extract ID and name from <:name:123456789>
+        import re
+        match = re.search(r'<a?:([^:]+):(\d+)>', input_text)
+        if match:
+            emoji_name = match.group(1)
+            emoji_id = match.group(2)
+            image_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
+            # Check if it's animated
+            if '<a:' in input_text:
+                image_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.gif"
+    
+    # Check if it's just an emoji name
+    elif input_text.isalnum() or '_' in input_text:
+        emoji_name = input_text
+        # Try to find in current server first
+        existing_emoji = discord.utils.get(ctx.guild.emojis, name=emoji_name)
+        if existing_emoji:
+            image_url = existing_emoji.url
+        else:
+            # Try to find in any server the bot is in
             for guild in bot.guilds:
-                emoji = discord.utils.get(guild.emojis, name=emoji_input)
-                if emoji:
+                existing_emoji = discord.utils.get(guild.emojis, name=emoji_name)
+                if existing_emoji:
+                    image_url = existing_emoji.url
                     break
         
-        if not emoji:
+        if not image_url:
             embed = discord.Embed(
-                description=f"❌ Could not find an emoji named `{emoji_input}` in any server I'm in!",
+                description=f"❌ Could not find an emoji named `{emoji_name}` in any server I'm in!",
                 color=discord.Color.red()
             )
-            if ctx.interaction:
-                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
+            await ctx.send(embed=embed)
             return
-        
-        emoji_name = emoji.name
     
-    # Use custom name if provided
-    if custom_name:
-        emoji_name = custom_name.replace(' ', '_')
+    # If we still don't have a URL, try treating input as just an ID
+    if not image_url and input_text.isdigit():
+        image_url = f"https://cdn.discordapp.com/emojis/{input_text}.png"
+        emoji_name = emoji_name or "emoji"
+    
+    # If still no URL, ask the user
+    if not image_url:
+        embed = discord.Embed(
+            description="❌ I couldn't find an emoji URL in your input!\n\n**Try one of these formats:**\n• Paste the emoji itself: `,,steal :pepe:`\n• Paste the emoji link: `,,steal https://cdn.discordapp.com/emojis/123456789.png`\n• Paste the emoji ID: `,,steal 123456789`",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    # Clean the emoji name
+    if emoji_name:
+        emoji_name = re.sub(r'[^a-zA-Z0-9_]', '_', emoji_name)
+        if not emoji_name or emoji_name.isdigit():
+            emoji_name = "emoji"
+    else:
+        emoji_name = "emoji"
     
     # Check if emoji already exists
     existing = discord.utils.get(ctx.guild.emojis, name=emoji_name)
     if existing:
         embed = discord.Embed(
-            description=f"⚠️ An emoji named `{emoji_name}` already exists in this server!",
+            description=f"⚠️ An emoji named `{emoji_name}` already exists!",
             color=discord.Color.orange()
         )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
         return
     
-    # Steal the emoji
+    # Try to download and create the emoji
     try:
-        # Download the emoji
         async with aiohttp.ClientSession() as session:
-            async with session.get(emoji.url) as resp:
+            async with session.get(image_url) as resp:
                 if resp.status != 200:
                     embed = discord.Embed(
-                        description="❌ Failed to download the emoji!",
+                        description="❌ Failed to download the emoji! The link might be expired or invalid.",
                         color=discord.Color.red()
                     )
-                    if ctx.interaction:
-                        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-                    else:
-                        await ctx.send(embed=embed)
+                    await ctx.send(embed=embed)
                     return
                 
                 image_data = await resp.read()
         
         # Create the emoji
         new_emoji = await ctx.guild.create_custom_emoji(
-            name=emoji_name,
+            name=emoji_name[:32],  # Discord limits to 32 chars
             image=image_data,
             reason=f"Stolen by {ctx.author.display_name}"
         )
@@ -5706,7 +5671,7 @@ async def stealemoji(ctx, emoji_input: str, custom_name: str = None):
             color=discord.Color.green()
         )
         embed.add_field(name="Emoji Name", value=f":{new_emoji.name}:", inline=True)
-        embed.add_field(name="Original Server", value=emoji.guild.name if emoji.guild else "Unknown", inline=True)
+        embed.add_field(name="Source", value=f"[Link]({image_url})", inline=True)
         embed.set_footer(text=f"Stolen by {ctx.author.display_name}")
         
         if ctx.interaction:
@@ -5724,238 +5689,18 @@ async def stealemoji(ctx, emoji_input: str, custom_name: str = None):
             description="❌ I don't have permission to create emojis!",
             color=discord.Color.red()
         )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
     except discord.HTTPException as e:
         embed = discord.Embed(
             description=f"❌ Failed to create emoji: {str(e)[:100]}",
             color=discord.Color.red()
         )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-
-async def steal_all_server_emojis(ctx):
-    """Steal all emojis from another server."""
-    embed = discord.Embed(
-        title="🔄 Steal All Emojis",
-        description="Send me a **server ID** to steal ALL emojis from that server.\n\n**How to get a server ID:**\n1. Enable Developer Mode in Discord\n2. Right-click a server → Copy ID\n\nType `cancel` to cancel.",
-        color=discord.Color.blue()
-    )
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        
-        # Wait for user response via follow-up
-        def check(m):
-            return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
-        
-        try:
-            msg = await bot.wait_for('message', timeout=60, check=check)
-            if msg.content.lower() == 'cancel':
-                cancel_embed = discord.Embed(
-                    description="❌ Cancelled.",
-                    color=discord.Color.red()
-                )
-                await ctx.channel.send(embed=cancel_embed)
-                return
-            
-            try:
-                server_id = int(msg.content.strip())
-                await steal_emojis_from_server(ctx, server_id)
-            except ValueError:
-                invalid_embed = discord.Embed(
-                    description="❌ Invalid server ID!",
-                    color=discord.Color.red()
-                )
-                await ctx.channel.send(embed=invalid_embed)
-        except asyncio.TimeoutError:
-            timeout_embed = discord.Embed(
-                description="⏰ Timeout! Cancelled.",
-                color=discord.Color.red()
-            )
-            await ctx.channel.send(embed=timeout_embed)
-    else:
         await ctx.send(embed=embed)
-        
-        def check(m):
-            return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
-        
-        try:
-            msg = await bot.wait_for('message', timeout=60, check=check)
-            if msg.content.lower() == 'cancel':
-                cancel_embed = discord.Embed(
-                    description="❌ Cancelled.",
-                    color=discord.Color.red()
-                )
-                await ctx.send(embed=cancel_embed)
-                return
-            
-            try:
-                server_id = int(msg.content.strip())
-                await steal_emojis_from_server(ctx, server_id)
-            except ValueError:
-                invalid_embed = discord.Embed(
-                    description="❌ Invalid server ID!",
-                    color=discord.Color.red()
-                )
-                await ctx.send(embed=invalid_embed)
-        except asyncio.TimeoutError:
-            timeout_embed = discord.Embed(
-                description="⏰ Timeout! Cancelled.",
-                color=discord.Color.red()
-            )
-            await ctx.send(embed=timeout_embed)
-
-async def steal_emojis_from_server(ctx, server_id):
-    """Steal all emojis from a specific server."""
-    # Find the target server
-    target_guild = None
-    for guild in bot.guilds:
-        if guild.id == server_id:
-            target_guild = guild
-            break
-    
-    if not target_guild:
+    except Exception as e:
         embed = discord.Embed(
-            description=f"❌ I'm not in a server with ID `{server_id}`!",
+            description=f"❌ Error: {str(e)[:100]}",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
-        return
-    
-    emojis = target_guild.emojis
-    if not emojis:
-        embed = discord.Embed(
-            description=f"❌ Server `{target_guild.name}` has no emojis to steal!",
-            color=discord.Color.orange()
-        )
-        await ctx.send(embed=embed)
-        return
-    
-    embed = discord.Embed(
-        title="🔄 Stealing Emojis",
-        description=f"Found **{len(emojis)}** emojis in `{target_guild.name}`. Starting to steal them...",
-        color=discord.Color.blue()
-    )
-    await ctx.send(embed=embed)
-    
-    success_count = 0
-    fail_count = 0
-    failed_names = []
-    
-    for emoji in emojis:
-        # Check if we have space for more emojis
-        if len(ctx.guild.emojis) >= ctx.guild.emoji_limit:
-            embed = discord.Embed(
-                description=f"⚠️ Server has reached the emoji limit ({ctx.guild.emoji_limit})! Stopped at {success_count} emojis.",
-                color=discord.Color.orange()
-            )
-            await ctx.send(embed=embed)
-            break
-        
-        # Check if emoji already exists
-        existing = discord.utils.get(ctx.guild.emojis, name=emoji.name)
-        if existing:
-            continue
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(emoji.url) as resp:
-                    if resp.status == 200:
-                        image_data = await resp.read()
-                        await ctx.guild.create_custom_emoji(
-                            name=emoji.name,
-                            image=image_data,
-                            reason=f"Stolen from {target_guild.name} by {ctx.author.display_name}"
-                        )
-                        success_count += 1
-                    else:
-                        fail_count += 1
-                        failed_names.append(emoji.name)
-            await asyncio.sleep(0.5)  # Rate limit protection
-        except Exception:
-            fail_count += 1
-            failed_names.append(emoji.name)
-    
-    result_embed = discord.Embed(
-        title="✅ Emoji Stealing Complete!",
-        description=f"Successfully stole **{success_count}** emojis from `{target_guild.name}`!",
-        color=discord.Color.green()
-    )
-    if fail_count > 0:
-        result_embed.add_field(
-            name="⚠️ Failed",
-            value=f"{fail_count} emojis failed: {', '.join(failed_names[:5])}{'...' if len(failed_names) > 5 else ''}",
-            inline=False
-        )
-    
-    await ctx.send(embed=result_embed)
-
-@bot.hybrid_command(name="listemojis", aliases=["lemojis"], description="List all emojis in a server by ID or in this server")
-@commands.has_permissions(administrator=True)
-async def listemojis(ctx, server_id: int = None):
-    """
-    List all emojis in a server.
-    Usage: ,,listemojis <server_id> or ,,listemojis
-    """
-    if not ctx.author.guild_permissions.administrator:
-        embed = discord.Embed(
-            description="❌ You need Administrator permissions to use this command!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    if server_id:
-        target_guild = None
-        for guild in bot.guilds:
-            if guild.id == server_id:
-                target_guild = guild
-                break
-        
-        if not target_guild:
-            embed = discord.Embed(
-                description=f"❌ I'm not in a server with ID `{server_id}`!",
-                color=discord.Color.red()
-            )
-            await ctx.send(embed=embed)
-            return
-    else:
-        target_guild = ctx.guild
-    
-    emojis = target_guild.emojis
-    if not emojis:
-        embed = discord.Embed(
-            description=f"❌ Server `{target_guild.name}` has no emojis!",
-            color=discord.Color.orange()
-        )
-        await ctx.send(embed=embed)
-        return
-    
-    # Show emojis in chunks
-    emoji_list = []
-    for emoji in emojis:
-        emoji_list.append(f"{emoji} `:{emoji.name}:`")
-    
-    embed = discord.Embed(
-        title=f"📋 Emojis in {target_guild.name}",
-        description=f"Total: **{len(emojis)}** emojis\n\n" + "\n".join(emoji_list[:50]),
-        color=discord.Color.blue()
-    )
-    
-    if len(emojis) > 50:
-        embed.set_footer(text=f"Showing first 50 of {len(emojis)} emojis")
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-    else:
         await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
