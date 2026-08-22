@@ -1730,10 +1730,23 @@ async def kick_error(ctx, error):
 @bot.hybrid_command(name="mute", description="Mute a member")
 @commands.has_permissions(manage_roles=True)
 async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str = "No reason provided"):
-    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
+    # Check if the bot can mute the target - bypass for server owner or if bot has higher role
+    if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} is higher in roles than me, sadly I cannot mute them.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} is higher in roles than me, sadly I cannot mute them.")
+            return await ctx.interaction.response.send_message(f"❌ Cannot mute the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ Cannot mute the server owner.")
+    
+    # If target has admin perms, allow but warn
+    if member.guild_permissions.administrator and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ Cannot mute an administrator.", ephemeral=True)
+        return await ctx.send(f"❌ Cannot mute an administrator.")
+    
+    # Bot can mute anyone below its highest role, including staff
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot mute them.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot mute them.")
 
     seconds = parse_duration(duration)
     if not seconds:
@@ -1743,10 +1756,21 @@ async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str
     
     try:
         await member.timeout(timedelta(seconds=seconds), reason=reason)
+        
+        embed = discord.Embed(
+            title="✨ Successfully Muted",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Member", value=f"{member.mention}", inline=False)
+        embed.add_field(name="📄 Reason", value=reason, inline=False)
+        embed.add_field(name="⏱️ Duration", value=duration, inline=False)
+        embed.set_footer(text=f"Muted by {ctx.author.display_name}")
+        
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"✅ **{member.display_name}** has been muted for {duration}.\n📝 Reason: {reason}")
+            await ctx.interaction.response.send_message(embed=embed)
         else:
-            await ctx.send(f"✅ **{member.display_name}** has been muted for {duration}.\n📝 Reason: {reason}")
+            await ctx.send(embed=embed)
+            
     except Exception as e:
         if ctx.interaction:
             await ctx.interaction.response.send_message(f"❌ Failed to mute member: {e}", ephemeral=True)
@@ -1874,15 +1898,15 @@ class MarriageRequestView(discord.ui.View):
 @bot.hybrid_command(name="marry", description="Ask another user to marry you")
 async def marry(ctx, member: discord.Member):
     if member.id == ctx.author.id:
-        return await ctx.send(embed=discord.Embed(description="😭 You cannot marry yourself.", color=discord.Color.red()))
+        return await ctx.send(embed=discord.Embed(description="😭 You cannot marry yourself weirdo.", color=discord.Color.red()))
     if member.bot:
-        return await ctx.send(embed=discord.Embed(description="☠️ You cannot marry a bot.", color=discord.Color.red()))
+        return await ctx.send(embed=discord.Embed(description="☠️ You cannot marry a bot son.", color=discord.Color.red()))
     cursor.execute("SELECT * FROM marriages WHERE user1_id = ? OR user2_id = ?", (ctx.author.id, ctx.author.id))
     if cursor.fetchone():
         return await ctx.send(embed=discord.Embed(description="💍 You are already married!", color=discord.Color.red()))
     cursor.execute("SELECT * FROM marriages WHERE user1_id = ? OR user2_id = ?", (member.id, member.id))
     if cursor.fetchone():
-        return await ctx.send(embed=discord.Embed(description=f"🥺 **{member.display_name}** is already married!", color=discord.Color.red()))
+        return await ctx.send(embed=discord.Embed(description=f"🥺 **{member.display_name}** is already married You crackhead!", color=discord.Color.red()))
 
     embed = discord.Embed(title="💍 Marriage Proposal", description=f"{ctx.author.mention} wants to marry {member.mention}!\n\n{member.mention}, do you accept?", color=discord.Color.from_rgb(255, 105, 180))
     embed.set_footer(text="This request expires in 60 seconds.")
