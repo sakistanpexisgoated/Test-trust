@@ -238,7 +238,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-       # --- AFK RETURN CHECK ---
+          # --- AFK RETURN CHECK ---
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
@@ -246,11 +246,13 @@ async def on_message(message):
         if duration_sec < 60:
             dur_str = f"{duration_sec} seconds"
         elif duration_sec < 3600:
-            dur_str = f"{duration_sec // 60} minutes {duration_sec % 60} seconds"
+            minutes = duration_sec // 60
+            seconds = duration_sec % 60
+            dur_str = f"{minutes} minute{'s' if minutes != 1 else ''} {seconds} second{'s' if seconds != 1 else ''}"
         else:
             hours = duration_sec // 3600
             minutes = (duration_sec % 3600) // 60
-            dur_str = f"{hours} hours {minutes} minutes"
+            dur_str = f"{hours} hour{'s' if hours != 1 else ''} {minutes} minute{'s' if minutes != 1 else ''}"
 
         embed = discord.Embed(
             title="👋 Welcome Back!",
@@ -263,7 +265,7 @@ async def on_message(message):
             inline=True
         )
         embed.add_field(
-            name="📝 AFK Reason",
+            name="📝 Reason",
             value=f"```\n{data['reason']}\n```",
             inline=True
         )
@@ -293,31 +295,6 @@ async def on_message(message):
             )
 
         await message.channel.send(embed=embed)
-# =========================================================
-# HELP COMMAND
-# =========================================================
-@bot.hybrid_command(name="help", description="Display all available commands")
-async def help(ctx):
-    embed = discord.Embed(
-        title="📋 Rynx Bot Commands",
-        description="**Prefix:** `R!` or `/`",
-        color=discord.Color.from_rgb(30, 31, 34)
-    )
-    embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
-    embed.add_field(name="🎉 Fun", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `pat`, `tape`, `gif`, `hack`, `mock`, `fraktur`, `pfps`, `memes`", inline=False)
-    embed.add_field(name="🎮 Games", value="`brainrot_dice`, `guess`, `country`, `debate`", inline=False)
-    embed.add_field(name="⚽ Football", value="`setchannel`, `spawn`, `collect`, `pack`, `sell`, `collection`, `trade`", inline=False)
-    embed.add_field(name="🛡️ Moderation", value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`", inline=False)
-    embed.add_field(name="👑 Admin", value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `trollpanel`, `whitelist`, `ghostping`, `fakenuke`", inline=False)
-    embed.add_field(name="💰 Admin Pay", value="`adminpay`, `adminset`, `adminsetbank`, `adminrob`, `adminrobamount`", inline=False)
-    embed.add_field(name="🔗 Link Filter", value="`allowed add`, `allowed remove`, `allowed list`, `allowed enable`, `allowed disable`, `allowed time`", inline=False)
-    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-    else:
-        await ctx.send(embed=embed)
-
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
