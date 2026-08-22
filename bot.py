@@ -190,7 +190,8 @@ async def on_message(message):
         and message.reference is None
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
-    
+
+    await bot.process_commands(message)
 # =========================================================
 # HELP COMMAND - REPLACE YOUR EXISTING HELP COMMAND
 # =========================================================
