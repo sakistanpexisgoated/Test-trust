@@ -7,6 +7,7 @@ import sqlite3
 import unicodedata
 import asyncio
 import io
+import aiohttp
 from datetime import timedelta
 from typing import List
 
