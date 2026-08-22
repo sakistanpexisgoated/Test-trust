@@ -3198,10 +3198,9 @@ async def sync(ctx):
     
     try:
         await bot.tree.sync()
-        await ctx.send("✅ Slash commands synced globally! Try `/goon` now.")
+        await ctx.send("✅ Commands have been synced globally!")
     except Exception as e:
         await ctx.send(f"❌ Sync failed: {e}")
-
 # =========================================================
 # GOON COMMAND
 # =========================================================
