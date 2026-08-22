@@ -423,55 +423,62 @@ async def globally_block_blacklisted(ctx):
 # =========================================================
 
 COMMAND_USAGE = {
-    "help": ",,help",
-    "afk": ",,afk [reason]",
-    "ban": ",,ban <member> [reason]",
-    "unban": ",,unban <user_id>",
-    "mute": ",,mute <member> [duration] [reason]",
-    "kick": ",,kick <member> [reason]",
-    "warn": ",,warn <member> [reason]",
-    "pay": ",,pay <member> <amount>",
-    "gamble": ",,gamble <amount>",
-    "dice": ",,dice <amount>",
-    "slots": ",,slots <amount>",
-    "crime": ",,crime",
-    "rob": ",,rob <member>",
-    "work": ",,work",
-    "deposit": ",,deposit <amount>",
-    "withdraw": ",,withdraw <amount>",
-    "marry": ",,marry <member>",
-    "divorce": ",,divorce",
-    "avatar": ",,avatar [member]",
-    "cf": ",,cf",
-    "gayrate": ",,gayrate [member]",
-    "8ball": ",,8ball <question>",
-    "pp": ",,pp [member]",
-    "roast": ",,roast [member1] [member2] [member3]",
-    "iq": ",,iq [member]",
-    "kiss": ",,kiss <member>",
-    "gif": ",,gif <search_term>",
-    "snipe": ",,snipe [number]",
-    "editsnipe": ",,editsnipe",
-    "hack": ",,hack <member>",
-    "poll": ",,poll <question>",
-    "say": ",,say <message>",
-    "embed": ",,embed <title> | <description>",
-    "clear": ",,clear <amount>",
-    "purge": ",,purge <amount>",
-    "slowmode": ",,slowmode <seconds>",
-    "brainrot_dice": ",,brainrot_dice [amount]",
-    "blacklist": ",,blacklist <user_id_or_mention> [reason]",
-    "unblacklist": ",,unblacklist <user_id>",
-    "serverblacklist": ",,serverblacklist <guild_id> [reason]",
-    "serverunblacklist": ",,serverunblacklist <guild_id>",
-    "trollpanel": ",,trollpanel",
-    "whitelist": ",,whitelist <member>",
-    "unwhitelist": ",,unwhitelist <member>",
-    "ghostping": ",,ghostping <member>",
-    "mock": ",,mock <text>",
-    "fakenuke": ",,fakenuke [member]",
-    "masscreate": ",,masscreate <count> <name>",
-    "setup": ",,setup [style]"
+    "help": "R!help",
+    "afk": "R!afk [reason]",
+    "ban": "R!ban @member [reason]",
+    "unban": "R!unban <user_id>",
+    "kick": "R!kick @member [reason]",
+    "mute": "R!mute @member [duration] [reason]",
+    "unmute": "R!unmute @member",
+    "warn": "R!warn @member [reason]",
+    "warnings": "R!warnings @member",
+    "clearwarns": "R!clearwarns @member",
+    "pay": "R!pay @member <amount>",
+    "gamble": "R!gamble <amount>",
+    "dice": "R!dice <amount>",
+    "slots": "R!slots <amount>",
+    "crime": "R!crime",
+    "rob": "R!rob @member",
+    "work": "R!work",
+    "deposit": "R!deposit <amount>",
+    "withdraw": "R!withdraw <amount>",
+    "marry": "R!marry @member",
+    "divorce": "R!divorce",
+    "avatar": "R!avatar [member]",
+    "cf": "R!cf",
+    "gayrate": "R!gayrate [member]",
+    "8ball": "R!8ball <question>",
+    "pp": "R!pp [member]",
+    "roast": "R!roast @member1 @member2 @member3",
+    "iq": "R!iq [member]",
+    "kiss": "R!kiss @member",
+    "gif": "R!gif <search_term>",
+    "snipe": "R!snipe [number]",
+    "editsnipe": "R!editsnipe",
+    "hack": "R!hack @member",
+    "poll": "R!poll <question>",
+    "say": "R!say <message>",
+    "embed": "R!embed <title> | <description>",
+    "clear": "R!clear <amount>",
+    "purge": "R!purge <amount>",
+    "slowmode": "R!slowmode <seconds>",
+    "brainrot_dice": "R!brainrot_dice [amount]",
+    "blacklist": "R!blacklist <user_id_or_mention> [reason]",
+    "unblacklist": "R!unblacklist <user_id>",
+    "serverblacklist": "R!serverblacklist <guild_id> [reason]",
+    "serverunblacklist": "R!serverunblacklist <guild_id>",
+    "trollpanel": "R!trollpanel",
+    "whitelist": "R!whitelist @member",
+    "unwhitelist": "R!unwhitelist @member",
+    "ghostping": "R!ghostping @member [times] [message]",
+    "mock": "R!mock <text>",
+    "fakenuke": "R!fakenuke [member]",
+    "masscreate": "R!masscreate <count> <name>",
+    "setup": "R!setup [style]",
+    "role": "R!role @member <role_name>",
+    "steal": "R!steal <emoji_link_or_id>",
+    "stealroles": "R!stealroles <server_id>",
+    "allowed": "R!allowed <link/unlink/list/enable/disable/time> [value]"
 }
 
 @bot.event
@@ -484,18 +491,28 @@ async def on_command_error(ctx, error):
 
     cmd_name = ctx.command.name if ctx.command else "command"
 
+    # Missing Required Argument
     if isinstance(error, commands.MissingRequiredArgument):
         arg_name = error.param.name
-        usage_str = COMMAND_USAGE.get(cmd_name, f",,{cmd_name} <{arg_name}>")
+        usage_str = COMMAND_USAGE.get(cmd_name, f"R!{cmd_name} <{arg_name}>")
+        
         embed = discord.Embed(
-            description=(
-                f"```\n{usage_str}\n"
-                f"{' ' * max(0, usage_str.find('<') if '<' in usage_str else 0)}"
-                f"^^^^^^^^^\n\n"
-                f"{arg_name} is a required argument that is missing.\n```"
-            ),
-            color=discord.Color.from_rgb(47, 49, 54)
+            title="❌ Missing Required Argument",
+            description=f"**@{ctx.author.display_name}**, you're missing the `{arg_name}` argument!",
+            color=discord.Color.red()
         )
+        embed.add_field(
+            name="📖 Correct Usage",
+            value=f"```\n{usage_str}\n```",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Example",
+            value=f"```\n{usage_str.replace('[', '').replace(']', '').replace('<', '').replace('>', '').replace('@member', '@pola')}\n```",
+            inline=False
+        )
+        embed.set_footer(text="<> = Required | [] = Optional")
+        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
@@ -503,12 +520,26 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # Bad Argument (invalid user, number, etc.)
     if isinstance(error, commands.BadArgument):
-        usage_str = COMMAND_USAGE.get(cmd_name, f",,{cmd_name}")
+        usage_str = COMMAND_USAGE.get(cmd_name, f"R!{cmd_name}")
         embed = discord.Embed(
-            description=f"```\n{usage_str}\n\nInvalid argument. Please check the command format.\n```",
-            color=discord.Color.from_rgb(47, 49, 54)
+            title="❌ Invalid Argument",
+            description=f"**@{ctx.author.display_name}**, you provided an invalid argument!",
+            color=discord.Color.red()
         )
+        embed.add_field(
+            name="📖 Correct Usage",
+            value=f"```\n{usage_str}\n```",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Tip",
+            value="Make sure you're mentioning a valid member (@mention) or using the correct format.",
+            inline=False
+        )
+        embed.set_footer(text="<> = Required | [] = Optional")
+        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
@@ -516,12 +547,26 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # Missing Permissions
     if isinstance(error, commands.MissingPermissions):
+        missing = ", ".join(error.missing_permissions).replace("_", " ").title()
         embed = discord.Embed(
             title="🛡️ Permission Denied",
-            description="Only **server administrators or moderators** can use this command.",
+            description=f"**@{ctx.author.display_name}**, you don't have permission to use this command!",
             color=discord.Color.red()
         )
+        embed.add_field(
+            name="🔒 Missing Permission(s)",
+            value=f"```\n{missing}\n```",
+            inline=False
+        )
+        embed.add_field(
+            name="📖 Command",
+            value=f"```\n{COMMAND_USAGE.get(cmd_name, f'R!{cmd_name}')}\n```",
+            inline=False
+        )
+        embed.set_footer(text="Contact a server admin for these permissions")
+        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
@@ -529,12 +574,21 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # Bot Missing Permissions
     if isinstance(error, commands.BotMissingPermissions):
+        missing = ", ".join(error.missing_permissions).replace("_", " ").title()
         embed = discord.Embed(
-            title="Bot is Missing Permissions",
-            description="I don't have the Discord permissions required to perform this command.",
-            color=discord.Color.red()
+            title="⚠️ Bot Missing Permissions",
+            description=f"I need the following permissions to run this command:",
+            color=discord.Color.orange()
         )
+        embed.add_field(
+            name="🔒 Missing Permission(s)",
+            value=f"```\n{missing}\n```",
+            inline=False
+        )
+        embed.set_footer(text="Ask an admin to grant me these permissions")
+        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
@@ -542,18 +596,177 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # Member Not Found
+    if isinstance(error, commands.MemberNotFound):
+        embed = discord.Embed(
+            title="❌ Member Not Found",
+            description=f"**@{ctx.author.display_name}**, I couldn't find that member!",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="📖 Correct Usage",
+            value=f"```\n{COMMAND_USAGE.get(cmd_name, f'R!{cmd_name}')}\n```",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Tip",
+            value="Try mentioning the user with @ or using their exact username.",
+            inline=False
+        )
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    # Command On Cooldown
+    if isinstance(error, commands.CommandOnCooldown):
+        embed = discord.Embed(
+            title="⏳ Command On Cooldown",
+            description=f"**@{ctx.author.display_name}**, please wait **{error.retry_after:.1f} seconds** before using this command again!",
+            color=discord.Color.orange()
+        )
+        embed.set_footer(text="Cooldown active")
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    # Role Not Found
+    if isinstance(error, commands.RoleNotFound):
+        embed = discord.Embed(
+            title="❌ Role Not Found",
+            description=f"**@{ctx.author.display_name}**, I couldn't find that role!",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="📖 Correct Usage",
+            value=f"```\n{COMMAND_USAGE.get(cmd_name, f'R!{cmd_name}')}\n```",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Tip",
+            value="Make sure the role name is spelled correctly and exists in the server.",
+            inline=False
+        )
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    # Not Owner
+    if isinstance(error, commands.NotOwner):
+        embed = discord.Embed(
+            title="👑 Owner Only",
+            description=f"**@{ctx.author.display_name}**, this command can only be used by the bot owner!",
+            color=discord.Color.red()
+        )
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    # Bad Argument (ValueError, etc.)
+    if isinstance(error, ValueError):
+        embed = discord.Embed(
+            title="❌ Invalid Value",
+            description=f"**@{ctx.author.display_name}**, you entered an invalid value!",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="📖 Correct Usage",
+            value=f"```\n{COMMAND_USAGE.get(cmd_name, f'R!{cmd_name}')}\n```",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Tip",
+            value="Make sure you're using a valid number or format.",
+            inline=False
+        )
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    # NSFW Channel Required
+    if isinstance(error, commands.NSFWChannelRequired):
+        embed = discord.Embed(
+            title="🔞 NSFW Only",
+            description=f"**@{ctx.author.display_name}**, this command can only be used in NSFW channels!",
+            color=discord.Color.red()
+        )
+        embed.set_footer(text="Go to a channel marked as NSFW")
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    # Custom Errors - Add specific message for common commands
+    if "ban" in cmd_name:
+        embed = discord.Embed(
+            title="❌ Ban Failed",
+            description=f"**@{ctx.author.display_name}**, I couldn't ban that member!",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="📖 Correct Usage",
+            value=f"```\n{COMMAND_USAGE.get(cmd_name, 'R!ban @member [reason]')}\n```",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Common Issues",
+            value="• The member has a higher role than me\n• I don't have Ban Members permission\n• The member is the server owner",
+            inline=False
+        )
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    # Generic Error Fallback
     embed = discord.Embed(
         title="⚠️ Command Error",
-        description=f"Something went wrong: `{str(error)[:900]}`",
+        description=f"**@{ctx.author.display_name}**, something went wrong!",
         color=discord.Color.red()
     )
+    embed.add_field(
+        name="📖 Command",
+        value=f"```\n{COMMAND_USAGE.get(cmd_name, f'R!{cmd_name}')}\n```",
+        inline=False
+    )
+    embed.add_field(
+        name="❌ Error Details",
+        value=f"```\n{str(error)[:200]}\n```",
+        inline=False
+    )
+    embed.set_footer(text="If this keeps happening, contact the bot owner")
+    
     if ctx.interaction:
         try:
             return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         except Exception:
             return
     return await ctx.send(embed=embed)
-
 # =========================================================
 # ALLOWED LINKS COMMANDS - UPDATED WITH SIMPLER UI
 # =========================================================
