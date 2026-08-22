@@ -5539,35 +5539,25 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
 @bot.hybrid_command(name="stealurl", aliases=["surl", "steal"], description="Steal an emoji using its Discord link, ID, or the emoji itself")
 @commands.has_permissions(administrator=True)
 async def stealurl(ctx, *, input_text: str):
-    """
-    Steal any emoji by pasting the emoji, its link, or its ID.
-    Usage: 
-    ,,steal 123456789012345678
-    ,,steal https://cdn.discordapp.com/emojis/123456789.png
-    ,,steal :pepe:
-    """
     if not ctx.author.guild_permissions.administrator:
-        embed = discord.Embed(
-            description="❌ You need Administrator permissions!",
-            color=discord.Color.red()
-        )
+        embed = discord.Embed(description="❌ You need Administrator permissions!", color=discord.Color.red())
         await ctx.send(embed=embed)
         return
     
     if not ctx.guild.me.guild_permissions.manage_emojis:
-        embed = discord.Embed(
-            description="❌ I need **Manage Emojis** permission!",
-            color=discord.Color.red()
-        )
+        embed = discord.Embed(description="❌ I need **Manage Emojis** permission!", color=discord.Color.red())
         await ctx.send(embed=embed)
         return
     
-    # Clean input
+    # Acknowledge the interaction immediately to prevent timeout
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=False)
+    
     input_text = input_text.strip()
     image_url = None
     emoji_name = None
     
-    # --- CHECK 1: Is it a Discord CDN URL? ---
+    # Check if it's a Discord CDN URL
     if "cdn.discordapp.com/emojis/" in input_text or "media.discordapp.net/emojis/" in input_text:
         image_url = input_text.split('?')[0]
         filename = image_url.split('/')[-1]
@@ -5575,7 +5565,7 @@ async def stealurl(ctx, *, input_text: str):
         if emoji_name.isdigit():
             emoji_name = "emoji"
     
-    # --- CHECK 2: Is it a custom emoji format <:name:id> or <a:name:id>? ---
+    # Check if it's a custom emoji format <:name:id>
     elif '<' in input_text and '>' in input_text:
         import re
         match = re.search(r'<a?:([^:]+):(\d+)>', input_text)
@@ -5586,14 +5576,14 @@ async def stealurl(ctx, *, input_text: str):
             ext = ".gif" if is_animated else ".png"
             image_url = f"https://cdn.discordapp.com/emojis/{emoji_id}{ext}"
     
-    # --- CHECK 3: Is it a numeric ID only? ---
+    # Check if it's a numeric ID only
     elif input_text.isdigit():
         emoji_id = input_text
-        # Try both .png and .gif
+        # Try PNG first
         image_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
         emoji_name = "emoji"
     
-    # --- CHECK 4: Is it an emoji name? ---
+    # Check if it's an emoji name
     elif input_text.isalnum() or '_' in input_text:
         emoji_name = input_text
         existing_emoji = discord.utils.get(ctx.guild.emojis, name=emoji_name)
@@ -5607,30 +5597,28 @@ async def stealurl(ctx, *, input_text: str):
                     break
         
         if not image_url:
-            embed = discord.Embed(
-                description=f"❌ Could not find an emoji named `{emoji_name}` in any server I'm in!",
-                color=discord.Color.red()
-            )
-            await ctx.send(embed=embed)
+            embed = discord.Embed(description=f"❌ Could not find an emoji named `{emoji_name}` in any server I'm in!", color=discord.Color.red())
+            if ctx.interaction:
+                await ctx.interaction.followup.send(embed=embed)
+            else:
+                await ctx.send(embed=embed)
             return
     
-    # --- CHECK 5: Try to extract ID from random input ---
+    # Try to extract ID from random input
     if not image_url:
-        # Try to find any numbers in the input
         import re
         numbers = re.findall(r'\d+', input_text)
         if numbers:
             emoji_id = numbers[0]
             image_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
-            emoji_name = emoji_name or "emoji"
+            emoji_name = "emoji"
     
-    # If still no URL, give up
     if not image_url:
-        embed = discord.Embed(
-            description="❌ I couldn't find an emoji URL in your input!\n\n**Try these formats:**\n• Emoji ID: `,,steal 123456789012345678`\n• Emoji link: `,,steal https://cdn.discordapp.com/emojis/123456789.png`\n• The emoji itself: `,,steal :pepe:`",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed)
+        embed = discord.Embed(description="❌ I couldn't find an emoji URL in your input!\n\n**Try these formats:**\n• Emoji ID: `,,steal 123456789012345678`\n• Emoji link: `,,steal https://cdn.discordapp.com/emojis/123456789.png`", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed)
+        else:
+            await ctx.send(embed=embed)
         return
     
     # Clean emoji name
@@ -5641,47 +5629,54 @@ async def stealurl(ctx, *, input_text: str):
     else:
         emoji_name = "emoji"
     
-    # Truncate name if too long
     if len(emoji_name) > 32:
         emoji_name = emoji_name[:32]
     
     # Check if emoji already exists
     existing = discord.utils.get(ctx.guild.emojis, name=emoji_name)
     if existing:
-        embed = discord.Embed(
-            description=f"⚠️ An emoji named `{emoji_name}` already exists!",
-            color=discord.Color.orange()
-        )
-        await ctx.send(embed=embed)
+        embed = discord.Embed(description=f"⚠️ An emoji named `{emoji_name}` already exists!", color=discord.Color.orange())
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed)
+        else:
+            await ctx.send(embed=embed)
         return
     
-    # Try to download and create the emoji
     try:
+        # Download the emoji with timeout
         async with aiohttp.ClientSession() as session:
-            async with session.get(image_url) as resp:
-                if resp.status != 200:
-                    # Try with .gif if .png failed
-                    if ".png" in image_url:
-                        gif_url = image_url.replace(".png", ".gif")
-                        async with session.get(gif_url) as resp2:
-                            if resp2.status == 200:
-                                image_data = await resp2.read()
-                            else:
-                                embed = discord.Embed(
-                                    description="❌ Failed to download the emoji! The ID might be invalid or the emoji may be animated (try the .gif link).",
-                                    color=discord.Color.red()
-                                )
-                                await ctx.send(embed=embed)
-                                return
+            try:
+                async with session.get(image_url, timeout=10) as resp:
+                    if resp.status == 200:
+                        image_data = await resp.read()
                     else:
-                        embed = discord.Embed(
-                            description="❌ Failed to download the emoji! The link might be expired or invalid.",
-                            color=discord.Color.red()
-                        )
-                        await ctx.send(embed=embed)
-                        return
+                        # Try GIF if PNG failed
+                        if ".png" in image_url:
+                            gif_url = image_url.replace(".png", ".gif")
+                            async with session.get(gif_url, timeout=10) as resp2:
+                                if resp2.status == 200:
+                                    image_data = await resp2.read()
+                                else:
+                                    embed = discord.Embed(description="❌ Failed to download the emoji! The ID might be invalid.", color=discord.Color.red())
+                                    if ctx.interaction:
+                                        await ctx.interaction.followup.send(embed=embed)
+                                    else:
+                                        await ctx.send(embed=embed)
+                                    return
+                        else:
+                            embed = discord.Embed(description="❌ Failed to download the emoji!", color=discord.Color.red())
+                            if ctx.interaction:
+                                await ctx.interaction.followup.send(embed=embed)
+                            else:
+                                await ctx.send(embed=embed)
+                            return
+            except asyncio.TimeoutError:
+                embed = discord.Embed(description="❌ Download timed out! The emoji might not exist or the ID is wrong.", color=discord.Color.red())
+                if ctx.interaction:
+                    await ctx.interaction.followup.send(embed=embed)
                 else:
-                    image_data = await resp.read()
+                    await ctx.send(embed=embed)
+                return
         
         # Create the emoji
         new_emoji = await ctx.guild.create_custom_emoji(
@@ -5698,7 +5693,7 @@ async def stealurl(ctx, *, input_text: str):
         embed.set_footer(text=f"Stolen by {ctx.author.display_name}")
         
         if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed)
+            await ctx.interaction.followup.send(embed=embed)
         else:
             if ctx.message:
                 try:
@@ -5708,23 +5703,26 @@ async def stealurl(ctx, *, input_text: str):
             await ctx.send(embed=embed)
             
     except discord.Forbidden:
-        embed = discord.Embed(
-            description="❌ I don't have permission to create emojis!",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed)
+        embed = discord.Embed(description="❌ I don't have permission to create emojis!", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed)
+        else:
+            await ctx.send(embed=embed)
     except discord.HTTPException as e:
-        embed = discord.Embed(
-            description=f"❌ Failed to create emoji: {str(e)[:100]}",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed)
+        if "Maximum number of emojis" in str(e):
+            embed = discord.Embed(description=f"❌ Your server has reached the emoji limit ({ctx.guild.emoji_limit})! Delete some emojis first.", color=discord.Color.red())
+        else:
+            embed = discord.Embed(description=f"❌ Failed to create emoji: {str(e)[:100]}", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed)
+        else:
+            await ctx.send(embed=embed)
     except Exception as e:
-        embed = discord.Embed(
-            description=f"❌ Error: {str(e)[:100]}",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed)
+        embed = discord.Embed(description=f"❌ Error: {str(e)[:100]}", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed)
+        else:
+            await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
