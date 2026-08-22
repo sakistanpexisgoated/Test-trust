@@ -191,6 +191,76 @@ async def on_message(message):
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
 
+    if is_standalone_bot_mention:
+        embed = discord.Embed(
+            title="🤖 Bot Help Panel",
+            description="hello i am rynx i was created by dust and gingerini my prefixs are R! and /",
+            color=discord.Color.from_rgb(30, 31, 34)
+        )
+        embed.add_field(name="📌 Prefixes", value="`R!` or `/`", inline=True)
+        embed.add_field(name="👑 Creators", value="`dust` & `gingerini`", inline=True)
+        embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
+        embed.add_field(name="🎉 Fun & Social", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `gif`, `hack`, `brainrot_dice`, `marry`, `divorce`, `mock`", inline=False)
+        embed.add_field(name="🛡️ Moderation & Utility", value="`afk`, `ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `help`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`, `blacklist`, `serverblacklist`", inline=False)
+        await message.channel.send(embed=embed)
+        return
+
+    # --- AFK MENTION CHECK ---
+    if message.mentions:
+        for member in message.mentions:
+            if member.id in afk_users:
+                afk_users[member.id]["mentions"].append({
+                    "author_name": message.author.display_name,
+                    "content": message.content,
+                    "jump_url": message.jump_url,
+                    "time": time.time()
+                })
+                data = afk_users[member.id]
+                embed = discord.Embed(
+                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
+                    color=discord.Color.from_rgb(30, 31, 34)
+                )
+                await message.channel.send(embed=embed)
+
+    # --- AFK RETURN CHECK ---
+    if message.author.id in afk_users:
+        data = afk_users.pop(message.author.id)
+        duration_sec = int(time.time() - data["time"])
+        
+        if duration_sec < 60:
+            dur_str = f"{duration_sec} seconds"
+        elif duration_sec < 3600:
+            dur_str = f"{duration_sec // 60} minutes"
+        else:
+            dur_str = f"{duration_sec // 3600} hours"
+
+        embed = discord.Embed(
+            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
+            color=discord.Color.from_rgb(30, 31, 34)
+        )
+
+        if data["mentions"]:
+            mentions_text = []
+            for m in data["mentions"]:
+                time_ago = int(time.time() - m["time"])
+                if time_ago < 60:
+                    time_str = f"{time_ago} seconds ago"
+                elif time_ago < 3600:
+                    time_str = f"{time_ago // 60} minutes ago"
+                else:
+                    time_str = f"{time_ago // 3600} hours ago"
+                
+                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
+            
+            embed.add_field(
+                name=f"You received {len(data['mentions'])} mention(s)",
+                value="\n\n".join(mentions_text),
+                inline=False
+            )
+
+        await message.channel.send(embed=embed)
+
+    # --- THIS MUST BE THE VERY LAST LINE ---
     await bot.process_commands(message)
 # =========================================================
 # HELP COMMAND - REPLACE YOUR EXISTING HELP COMMAND
