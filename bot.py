@@ -5534,14 +5534,8 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
                 pass
         await ctx.send(embed=embed)
 # =========================================================
-# EMOJI STEALER BY URL/ID - ADD THIS TO YOUR EXISTING CODE
+# EMOJI STEALER COMMAND - FIXED WITH AUTO-RENAME
 # =========================================================
-
-# =========================================================
-# EMOJI STEALER COMMAND - FIXED
-# =========================================================
-
-import re  # MAKE SURE THIS IS AT THE TOP OF YOUR bot.py
 
 @bot.hybrid_command(name="stealurl", aliases=["surl", "steal"], description="Steal an emoji using its Discord link, ID, or the emoji itself")
 @commands.has_permissions(administrator=True)
@@ -5596,7 +5590,6 @@ async def stealurl(ctx, *, input_text: str):
     
     # Check if it's an emoji name
     else:
-        # Try to find emoji by name in current server or any server
         emoji_name = input_text
         existing_emoji = discord.utils.get(ctx.guild.emojis, name=emoji_name)
         if existing_emoji:
@@ -5609,7 +5602,6 @@ async def stealurl(ctx, *, input_text: str):
                     break
         
         if not image_url:
-            # Try to extract any number from the input
             numbers = re.findall(r'\d+', input_text)
             if numbers:
                 emoji_id = numbers[0]
@@ -5638,15 +5630,16 @@ async def stealurl(ctx, *, input_text: str):
     if len(emoji_name) > 32:
         emoji_name = emoji_name[:32]
     
-    # Check if emoji already exists
-    existing = discord.utils.get(ctx.guild.emojis, name=emoji_name)
-    if existing:
-        embed = discord.Embed(description=f"⚠️ An emoji named `{emoji_name}` already exists!", color=discord.Color.orange())
-        if ctx.interaction:
-            await ctx.interaction.followup.send(embed=embed)
-        else:
-            await ctx.send(embed=embed)
-        return
+    # --- AUTO-RENAME IF NAME ALREADY EXISTS ---
+    original_name = emoji_name
+    counter = 1
+    while discord.utils.get(ctx.guild.emojis, name=emoji_name):
+        emoji_name = f"{original_name}_{counter}"
+        counter += 1
+        # Safety limit
+        if counter > 100:
+            emoji_name = f"emoji_{int(time.time())}"
+            break
     
     try:
         # Download the emoji
@@ -5655,7 +5648,6 @@ async def stealurl(ctx, *, input_text: str):
                 if resp.status == 200:
                     image_data = await resp.read()
                 else:
-                    # Try GIF if PNG failed
                     if ".png" in image_url:
                         gif_url = image_url.replace(".png", ".gif")
                         async with session.get(gif_url, timeout=10) as resp2:
@@ -5683,9 +5675,13 @@ async def stealurl(ctx, *, input_text: str):
             reason=f"Stolen by {ctx.author.display_name}"
         )
         
+        # Check if name was changed
+        name_changed = original_name != emoji_name
+        name_message = f" (renamed to `:{emoji_name}:` because `:{original_name}:` already existed)" if name_changed else ""
+        
         embed = discord.Embed(
             title="✅ Emoji Stolen!",
-            description=f"Successfully stole {new_emoji} (`:{new_emoji.name}:`)",
+            description=f"Successfully stole {new_emoji} (`:{new_emoji.name}:`){name_message}",
             color=discord.Color.green()
         )
         embed.set_footer(text=f"Stolen by {ctx.author.display_name}")
