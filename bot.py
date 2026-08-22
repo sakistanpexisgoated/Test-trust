@@ -6784,14 +6784,14 @@ async def endhide(ctx):
 # =========================================================
 
 RAPE_GIFS = [
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWxmZ21xd3pwcXpoaW40YzZ5cHRzMHI3MXozMzl6NWR0cWE0c3p6dyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/TJ7hXERD1NmrS/giphy.gif"
+    "https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif"
 ]
 
 @bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
 async def pat(ctx, member: discord.Member = None):
     if member is None:
         embed = discord.Embed(
-            description="❌ You need to specify someone to rape!\nUsage: `R!pat @member`",
+            description="❌ You need to specify someone to rape!\nUsage: `R!rape @member`",
             color=discord.Color.red()
         )
         if ctx.interaction:
