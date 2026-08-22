@@ -6985,7 +6985,7 @@ async def stealroles(ctx, server_id: str):
                 role_name = role_data['name']
                 
                 # Build permissions
-                permissions = discord.Permissions(role_data['permissions'])
+                permissions = discord.Permissions(int(role_data['permissions']))
                 
                 # Color
                 color = discord.Color(role_data['color']) if role_data['color'] != 0 else discord.Color.default()
