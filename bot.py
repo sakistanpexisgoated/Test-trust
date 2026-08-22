@@ -238,24 +238,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-    # --- AFK MENTION CHECK ---
-    if message.mentions:
-        for member in message.mentions:
-            if member.id in afk_users:
-                afk_users[member.id]["mentions"].append({
-                    "author_name": message.author.display_name,
-                    "content": message.content,
-                    "jump_url": message.jump_url,
-                    "time": time.time()
-                })
-                data = afk_users[member.id]
-                embed = discord.Embed(
-                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
-                    color=discord.Color.from_rgb(30, 31, 34)
-                )
-                await message.channel.send(embed=embed)
-
-    # --- AFK RETURN CHECK ---
+       # --- AFK RETURN CHECK ---
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
@@ -263,18 +246,33 @@ async def on_message(message):
         if duration_sec < 60:
             dur_str = f"{duration_sec} seconds"
         elif duration_sec < 3600:
-            dur_str = f"{duration_sec // 60} minutes"
+            dur_str = f"{duration_sec // 60} minutes {duration_sec % 60} seconds"
         else:
-            dur_str = f"{duration_sec // 3600} hours"
+            hours = duration_sec // 3600
+            minutes = (duration_sec % 3600) // 60
+            dur_str = f"{hours} hours {minutes} minutes"
 
         embed = discord.Embed(
-            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
-            color=discord.Color.from_rgb(30, 31, 34)
+            title="👋 Welcome Back!",
+            description=f"**{message.author.display_name}** is no longer AFK.",
+            color=discord.Color.green()
         )
+        embed.add_field(
+            name="⏱️ Duration",
+            value=f"```\n{dur_str}\n```",
+            inline=True
+        )
+        embed.add_field(
+            name="📝 AFK Reason",
+            value=f"```\n{data['reason']}\n```",
+            inline=True
+        )
+        embed.set_thumbnail(url=message.author.display_avatar.url)
+        embed.set_footer(text=f"Welcome back {message.author.display_name}!")
 
         if data["mentions"]:
             mentions_text = []
-            for m in data["mentions"]:
+            for m in data["mentions"][:5]:
                 time_ago = int(time.time() - m["time"])
                 if time_ago < 60:
                     time_str = f"{time_ago} seconds ago"
@@ -283,43 +281,18 @@ async def on_message(message):
                 else:
                     time_str = f"{time_ago // 3600} hours ago"
                 
-                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
+                mentions_text.append(f"• **{m['author_name']}** ({time_str})\n  [Jump to message]({m['jump_url']})")
+            
+            if len(data["mentions"]) > 5:
+                mentions_text.append(f"\n*... and {len(data['mentions']) - 5} more mentions*")
             
             embed.add_field(
-                name=f"You received {len(data['mentions'])} mention(s)",
-                value="\n\n".join(mentions_text),
+                name=f"💬 You received {len(data['mentions'])} mention(s)",
+                value="\n".join(mentions_text),
                 inline=False
             )
 
         await message.channel.send(embed=embed)
-
-    # --- LINK FILTERING ---
-    if message.guild and link_check_enabled.get(message.guild.id, False):
-        url_pattern = r'https?://[^\s]+|www\.[^\s]+'
-        links = re.findall(url_pattern, message.content)
-        
-        if links:
-            cursor.execute("SELECT link_domain FROM allowed_links WHERE guild_id = ?", (message.guild.id,))
-            allowed = [row[0] for row in cursor.fetchall()]
-            
-            for link in links:
-                domain = extract_domain(link)
-                if domain and domain not in allowed:
-                    cursor.execute("SELECT mute_duration FROM link_punishment WHERE guild_id = ?", (message.guild.id,))
-                    row = cursor.fetchone()
-                    duration = row[0] if row else 300
-                    
-                    try:
-                        await message.delete()
-                        await message.author.timeout(timedelta(seconds=duration), reason=f"Sent unauthorized link: {domain}")
-                        await message.channel.send(f"🔇 {message.author.mention} was muted for {format_duration(duration)} for sending an unauthorized link: `{domain}`")
-                    except Exception as e:
-                        await message.channel.send(f"❌ Failed to mute {message.author.mention}: {e}")
-                    break
-
-    # --- THIS MUST BE THE VERY LAST LINE ---
-    await bot.process_commands(message)
-
 # =========================================================
 # HELP COMMAND
 # =========================================================
