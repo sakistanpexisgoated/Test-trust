@@ -1413,9 +1413,9 @@ async def gayrate(ctx, member: discord.Member = None):
 async def eight_ball(ctx, *, question: str):
     responses = [
         "It is certain.", "It is decidedly so.", "Without a doubt.",
-        "Yes definitely.", "You may rely on it.", "As I see it, yes.",
-        "Most likely.", "Outlook good.", "Yes.", "Signs point to yes.",
-        "Reply hazy, try again.", "Ask again later.", "Better not tell you now.",
+        "Yes definitely.", "You may rely on it.", "As I see it, yes <3>.",
+        "Most likely.", "Outlook good.", "Yes.", "Signs point to yes :3.",
+        "Reply hazy, try again.", "Ask again later.", "Better not tell you now heh.",
         "Cannot predict now.", "Concentrate and ask again.",
         "Don't count on it.", "My reply is no.", "My sources say no sussy baka.",
         "Outlook not so good nigga.", "Very doubtful sir."
@@ -1625,20 +1625,42 @@ async def afk(ctx, *, reason: str = "AFK"):
     embed = discord.Embed(description=f"👋 {ctx.author.mention} is now AFK: {reason}", color=discord.Color.blurple())
     await ctx.send(embed=embed)
 
+# =========================================================
+# BAN COMMAND
+# =========================================================
 @bot.hybrid_command(name="ban", description="Ban a member from the server")
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
-    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
+    if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} is higher in roles than me, sadly I cannot ban them.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} is higher in roles than me, sadly I cannot ban them.")
+            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot ban the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot ban the server owner.")
+    
+    if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
+        if ctx.author.id != ctx.guild.owner_id:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot ban a staff member.", ephemeral=True)
+            return await ctx.send(f"❌ {ctx.author.mention} you cannot ban a staff member.")
+    
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot ban them.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot ban them.")
 
     await member.ban(reason=reason)
     
+    embed = discord.Embed(
+        title="👋 Successfully Banned",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="Member", value=f"{member.mention}", inline=False)
+    embed.add_field(name="📄 Reason", value=reason, inline=False)
+    embed.set_footer(text=f"Banned by {ctx.author.display_name}")
+    
     if ctx.interaction:
-        await ctx.interaction.response.send_message(f"✅ **{member.display_name}** has been banned.\n📝 Reason: {reason}")
+        await ctx.interaction.response.send_message(embed=embed)
     else:
-        await ctx.send(f"✅ **{member.display_name}** has been banned.\n📝 Reason: {reason}")
+        await ctx.send(embed=embed)
 
 @ban.error
 async def ban_error(ctx, error):
@@ -1647,7 +1669,10 @@ async def ban_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Ban Members permission.", ephemeral=True)
         else:
             await ctx.send(f"❌ {ctx.author.mention} You are missing Ban Members permission.")
-            
+# =========================================================
+# UNBAN COMMAND
+# =========================================================
+
 @bot.hybrid_command(name="unban", description="Unban a user by ID")
 @commands.has_permissions(ban_members=True)
 async def unban(ctx, user_id: str):
@@ -1656,10 +1681,18 @@ async def unban(ctx, user_id: str):
         user = await bot.fetch_user(uid)
         await ctx.guild.unban(user)
         
+        embed = discord.Embed(
+            title="✅ Successfully Unbanned",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="User", value=f"{user}", inline=False)
+        embed.set_footer(text=f"Unbanned by {ctx.author.display_name}")
+        
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"✅ **{user}** has been unbanned.")
+            await ctx.interaction.response.send_message(embed=embed)
         else:
-            await ctx.send(f"✅ **{user}** has been unbanned.")
+            await ctx.send(embed=embed)
+            
     except discord.NotFound:
         if ctx.interaction:
             await ctx.interaction.response.send_message(f"❌ User ID `{user_id}` not found.", ephemeral=True)
@@ -1675,10 +1708,10 @@ async def unban(ctx, user_id: str):
 async def unban_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Ban Members permission.", ephemeral=True)
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing UnBan Members permission.", ephemeral=True)
         else:
-            await ctx.send(f"❌ {ctx.author.mention} You are missing Ban Members permission.")
-
+            await ctx.send(f"❌ {ctx.author.mention} You are missing UnBan Members permission.")
+            
 @bot.hybrid_group(name="fake", description="Fake moderation commands")
 async def fake(ctx):
     pass
@@ -1702,22 +1735,43 @@ async def fake_ban(ctx, member: discord.Member, *, reason: str = "No reason prov
     embed.set_footer(text=f"tottaly real trust by {ctx.author.display_name}")
 
     await ctx.send(embed=embed)
+# =========================================================
+# KICK COMMAND
+# =========================================================
 
 @bot.hybrid_command(name="kick", description="Kick a member from the server")
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, member: discord.Member, *, reason: str = "No reason provided"):
-    # Check if bot can kick the target
-    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
+    if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} is higher in roles than me, sadly I cannot kick them.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} is higher in roles than me, sadly I cannot kick them.")
+            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot kick the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot kick the server owner.")
+    
+    if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
+        if ctx.author.id != ctx.guild.owner_id:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot kick a staff member.", ephemeral=True)
+            return await ctx.send(f"❌ {ctx.author.mention} you cannot kick a staff member.")
+    
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot kick them.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot kick them.")
 
     await member.kick(reason=reason)
     
+    embed = discord.Embed(
+        title="⭐️ Successfully Kicked",
+        color=discord.Color.orange()
+    )
+    embed.add_field(name="Member", value=f"{member.mention}", inline=False)
+    embed.add_field(name="📄 Reason", value=reason, inline=False)
+    embed.set_footer(text=f"Kicked by {ctx.author.display_name}")
+    
     if ctx.interaction:
-        await ctx.interaction.response.send_message(f"✅ **{member.display_name}** has been kicked.\n📝 Reason: {reason}")
+        await ctx.interaction.response.send_message(embed=embed)
     else:
-        await ctx.send(f"✅ **{member.display_name}** has been kicked.\n📝 Reason: {reason}")
+        await ctx.send(embed=embed)
 
 @kick.error
 async def kick_error(ctx, error):
@@ -1726,23 +1780,27 @@ async def kick_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Kick Members permission.", ephemeral=True)
         else:
             await ctx.send(f"❌ {ctx.author.mention} You are missing Kick Members permission.")
+# =========================================================
+# MUTE COMMAND
+# =========================================================
 
 @bot.hybrid_command(name="mute", description="Mute a member")
 @commands.has_permissions(manage_roles=True)
 async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str = "No reason provided"):
-    # Check if the bot can mute the target - bypass for server owner or if bot has higher role
+    # Check if target is server owner
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ Cannot mute the server owner.", ephemeral=True)
-        return await ctx.send(f"❌ Cannot mute the server owner.")
+            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot mute the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot mute the server owner.")
     
-    # If target has admin perms, allow but warn
-    if member.guild_permissions.administrator and ctx.author.id != ctx.guild.owner_id:
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ Cannot mute an administrator.", ephemeral=True)
-        return await ctx.send(f"❌ Cannot mute an administrator.")
+    # Check if target is staff (has kick/ban/manage roles perms)
+    if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
+        if ctx.author.id != ctx.guild.owner_id:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot mute a staff member.", ephemeral=True)
+            return await ctx.send(f"❌ {ctx.author.mention} you cannot mute a staff member.")
     
-    # Bot can mute anyone below its highest role, including staff
+    # Check bot role hierarchy
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         if ctx.interaction:
             return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot mute them.", ephemeral=True)
@@ -1781,24 +1839,41 @@ async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str
 async def mute_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Manage Roles permission.", ephemeral=True)
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Mute Perms.", ephemeral=True)
         else:
-            await ctx.send(f"❌ {ctx.author.mention} You are missing Manage Roles permission.")
-            
+            await ctx.send(f"❌ {ctx.author.mention} You are missing Mute permissions.")
+# =========================================================
+# UNMUTE COMMAND
+# =========================================================
+
 @bot.hybrid_command(name="unmute", description="Remove a member's timeout")
 @commands.has_permissions(manage_roles=True)
 async def unmute(ctx, member: discord.Member):
-    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
+    if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher role than me, I cannot unmute them.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} has a higher role than me, I cannot unmute them.")
+            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot unmute the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot unmute the server owner.")
+    
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot unmute them.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot unmute them.")
     
     try:
         await member.timeout(None, reason=f"Unmuted by {ctx.author}")
+        
+        embed = discord.Embed(
+            title="☄️ Successfully Unmuted",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Member", value=f"{member.mention}", inline=False)
+        embed.set_footer(text=f"Unmuted by {ctx.author.display_name}")
+        
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"✅ Successfully unmuted {member.mention}.")
+            await ctx.interaction.response.send_message(embed=embed)
         else:
-            await ctx.send(f"✅ Successfully unmuted {member.mention}.")
+            await ctx.send(embed=embed)
+            
     except Exception as e:
         if ctx.interaction:
             await ctx.interaction.response.send_message(f"❌ Failed to unmute member: {e}", ephemeral=True)
@@ -1817,16 +1892,57 @@ async def unmute_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
         else:
             await ctx.send(f"❌ Member not found.")
-            
+# =========================================================
+# WARN COMMAND
+# =========================================================
+
 @bot.hybrid_command(name="warn", description="Warn a member")
+@commands.has_permissions(manage_messages=True)
 async def warn(ctx, member: discord.Member, *, reason: str = "No reason provided"):
-    if not await require_server_mod(ctx):
-        return
+    if ctx.guild.owner_id == member.id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot warn the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot warn the server owner.")
+    
+    if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
+        if ctx.author.id != ctx.guild.owner_id:
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot warn a staff member.", ephemeral=True)
+            return await ctx.send(f"❌ {ctx.author.mention} you cannot warn a staff member.")
+    
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot warn them.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot warn them.")
+
+    cursor.execute("SELECT COUNT(*) FROM warnings WHERE user_id = ?", (member.id,))
+    warn_count = cursor.fetchone()[0] + 1
+    
     cursor.execute("INSERT INTO warnings (user_id, moderator_id, reason) VALUES (?, ?, ?)", (member.id, ctx.author.id, reason))
     db.commit()
-    embed = discord.Embed(description=f"⚠️ Warned **{member.display_name}**. Reason: {reason}", color=discord.Color.orange())
-    await ctx.send(embed=embed)
+    
+    embed = discord.Embed(
+        title="⚠️ Successfully Warned",
+        color=discord.Color.orange()
+    )
+    embed.add_field(name="Member", value=f"{member.mention}", inline=False)
+    embed.add_field(name="📄 Reason", value=reason, inline=False)
+    embed.add_field(name="⚠️ Warning Count", value=f"#{warn_count}", inline=False)
+    embed.set_footer(text=f"Warned by {ctx.author.display_name}")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
 
+@warn.error
+async def warn_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Manage Messages permission.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ {ctx.author.mention} You are missing Manage Messages permission.")
+            
 @bot.hybrid_command(name="avatar", description="Show a user's avatar")
 async def avatar(ctx, member: discord.Member = None):
     target = member or ctx.author
