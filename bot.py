@@ -40,7 +40,7 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(
-    command_prefix=",,",
+    command_prefix="R!",
     intents=intents,
     help_command=None
 )
@@ -190,20 +190,81 @@ async def on_message(message):
         and message.reference is None
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
+    
+# =========================================================
+# HELP COMMAND - REPLACE YOUR EXISTING HELP COMMAND
+# =========================================================
 
-    if is_standalone_bot_mention:
-        embed = discord.Embed(
-            title="🤖 Bot Help Panel",
-            description="hello i am rynx i was created by dust and gingerini my prefixs are ,, and /",
-            color=discord.Color.from_rgb(30, 31, 34)
-        )
-        embed.add_field(name="📌 Prefixes", value="`,,` or `/`", inline=True)
-        embed.add_field(name="👑 Creators", value="`dust` & `gingerini`", inline=True)
-        embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
-        embed.add_field(name="🎉 Fun & Social", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `gif`, `hack`, `brainrot_dice`, `marry`, `divorce`, `mock`", inline=False)
-        embed.add_field(name="🛡️ Moderation & Utility", value="`afk`, `ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `help`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`, `blacklist`, `serverblacklist`", inline=False)
-        await message.channel.send(embed=embed)
-        return
+@bot.hybrid_command(name="help", description="Display all available commands")
+async def help(ctx):
+    embed = discord.Embed(
+        title="📋 Rynx Bot Commands",
+        description=f"**Prefix:** `R!` or `/`\nUse `R!help` or `/help` to see this menu.",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    
+    # Economy Commands
+    embed.add_field(
+        name="💰 Economy",
+        value="`balance`, `bal`, `daily`, `work`, `gamble`, `bet`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `dep`, `withdraw`, `with`",
+        inline=False
+    )
+    
+    # Fun & Social
+    embed.add_field(
+        name="🎉 Fun & Social",
+        value="`cf`, `coinflip`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `pat`, `tape`, `gif`, `hack`, `mock`, `fraktur`, `pfps`, `memes`",
+        inline=False
+    )
+    
+    # Games
+    embed.add_field(
+        name="🎮 Games",
+        value="`brainrot_dice`, `guess`, `country`, `debate`",
+        inline=False
+    )
+    
+    # Football Cards
+    embed.add_field(
+        name="⚽ Football Cards",
+        value="`setchannel`, `spawn`, `collect`, `pack`, `sell`, `collection`, `cards`, `trade`",
+        inline=False
+    )
+    
+    # Moderation & Utility
+    embed.add_field(
+        name="🛡️ Moderation",
+        value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`, `stealurl`, `surl`",
+        inline=False
+    )
+    
+    # Admin/Owner
+    embed.add_field(
+        name="👑 Admin/Owner",
+        value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `unblacklist`, `serverblacklist`, `serverunblacklist`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`",
+        inline=False
+    )
+    
+    # Admin Pay Commands
+    embed.add_field(
+        name="💰 Admin Economy",
+        value="`adminpay`, `ownerspay`, `adminset`, `ownersset`, `adminsetbank`, `ownerssetbank`, `adminrob`, `ownersrob`, `adminrobamount`, `ownersrobamount`",
+        inline=False
+    )
+    
+    # Giveaway
+    embed.add_field(
+        name="🎁 Giveaway",
+        value="`giveaway create`, `giveaway reroll`",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await ctx.send(embed=embed)
 
     if message.mentions:
         for member in message.mentions:
