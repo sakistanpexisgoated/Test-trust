@@ -6110,6 +6110,61 @@ async def spank(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# BENDOVER COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# =========================================================
+
+BENDOVER_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3NzY3anpiN2dxcXh2NnpmcXhsaGt0Mmx0YWt4MGt1Z2tvZHZ3NjFoYyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/HmtJvG66fzqwHMLXMk/giphy.gif"
+]
+
+@bot.hybrid_command(name="bendover", description="Ask someone to bend over!")
+async def bendover(ctx, member: discord.Member = None):
+    if member is None:
+        embed = discord.Embed(
+            description="❌ You need to specify someone to bend over🤤!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.id == ctx.author.id:
+        embed = discord.Embed(
+            description=f"🫣 {ctx.author.mention} asked themselves to bend over... that's odd uhm!",
+            color=discord.Color.orange()
+        )
+        embed.set_image(url=random.choice(BENDOVER_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(
+            description="❌ You can't ask a bot to bend over!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    embed = discord.Embed(
+        description=f"🫣 {ctx.author.mention} asked {member.mention} to bend over and they said alr 😳",
+        color=discord.Color.from_rgb(255, 182, 193)
+    )
+    embed.set_image(url=random.choice(BENDOVER_GIFS))
+    embed.set_footer(text="Bend over!")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
