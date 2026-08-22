@@ -6053,6 +6053,62 @@ async def role_error(ctx, error):
             await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
         else:
             await ctx.send(f"❌ Member not found.")
+            # =========================================================
+# SPANK COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# =========================================================
+
+SPANK_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmF5ejljb2t0eXRjczgza2lndHdrMTNydGFyajB4b2x3bWNteHBkZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/pRotk2UQTsozm/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZm1lcDlleWJ6NG91dzBxdGNsc2hpMm14ZmpoeG94OHNkMjhlOGk5aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/wPAxIdea6mbw3vQa6i/giphy.gif"
+]
+
+@bot.hybrid_command(name="spank", description="Spank someone!")
+async def spank(ctx, member: discord.Member = None):
+    if member is None:
+        embed = discord.Embed(
+            description="❌ You need to specify someone to spank!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.id == ctx.author.id:
+        embed = discord.Embed(
+            description=f"🖐️ {ctx.author.mention} spanks themselves... their a werido...!",
+            color=discord.Color.orange()
+        )
+        embed.set_image(url=random.choice(SPANK_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(
+            description="❌ You can't spank a bot!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    embed = discord.Embed(
+        description=f"🖐️ {ctx.author.mention} spanked {member.mention} 🍑",
+        color=discord.Color.from_rgb(255, 182, 193)
+    )
+    embed.set_image(url=random.choice(SPANK_GIFS))
+    embed.set_footer(text="Spank spank!")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
