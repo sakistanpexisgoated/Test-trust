@@ -6299,7 +6299,7 @@ async def linkshelp(ctx):
     else:
         await ctx.send(embed=embed)
 # =========================================================
-# HIDE & SEEK COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# HIDE & SEEK COMMAND - WITH INVITE SYSTEM
 # =========================================================
 
 # Add these database tables
@@ -6310,24 +6310,22 @@ CREATE TABLE IF NOT EXISTS hide_seek_stats (
     seeks INTEGER DEFAULT 0,
     found INTEGER DEFAULT 0,
     hidden INTEGER DEFAULT 0,
-    points INTEGER DEFAULT 0
+    points INTEGER DEFAULT 0,
+    wins INTEGER DEFAULT 0,
+    losses INTEGER DEFAULT 0
 )
 """)
 db.commit()
 
 # Memory cache for active games
 hide_seek_games = {}
-hide_seek_cooldown = {}
+hide_seek_invites = {}
 
-@bot.hybrid_command(name="hide", description="Hide in a random channel for seekers to find you!")
-async def hide(ctx):
-    user_id = ctx.author.id
-    guild_id = ctx.guild.id
-    
-    # Check if user is already in a game
-    if user_id in hide_seek_games:
+@bot.hybrid_command(name="hide", description="Invite someone to play hide and seek!")
+async def hide(ctx, member: discord.Member = None):
+    if member is None:
         embed = discord.Embed(
-            description="❌ You're already hiding! Wait for someone to find you.",
+            description="❌ You need to invite someone to play!\nUsage: `R!hide @member`",
             color=discord.Color.red()
         )
         if ctx.interaction:
@@ -6336,12 +6334,57 @@ async def hide(ctx):
             await ctx.send(embed=embed)
         return
     
-    # Check cooldown (30 seconds between hides)
-    if user_id in hide_seek_cooldown:
-        remaining = int(30 - (time.time() - hide_seek_cooldown[user_id]))
+    if member.id == ctx.author.id:
+        embed = discord.Embed(
+            description="❌ You can't play hide and seek with yourself!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(
+            description="❌ You can't play hide and seek with a bot!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    # Check if user is already in a game
+    if ctx.author.id in hide_seek_games:
+        embed = discord.Embed(
+            description="❌ You're already in a hide and seek game!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.id in hide_seek_games:
+        embed = discord.Embed(
+            description=f"❌ {member.mention} is already in a hide and seek game!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    # Check cooldown (30 seconds between invites)
+    if ctx.author.id in hide_seek_invites:
+        remaining = int(30 - (time.time() - hide_seek_invites[ctx.author.id]))
         if remaining > 0:
             embed = discord.Embed(
-                description=f"⏳ Please wait {remaining} seconds before hiding again.",
+                description=f"⏳ Please wait {remaining} seconds before sending another invite.",
                 color=discord.Color.orange()
             )
             if ctx.interaction:
@@ -6350,80 +6393,164 @@ async def hide(ctx):
                 await ctx.send(embed=embed)
             return
     
-    # Get channels the user can see (excluding categories, voice, and restricted channels)
+    # Store invite
+    hide_seek_invites[ctx.author.id] = time.time()
+    
+    # Create confirmation view
+    view = HideSeekInviteView(ctx.author.id, member.id, ctx.channel.id)
+    
+    embed = discord.Embed(
+        title="🕵️ Hide & Seek Invite",
+        description=f"{ctx.author.mention} is inviting {member.mention} to play **Hide and Seek**!\n\n"
+                    f"**How to play:**\n"
+                    f"1️⃣ {ctx.author.mention} will hide in a random channel\n"
+                    f"2️⃣ {member.mention} has **20 guesses** to find them\n"
+                    f"3️⃣ Hints given every 5 guesses\n"
+                    f"4️⃣ Winner gets **$200** and **+10 points**!\n\n"
+                    f"**Do you accept the challenge?**",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    embed.set_footer(text="This invite expires in 60 seconds")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, view=view)
+    else:
+        await ctx.send(embed=embed, view=view)
+
+class HideSeekInviteView(discord.ui.View):
+    def __init__(self, hider_id, seeker_id, channel_id):
+        super().__init__(timeout=60)
+        self.hider_id = hider_id
+        self.seeker_id = seeker_id
+        self.channel_id = channel_id
+        self.answered = False
+    
+    async def on_timeout(self):
+        if not self.answered:
+            for child in self.children:
+                child.disabled = True
+            try:
+                embed = discord.Embed(
+                    description="⏰ Invite expired! The game has been cancelled.",
+                    color=discord.Color.orange()
+                )
+                await self.message.edit(embed=embed, view=self)
+            except:
+                pass
+    
+    @discord.ui.button(label="✅ Yes, Let's Play!", style=discord.ButtonStyle.success)
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.seeker_id:
+            await interaction.response.send_message("❌ This invite isn't for you!", ephemeral=True)
+            return
+        
+        if self.answered:
+            await interaction.response.send_message("⏳ This invite has already been answered!", ephemeral=True)
+            return
+        
+        self.answered = True
+        for child in self.children:
+            child.disabled = True
+        
+        await interaction.response.edit_message(
+            content=f"✅ {interaction.user.mention} accepted the challenge! Starting game...",
+            view=self
+        )
+        
+        # Start the game
+        await start_hide_seek_game(interaction.channel, self.hider_id, self.seeker_id)
+    
+    @discord.ui.button(label="❌ No, Maybe Later", style=discord.ButtonStyle.danger)
+    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.seeker_id:
+            await interaction.response.send_message("❌ This invite isn't for you!", ephemeral=True)
+            return
+        
+        if self.answered:
+            await interaction.response.send_message("⏳ This invite has already been answered!", ephemeral=True)
+            return
+        
+        self.answered = True
+        for child in self.children:
+            child.disabled = True
+        
+        embed = discord.Embed(
+            description=f"❌ {interaction.user.mention} declined the invite. Game cancelled.",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+async def start_hide_seek_game(channel, hider_id, seeker_id):
+    guild = channel.guild
+    hider = guild.get_member(hider_id)
+    seeker = guild.get_member(seeker_id)
+    
+    if not hider or not seeker:
+        embed = discord.Embed(
+            description="❌ One of the players is no longer in the server!",
+            color=discord.Color.red()
+        )
+        await channel.send(embed=embed)
+        return
+    
+    # Get channels the hider can see
     available_channels = []
-    for channel in ctx.guild.text_channels:
-        # Check if user has permission to view channel
-        perms = channel.permissions_for(ctx.author)
-        if perms.view_channel and channel.type == discord.ChannelType.text:
-            # Exclude NSFW channels if needed
-            if channel.is_nsfw():
+    for ch in guild.text_channels:
+        perms = ch.permissions_for(hider)
+        if perms.view_channel and ch.type == discord.ChannelType.text:
+            if ch.is_nsfw():
                 continue
-            available_channels.append(channel)
+            available_channels.append(ch)
     
     if len(available_channels) < 2:
         embed = discord.Embed(
             description="❌ Not enough channels available to hide in! Need at least 2 text channels.",
             color=discord.Color.red()
         )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+        await channel.send(embed=embed)
         return
     
     # Pick random channel
     hidden_channel = random.choice(available_channels)
     
     # Store game data
-    hide_seek_games[user_id] = {
+    hide_seek_games[hider_id] = {
         "channel_id": hidden_channel.id,
         "channel_name": hidden_channel.name,
-        "guild_id": guild_id,
+        "guild_id": guild.id,
         "guesses": 0,
         "max_guesses": 20,
         "found_by": None,
+        "seeker_id": seeker_id,
         "start_time": time.time()
     }
-    hide_seek_cooldown[user_id] = time.time()
     
     # DM the hider
     try:
-        await ctx.author.send(f"🕵️ You are hiding in **#{hidden_channel.name}**! Seekers have 20 guesses to find you.")
+        await hider.send(f"🕵️ You are hiding in **#{hidden_channel.name}**! {seeker.display_name} has 20 guesses to find you.")
     except:
         pass
     
-    # Announce to channel
+    # Announce
     embed = discord.Embed(
-        title="🕵️ Hide & Seek!",
-        description=f"{ctx.author.mention} is hiding somewhere in this server!\n\n**Seekers:** Use `R!seek #channel` to guess where they are!\nYou have **20 guesses** to find them.",
+        title="🕵️ Hide & Seek Started!",
+        description=f"{hider.mention} is hiding somewhere in this server!\n\n"
+                    f"**Seeker:** {seeker.mention}\n"
+                    f"**Guesses:** 20\n"
+                    f"**Prize:** $200 + 10 points!\n\n"
+                    f"Use `R!seek #channel` to guess where they are!",
         color=discord.Color.from_rgb(30, 31, 34)
     )
     embed.set_footer(text=f"Hint: The channel has {len(hidden_channel.name)} letters")
     
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
-    else:
-        await ctx.send(embed=embed)
+    await channel.send(embed=embed)
 
 @bot.hybrid_command(name="seek", description="Guess where the hider is!")
 async def seek(ctx, channel: discord.TextChannel):
     user_id = ctx.author.id
     guild_id = ctx.guild.id
     
-    # Check if there's an active hider
-    if not hide_seek_games:
-        embed = discord.Embed(
-            description="❌ Nobody is hiding right now! Use `R!hide` to start a game.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    # Find the active hider
+    # Find active game
     hider_id = None
     game_data = None
     for hid, data in hide_seek_games.items():
@@ -6434,7 +6561,7 @@ async def seek(ctx, channel: discord.TextChannel):
     
     if not hider_id:
         embed = discord.Embed(
-            description="❌ Nobody is hiding in this server right now!",
+            description="❌ Nobody is hiding in this server right now! Use `R!hide @member` to start a game.",
             color=discord.Color.red()
         )
         if ctx.interaction:
@@ -6443,10 +6570,10 @@ async def seek(ctx, channel: discord.TextChannel):
             await ctx.send(embed=embed)
         return
     
-    # Check if seeker is the hider
-    if hider_id == user_id:
+    # Only the seeker can guess
+    if user_id != game_data["seeker_id"]:
         embed = discord.Embed(
-            description="❌ You can't seek yourself! You're the one hiding!",
+            description=f"❌ Only <@{game_data['seeker_id']}> can make guesses in this game!",
             color=discord.Color.red()
         )
         if ctx.interaction:
@@ -6455,7 +6582,6 @@ async def seek(ctx, channel: discord.TextChannel):
             await ctx.send(embed=embed)
         return
     
-    # Check guesses limit
     if game_data["guesses"] >= game_data["max_guesses"]:
         embed = discord.Embed(
             description=f"❌ The hider has already been found or the game ended!",
@@ -6467,7 +6593,6 @@ async def seek(ctx, channel: discord.TextChannel):
             await ctx.send(embed=embed)
         return
     
-    # Check if the hider was already found
     if game_data.get("found_by") is not None:
         embed = discord.Embed(
             description=f"❌ The hider was already found by <@{game_data['found_by']}>!",
@@ -6484,20 +6609,20 @@ async def seek(ctx, channel: discord.TextChannel):
     remaining = game_data["max_guesses"] - game_data["guesses"]
     
     if channel.id == game_data["channel_id"]:
-        # CORRECT GUESS!
+        # CORRECT!
         game_data["found_by"] = user_id
         
         # Update stats
         cursor.execute("INSERT OR IGNORE INTO hide_seek_stats (user_id) VALUES (?)", (hider_id,))
         cursor.execute("INSERT OR IGNORE INTO hide_seek_stats (user_id) VALUES (?)", (user_id,))
-        cursor.execute("UPDATE hide_seek_stats SET hidden = hidden + 1 WHERE user_id = ?", (hider_id,))
-        cursor.execute("UPDATE hide_seek_stats SET found = found + 1 WHERE user_id = ?", (user_id,))
+        cursor.execute("UPDATE hide_seek_stats SET hidden = hidden + 1, losses = losses + 1 WHERE user_id = ?", (hider_id,))
+        cursor.execute("UPDATE hide_seek_stats SET found = found + 1, wins = wins + 1 WHERE user_id = ?", (user_id,))
         
-        # Economy: winner gets 200, loser loses 100
+        # Economy
         update_wallet(user_id, 200)
         update_wallet(hider_id, -100)
         
-        # Points: winner +10, loser -5
+        # Points
         cursor.execute("UPDATE hide_seek_stats SET points = points + 10 WHERE user_id = ?", (user_id,))
         cursor.execute("UPDATE hide_seek_stats SET points = points - 5 WHERE user_id = ?", (hider_id,))
         db.commit()
@@ -6512,7 +6637,6 @@ async def seek(ctx, channel: discord.TextChannel):
         )
         embed.set_footer(text=f"Found in {game_data['guesses']} guesses!")
         
-        # Remove game
         del hide_seek_games[hider_id]
         
         if ctx.interaction:
@@ -6520,7 +6644,7 @@ async def seek(ctx, channel: discord.TextChannel):
         else:
             await ctx.send(embed=embed)
     else:
-        # WRONG GUESS
+        # WRONG
         embed = discord.Embed(
             title="❌ Wrong!",
             description=f"{ctx.author.mention} guessed **#{channel.name}** but that's not where they are!\n\n"
@@ -6528,7 +6652,7 @@ async def seek(ctx, channel: discord.TextChannel):
             color=discord.Color.red()
         )
         
-        # Give hints every 5 guesses
+        # Hints every 5 guesses
         if game_data["guesses"] % 5 == 0:
             channel_name = game_data["channel_name"]
             hint = ""
@@ -6538,17 +6662,16 @@ async def seek(ctx, channel: discord.TextChannel):
                 hint = f"💡 Hint: The channel has {len(channel_name)} letters"
             elif game_data["guesses"] == 15:
                 hint = f"💡 Hint: The channel name contains `{channel_name[2:4]}`"
-            else:
-                hint = f"💡 Hint: The channel is `#{channel_name}`" if game_data["guesses"] >= 20 else ""
+            elif game_data["guesses"] >= 20:
+                hint = f"💡 Hint: The channel is `#{channel_name}`"
             
             if hint:
                 embed.add_field(name="📌 Hint", value=hint, inline=False)
         
-        # If no guesses left, end game
         if game_data["guesses"] >= game_data["max_guesses"]:
             embed.description = f"❌ Nobody found <@{hider_id}>! They were hiding in **#{game_data['channel_name']}**."
             cursor.execute("INSERT OR IGNORE INTO hide_seek_stats (user_id) VALUES (?)", (hider_id,))
-            cursor.execute("UPDATE hide_seek_stats SET hidden = hidden + 1 WHERE user_id = ?", (hider_id,))
+            cursor.execute("UPDATE hide_seek_stats SET hidden = hidden + 1, wins = wins + 1 WHERE user_id = ?", (hider_id,))
             db.commit()
             del hide_seek_games[hider_id]
         
@@ -6559,7 +6682,7 @@ async def seek(ctx, channel: discord.TextChannel):
 
 @bot.hybrid_command(name="hideleaderboard", aliases=["hidelb", "hiderank"], description="Show hide and seek leaderboard")
 async def hideleaderboard(ctx):
-    cursor.execute("SELECT user_id, points, hides, hidden, found FROM hide_seek_stats ORDER BY points DESC LIMIT 10")
+    cursor.execute("SELECT user_id, points, hides, hidden, found, wins, losses FROM hide_seek_stats ORDER BY points DESC LIMIT 10")
     rows = cursor.fetchall()
     
     if not rows:
@@ -6576,10 +6699,10 @@ async def hideleaderboard(ctx):
     leaderboard = []
     rank = 1
     for row in rows:
-        user_id, points, hides, hidden, found = row
+        user_id, points, hides, hidden, found, wins, losses = row
         user = bot.get_user(user_id)
         name = user.display_name if user else f"User {user_id}"
-        leaderboard.append(f"**#{rank}** {name} - ⭐ {points} pts | 🏆 Found: {found} | 🕵️ Hid: {hidden}")
+        leaderboard.append(f"**#{rank}** {name} - ⭐ {points} pts | 🏆 {wins}W/{losses}L | 🕵️ Hid: {hidden} | Found: {found}")
         rank += 1
     
     embed = discord.Embed(
@@ -6597,7 +6720,7 @@ async def hideleaderboard(ctx):
 @bot.hybrid_command(name="hidestats", description="Check your hide and seek stats")
 async def hidestats(ctx, member: discord.Member = None):
     target = member or ctx.author
-    cursor.execute("SELECT hides, hidden, found, points FROM hide_seek_stats WHERE user_id = ?", (target.id,))
+    cursor.execute("SELECT hides, hidden, found, points, wins, losses FROM hide_seek_stats WHERE user_id = ?", (target.id,))
     row = cursor.fetchone()
     
     if not row:
@@ -6611,17 +6734,18 @@ async def hidestats(ctx, member: discord.Member = None):
             await ctx.send(embed=embed)
         return
     
-    hides, hidden, found, points = row
+    hides, hidden, found, points, wins, losses = row
     
     embed = discord.Embed(
         title=f"📊 {target.display_name}'s Stats",
         description=f"⭐ Points: **{points}**\n"
+                    f"🏆 Wins: **{wins}** | Losses: **{losses}**\n"
                     f"🕵️ Times Hidden: **{hides}**\n"
                     f"🏆 Found Someone: **{found}**\n"
                     f"😳 Got Found: **{hidden}**",
         color=discord.Color.blue()
     )
-    embed.set_footer(text="Use R!hide to start hiding!")
+    embed.set_footer(text="Use R!hide @member to play!")
     
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed)
