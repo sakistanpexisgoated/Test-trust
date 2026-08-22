@@ -271,7 +271,6 @@ async def help(ctx):
         await message.channel.send(embed=embed)
 
     await bot.process_commands(message)
-
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
