@@ -195,87 +195,26 @@ async def on_message(message):
 # =========================================================
 # HELP COMMAND - REPLACE YOUR EXISTING HELP COMMAND
 # =========================================================
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    
-    is_standalone_bot_mention = (
-        bot.user in message.mentions
-        and not message.mention_everyone
-        and message.reference is None
-        and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
+@bot.hybrid_command(name="help", description="Display all available commands")
+async def help(ctx):
+    embed = discord.Embed(
+        title="📋 Rynx Bot Commands",
+        description="**Prefix:** `R!` or `/`",
+        color=discord.Color.from_rgb(30, 31, 34)
     )
-
-    if is_standalone_bot_mention:
-        embed = discord.Embed(
-            title="🤖 Bot Help Panel",
-            description="hello i am rynx i was created by dust and gingerini my prefixs are R! and /",
-            color=discord.Color.from_rgb(30, 31, 34)
-        )
-        embed.add_field(name="📌 Prefixes", value="`R!` or `/`", inline=True)
-        embed.add_field(name="👑 Creators", value="`dust` & `gingerini`", inline=True)
-        embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
-        embed.add_field(name="🎉 Fun & Social", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `gif`, `hack`, `brainrot_dice`, `marry`, `divorce`, `mock`", inline=False)
-        embed.add_field(name="🛡️ Moderation & Utility", value="`afk`, `ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `help`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`, `blacklist`, `serverblacklist`", inline=False)
-        await message.channel.send(embed=embed)
-        return
-
-    # <--- AFK CODE GOES HERE --->
-    if message.mentions:
-        for member in message.mentions:
-            if member.id in afk_users:
-                afk_users[member.id]["mentions"].append({
-                    "author_name": message.author.display_name,
-                    "content": message.content,
-                    "jump_url": message.jump_url,
-                    "time": time.time()
-                })
-                data = afk_users[member.id]
-                embed = discord.Embed(
-                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
-                    color=discord.Color.from_rgb(30, 31, 34)
-                )
-                await message.channel.send(embed=embed)
-
-    if message.author.id in afk_users:
-        data = afk_users.pop(message.author.id)
-        duration_sec = int(time.time() - data["time"])
-        
-        if duration_sec < 60:
-            dur_str = f"{duration_sec} seconds"
-        elif duration_sec < 3600:
-            dur_str = f"{duration_sec // 60} minutes"
-        else:
-            dur_str = f"{duration_sec // 3600} hours"
-
-        embed = discord.Embed(
-            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
-            color=discord.Color.from_rgb(30, 31, 34)
-        )
-
-        if data["mentions"]:
-            mentions_text = []
-            for m in data["mentions"]:
-                time_ago = int(time.time() - m["time"])
-                if time_ago < 60:
-                    time_str = f"{time_ago} seconds ago"
-                elif time_ago < 3600:
-                    time_str = f"{time_ago // 60} minutes ago"
-                else:
-                    time_str = f"{time_ago // 3600} hours ago"
-                
-                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
-            
-            embed.add_field(
-                name=f"You received {len(data['mentions'])} mention(s)",
-                value="\n\n".join(mentions_text),
-                inline=False
-            )
-
-        await message.channel.send(embed=embed)
-
-    await bot.process_commands(message)
+    embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
+    embed.add_field(name="🎉 Fun", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `pat`, `tape`, `gif`, `hack`, `mock`, `fraktur`, `pfps`, `memes`", inline=False)
+    embed.add_field(name="🎮 Games", value="`brainrot_dice`, `guess`, `country`, `debate`", inline=False)
+    embed.add_field(name="⚽ Football", value="`setchannel`, `spawn`, `collect`, `pack`, `sell`, `collection`, `trade`", inline=False)
+    embed.add_field(name="🛡️ Moderation", value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`", inline=False)
+    embed.add_field(name="👑 Admin", value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `trollpanel`, `whitelist`, `ghostping`, `fakenuke`", inline=False)
+    embed.add_field(name="💰 Admin Pay", value="`adminpay`, `adminset`, `adminsetbank`, `adminrob`, `adminrobamount`", inline=False)
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await ctx.send(embed=embed)
 # =========================================================
 # HELPER FUNCTIONS
 # =========================================================
