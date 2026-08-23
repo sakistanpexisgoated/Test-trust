@@ -6868,10 +6868,10 @@ async def pat(ctx, member: discord.Member = None):
 # =========================================================
 
 SLAP_GIFS = [
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2pyc3c1eWRxaHExeXh6dzY4dzBpN3hsaGk2cjFidGFwZXZ2NnlteCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/opi5w0RNRsUfoBuiqk/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2pyc3c1eWRxaHExeXh6dzY4dzBpN3hsaGk2cjFidGFwZXZ2NnlteCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/AsTZ4GbuYhMKguskTu/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2pyc3c1eWRxaHExeXh6dzY4dzBpN3hsaGk2cjFidGFwZXZ2NnlteCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/6kXM5jGyo6Amu1Mt5l/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3am42ejZ6ejhvZ2pnaGNrYnN6NDQ2dnBwMHQ5dzhjdXN1ODBlZ2F2dSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/QZpDATBs8QzcLZo9uI/giphy.gif"
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541232784352477184/slap-jjk.gif?ex=6a8cd862&is=6a8b86e2&hm=423dbe8e7f07e27725c275b44dd1db3aab881ecb1995d84c2503f752840decdb",
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541233495492403231/mushoku-tensei-boy-hit-girl.gif?ex=6a8cd90c&is=6a8b878c&hm=c6a594663908cfa3dae2cd3546dab0e90a17e055b0dee6ec84db840cc695954d",
+    "https://cdn.discordapp.com/attachments/1536352076383395911/1541233998838235217/slap-riku.gif?ex=6a8cd984&is=6a8b8804&hm=f921ae6fd357608db839cf8e73586e95133f429d5b6524f13ecc4921d29d494d",
+    "https://cdn.discordapp.com/attachments/1536352076383395911/1541234656819683429/cats-cat-slap.gif?ex=6a8cda20&is=6a8b88a0&hm=4c59102980908ad2a6e2c241da147368dd0c491f3f6eff994faca7fd7c2040a5"
 ]
 
 @bot.hybrid_command(name="slap", description="Slap someone!")
