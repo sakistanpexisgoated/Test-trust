@@ -6809,44 +6809,19 @@ async def endhide(ctx):
 # RAPE COMMAND
 # =========================================================
 
-RAPE_GIFS = [
-    "https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif"
-]
-
-@bot.hybrid_command(name="rape", description="rape someone with a GIF!")
+@bot.hybrid_command(name="rape", description="rape someone")
 async def rape(ctx, member: discord.Member = None):
     if member is None:
-        embed = discord.Embed(
-            description="❌ You need to specify someone to rape!\nUsage: `R!rape @member`",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+        await ctx.send("❌ You need to specify someone to rape!\nUsage: `R!rape @member`")
         return
     
     if member.id == ctx.author.id:
         embed = discord.Embed(
-            description=f"🫂 {ctx.author.mention} rapes themselves... that's kinda sad but okay!",
+            description=f"🫂 {ctx.author.mention} rapes themselves... that's kinda sad!",
             color=discord.Color.orange()
         )
         embed.set_image(url="https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif")
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    if member.bot:
-        embed = discord.Embed(
-            description="❌ You can't rape a bot weirdo!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
         return
     
     embed = discord.Embed(
@@ -6856,10 +6831,7 @@ async def rape(ctx, member: discord.Member = None):
     embed.set_image(url="https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif")
     embed.set_footer(text="get graped!")
     
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
-    else:
-        await ctx.send(embed=embed)
+    await ctx.send(embed=embed)
 # =========================================================
 # SLAP COMMAND - ADD THIS BEFORE bot.run(TOKEN)
 # =========================================================
