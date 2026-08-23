@@ -6806,15 +6806,15 @@ async def endhide(ctx):
     else:
         await ctx.send(embed=embed)
 # =========================================================
-# RAPE COMMAND
+# Rape command - ADD THIS BEFORE bot.run(TOKEN)
 # =========================================================
 
 RAPE_GIFS = [
-    "https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif"
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGJhM3FmcWN2ZWJ2dTEyMGppN2puOTM2a3l5d2ozOHNwYzV3MmxwNCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/OGXilB8foNFIs/giphy.gif"
 ]
 
 @bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
-async def rape(ctx, member: discord.Member = None):
+async def pat(ctx, member: discord.Member = None):
     if member is None:
         embed = discord.Embed(
             description="❌ You need to specify someone to rape!\nUsage: `R!rape @member`",
@@ -6840,7 +6840,7 @@ async def rape(ctx, member: discord.Member = None):
     
     if member.bot:
         embed = discord.Embed(
-            description="❌ You can't rape a bot weirdo!",
+            description="❌ You can't rape a bot werido!",
             color=discord.Color.red()
         )
         if ctx.interaction:
@@ -6850,7 +6850,7 @@ async def rape(ctx, member: discord.Member = None):
         return
     
     embed = discord.Embed(
-        description=f"🍑 {ctx.author.mention} rapes {member.mention}! 🍆",
+        description=f"🍑 {ctx.author.mention} rapes {member.mention}!🍆",
         color=discord.Color.from_rgb(255, 182, 193)
     )
     embed.set_image(url=random.choice(RAPE_GIFS))
