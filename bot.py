@@ -6207,7 +6207,7 @@ async def spank(ctx, member: discord.Member = None):
 # =========================================================
 
 BENDOVER_GIFS = [
-    "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3NzY3anpiN2dxcXh2NnpmcXhsaGt0Mmx0YWt4MGt1Z2tvZHZ3NjFoYyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/HmtJvG66fzqwHMLXMk/giphy.gif"
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541229274613424189/bend-over-bed.gif?ex=6a8cd51d&is=6a8b839d&hm=bcc868baa77481a867b295a99bc4ec7efe533795c7cec5aa23517fd211729d75"
 ]
 
 @bot.hybrid_command(name="bendover", description="Ask someone to bend over!")
