@@ -6150,8 +6150,10 @@ async def role_error(ctx, error):
 # =========================================================
 
 SPANK_GIFS = [
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmF5ejljb2t0eXRjczgza2lndHdrMTNydGFyajB4b2x3bWNteHBkZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/pRotk2UQTsozm/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZm1lcDlleWJ6NG91dzBxdGNsc2hpMm14ZmpoeG94OHNkMjhlOGk5aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/wPAxIdea6mbw3vQa6i/giphy.gif"
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541230113180614666/bad-girl-spank.gif?ex=6a8cd5e5&is=6a8b8465&hm=d3ed6a6854f20f6c0ca16a29a6a0ccf4dc2a26f66e7df668bb886c64e00a67f4",
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541230109363675176/rikka-takanashi-chunibyo.gif?ex=6a8cd5e4&is=6a8b8464&hm=509840270093c68677f16726ce3dd9d8670d2d681b92ac261fcfa6cd32887836",
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541230149612212354/american-dad-cartoon.gif?ex=6a8cd5ee&is=6a8b846e&hm=1c93e265be5433b8ae3af608b0878bfa32ed6ecfb3d2ee0f3513b0ac57699aff",
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541230890447933470/anime-spanking.gif?ex=6a8cd69e&is=6a8b851e&hm=494fbffbc9dee0b95cfd435f4a6f76f11287b59c4079d0ca3a23384b9105a6c8"
 ]
 
 @bot.hybrid_command(name="spank", description="Spank someone!")
@@ -6207,7 +6209,8 @@ async def spank(ctx, member: discord.Member = None):
 # =========================================================
 
 BENDOVER_GIFS = [
-    "https://cdn.discordapp.com/attachments/1525052130266841090/1541229274613424189/bend-over-bed.gif?ex=6a8cd51d&is=6a8b839d&hm=bcc868baa77481a867b295a99bc4ec7efe533795c7cec5aa23517fd211729d75"
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541229274613424189/bend-over-bed.gif?ex=6a8cd51d&is=6a8b839d&hm=bcc868baa77481a867b295a99bc4ec7efe533795c7cec5aa23517fd211729d75",
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541231362344747078/ilyshkin.gif?ex=6a8cd70f&is=6a8b858f&hm=1e2cd60e7f265ba8c766fc48a3135f51f7677d2a353af44e5a744a974421d987",
 ]
 
 @bot.hybrid_command(name="bendover", description="Ask someone to bend over!")
