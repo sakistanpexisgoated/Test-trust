@@ -6806,32 +6806,60 @@ async def endhide(ctx):
     else:
         await ctx.send(embed=embed)
 # =========================================================
-# RAPE COMMAND
+# Rape command - ADD THIS BEFORE bot.run(TOKEN)
 # =========================================================
 
-@bot.hybrid_command(name="rape", description="rape someone")
-async def rape(ctx, member: discord.Member = None):
+RAPE_GIFS = [
+    "https://cdn.discordapp.com/attachments/1525052130266841090/1541227778098204733/ezgif-6db7731ff9ed9aa8.gif"
+]
+
+@bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
+async def pat(ctx, member: discord.Member = None):
     if member is None:
-        await ctx.send("❌ You need to specify someone to rape!\nUsage: `R!rape @member`")
+        embed = discord.Embed(
+            description="❌ You need to specify someone to rape!\nUsage: `R!rape @member`",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
         return
     
     if member.id == ctx.author.id:
         embed = discord.Embed(
-            description=f"🫂 {ctx.author.mention} rapes themselves... that's kinda sad!",
+            description=f"🫂 {ctx.author.mention} rapes themselves... that's kinda sad but okay!",
             color=discord.Color.orange()
         )
-        embed.set_image(url="https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif")
-        await ctx.send(embed=embed)
+        embed.set_image(url=random.choice(RAPE_GIFS))
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+    
+    if member.bot:
+        embed = discord.Embed(
+            description="❌ You can't rape a bot werido!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
         return
     
     embed = discord.Embed(
-        description=f"🍑 {ctx.author.mention} rapes {member.mention}! 🍆",
+        description=f"🍑 {ctx.author.mention} rapes {member.mention}!🍆",
         color=discord.Color.from_rgb(255, 182, 193)
     )
-    embed.set_image(url="https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif")
+    embed.set_image(url=random.choice(RAPE_GIFS))
     embed.set_footer(text="get graped!")
     
-    await ctx.send(embed=embed)
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
 # =========================================================
 # SLAP COMMAND - ADD THIS BEFORE bot.run(TOKEN)
 # =========================================================
