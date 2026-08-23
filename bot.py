@@ -6915,7 +6915,6 @@ async def slap(ctx, member: discord.Member = None):
         color=discord.Color.from_rgb(255, 182, 193)
     )
     embed.set_image(url=random.choice(SLAP_GIFS))
-    embed.set_footer(text="Slap!")
     
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed)
