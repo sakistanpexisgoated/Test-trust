@@ -6810,7 +6810,7 @@ async def endhide(ctx):
 # =========================================================
 
 RAPE_GIFS = [
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGJhM3FmcWN2ZWJ2dTEyMGppN2puOTM2a3l5d2ozOHNwYzV3MmxwNCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/OGXilB8foNFIs/giphy.gif"
+    "https://media1.tenor.com/m/j6GoflLjRIsAAAAC/sheep-fucked-sheep.gif"
 ]
 
 @bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
