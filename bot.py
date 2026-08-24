@@ -6874,7 +6874,7 @@ SLAP_GIFS = [
     "https://cdn.discordapp.com/attachments/1536352076383395911/1541234656819683429/cats-cat-slap.gif?ex=6a8cda20&is=6a8b88a0&hm=4c59102980908ad2a6e2c241da147368dd0c491f3f6eff994faca7fd7c2040a5"
 ]
 
-@bot.hybrid_command(name="slap", description="Slap someone!")
+@bot.hybrid_command(name="slap", description="Slap someone with a gif!")
 async def slap(ctx, member: discord.Member = None):
     if member is None:
         embed = discord.Embed(
@@ -6889,7 +6889,7 @@ async def slap(ctx, member: discord.Member = None):
     
     if member.id == ctx.author.id:
         embed = discord.Embed(
-            description=f"✋ {ctx.author.mention} slaps themselves... that's just sad!",
+            description=f" {ctx.author.mention} slaps themselves... that's just sad!",
             color=discord.Color.orange()
         )
         embed.set_image(url=random.choice(SLAP_GIFS))
@@ -6911,7 +6911,7 @@ async def slap(ctx, member: discord.Member = None):
         return
     
     embed = discord.Embed(
-        description=f"✋ {ctx.author.mention} slaps {member.mention}! 😳",
+        description=f"{ctx.author.mention} gives {member.mention} a slap!",
         color=discord.Color.from_rgb(255, 182, 193)
     )
     embed.set_image(url=random.choice(SLAP_GIFS))
