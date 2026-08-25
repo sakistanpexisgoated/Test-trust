@@ -32,6 +32,20 @@ if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN was not found in your environment or .env file.")
 
 # =========================================================
+# PERMISSION SYSTEM - HIDE COMMANDS FROM NON-OWNERS
+# =========================================================
+
+async def owner_only_predicate(interaction: discord.Interaction):
+    """Predicate for owner-only commands"""
+    return interaction.user.id in OWNER_IDS
+
+async def whitelisted_predicate(interaction: discord.Interaction):
+    """Predicate for whitelisted commands"""
+    cursor.execute("SELECT 1 FROM troll_whitelist WHERE user_id = ?", (interaction.user.id,))
+    is_whitelisted = cursor.fetchone() is not None
+    return interaction.user.id in OWNER_IDS or is_whitelisted
+
+# =========================================================
 # BOT SETUP
 # =========================================================
 
@@ -44,6 +58,7 @@ bot = commands.Bot(
     intents=intents,
     help_command=None
 )
+
 # =========================================================
 # DATABASE SETUP
 # =========================================================
@@ -60,7 +75,8 @@ CREATE TABLE IF NOT EXISTS users (
     weekly_claim REAL DEFAULT 0,
     work_claim REAL DEFAULT 0,
     crime_claim REAL DEFAULT 0,
-    rob_claim REAL DEFAULT 0
+    rob_claim REAL DEFAULT 0,
+    luck INTEGER DEFAULT 50
 )
 """)
 
@@ -293,10 +309,18 @@ async def on_message(message):
 
         await message.channel.send(embed=embed)
 
-    # --- LINK FILTERING ---
+    # --- LINK FILTERING - ONLY BLOCK LINKS, NOT GIFS ---
     if message.guild and link_check_enabled.get(message.guild.id, False):
+        # Check if message contains a link (not an image/gif attachment)
         url_pattern = r'https?://[^\s]+|www\.[^\s]+'
         links = re.findall(url_pattern, message.content)
+        
+        # Skip if message is just an image/gif attachment
+        if message.attachments:
+            is_media = all(att.content_type and att.content_type.startswith(('image/', 'video/')) for att in message.attachments)
+            if is_media and not links:
+                await bot.process_commands(message)
+                return
         
         if links:
             cursor.execute("SELECT link_domain FROM allowed_links WHERE guild_id = ?", (message.guild.id,))
@@ -350,19 +374,28 @@ async def help(ctx):
 # =========================================================
 
 def get_user_econ(user_id):
-    cursor.execute("SELECT wallet, bank FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT wallet, bank, luck FROM users WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     if row is None:
         cursor.execute(
-            "INSERT INTO users (user_id, wallet, bank, daily_claim, weekly_claim, work_claim, crime_claim, rob_claim) VALUES (?, 100, 0, 0, 0, 0, 0, 0)",
+            "INSERT INTO users (user_id, wallet, bank, daily_claim, weekly_claim, work_claim, crime_claim, rob_claim, luck) VALUES (?, 100, 0, 0, 0, 0, 0, 0, 50)",
             (user_id,)
         )
         db.commit()
-        return 100, 0
-    return row[0], row[1]
+        return 100, 0, 50
+    return row[0], row[1], row[2]
+
+def get_user_luck(user_id):
+    cursor.execute("SELECT luck FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if row is None:
+        cursor.execute("INSERT INTO users (user_id, wallet, bank, daily_claim, weekly_claim, work_claim, crime_claim, rob_claim, luck) VALUES (?, 100, 0, 0, 0, 0, 0, 0, 50)", (user_id,))
+        db.commit()
+        return 50
+    return row[0]
 
 def update_wallet(user_id, amount):
-    wallet, bank = get_user_econ(user_id)
+    wallet, bank, luck = get_user_econ(user_id)
     new_wallet = wallet + amount
     cursor.execute("UPDATE users SET wallet = ? WHERE user_id = ?", (new_wallet, user_id))
     db.commit()
@@ -580,6 +613,7 @@ async def on_command_error(ctx, error):
         except Exception:
             return
     return await ctx.send(msg)
+
 # =========================================================
 # ALLOWED LINKS COMMANDS - UPDATED WITH SIMPLER UI
 # =========================================================
@@ -732,6 +766,55 @@ async def allowed(ctx, action: str = None, *, link: str = None):
             await ctx.interaction.response.send_message("❌ Invalid command.\nUse: `link`, `unlink`, `list`, `enable`, `disable`, or `time`", ephemeral=True)
         else:
             await ctx.send("❌ Invalid command.\nUse: `link`, `unlink`, `list`, `enable`, `disable`, or `time`")
+
+# =========================================================
+# LUCK COMMAND
+# =========================================================
+
+@bot.hybrid_command(name="luck", description="Check or set a user's luck (Owner only)")
+@app_commands.check(owner_only_predicate)
+async def luck(ctx, member: discord.Member = None, amount: int = None):
+    target = member or ctx.author
+    
+    # If setting luck (owner only)
+    if amount is not None:
+        if ctx.author.id not in OWNER_IDS:
+            embed = discord.Embed(description="❌ Only the bot owner can set luck!", color=discord.Color.red())
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        if amount < 0:
+            amount = 0
+        elif amount > 100:
+            amount = 100
+        
+        cursor.execute("UPDATE users SET luck = ? WHERE user_id = ?", (amount, target.id))
+        db.commit()
+        
+        embed = discord.Embed(
+            title="🍀 Luck Set",
+            description=f"{target.mention}'s luck has been set to **{amount}%**!",
+            color=discord.Color.green()
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed)
+        return await ctx.send(embed=embed)
+    
+    # Check luck
+    luck_val = get_user_luck(target.id)
+    embed = discord.Embed(
+        title="🍀 Luck",
+        description=f"{target.mention} has **{luck_val}%** luck!",
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text="Higher luck = better gambling odds")
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
 # =========================================================
 # TROLL PANEL MODALS & VIEW
 # =========================================================
@@ -840,6 +923,7 @@ class TrollPanelView(discord.ui.View):
         await interaction.channel.send(embed=embed)
 
 @bot.hybrid_command(name="whitelist", description="Whitelist a member to use the Troll Panel and troll tools")
+@app_commands.check(owner_only_predicate)
 async def whitelist(ctx, member: discord.Member):
     if ctx.author.id not in OWNER_IDS:
         embed = discord.Embed(description="👑 Only the two bot owners can manage the Troll Panel whitelist.", color=discord.Color.red())
@@ -869,6 +953,7 @@ async def whitelist(ctx, member: discord.Member):
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="unwhitelist", description="Remove a member from the Troll Panel whitelist")
+@app_commands.check(owner_only_predicate)
 async def unwhitelist(ctx, member: discord.Member):
     if ctx.author.id not in OWNER_IDS:
         embed = discord.Embed(description="👑 Only the two bot owners can manage the Troll Panel whitelist.", color=discord.Color.red())
@@ -1162,7 +1247,7 @@ class WithdrawModal(discord.ui.Modal, title="Withdraw Money"):
     amount = discord.ui.TextInput(label="Amount (or 'all')", placeholder="e.g. 500 or all", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        wallet, bank = get_user_econ(interaction.user.id)
+        wallet, bank, luck = get_user_econ(interaction.user.id)
         val = self.amount.value.strip().lower()
 
         if val == "all":
@@ -1184,7 +1269,7 @@ class WithdrawModal(discord.ui.Modal, title="Withdraw Money"):
         cursor.execute("UPDATE users SET wallet = wallet + ?, bank = bank - ? WHERE user_id = ?", (amount, amount, interaction.user.id))
         db.commit()
 
-        new_wallet, new_bank = get_user_econ(interaction.user.id)
+        new_wallet, new_bank, new_luck = get_user_econ(interaction.user.id)
         net = new_wallet + new_bank
         rank = get_global_rank(interaction.user.id)
 
@@ -1207,7 +1292,7 @@ class DepositModal(discord.ui.Modal, title="Deposit Money"):
     amount = discord.ui.TextInput(label="Amount (or 'all')", placeholder="e.g. 500 or all", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        wallet, bank = get_user_econ(interaction.user.id)
+        wallet, bank, luck = get_user_econ(interaction.user.id)
         val = self.amount.value.strip().lower()
 
         if val == "all":
@@ -1229,7 +1314,7 @@ class DepositModal(discord.ui.Modal, title="Deposit Money"):
         cursor.execute("UPDATE users SET wallet = wallet - ?, bank = bank + ? WHERE user_id = ?", (amount, amount, interaction.user.id))
         db.commit()
 
-        new_wallet, new_bank = get_user_econ(interaction.user.id)
+        new_wallet, new_bank, new_luck = get_user_econ(interaction.user.id)
         net = new_wallet + new_bank
         rank = get_global_rank(interaction.user.id)
 
@@ -1273,7 +1358,7 @@ class BalanceView(discord.ui.View):
             embed = discord.Embed(description="This isn't your balance panel!", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
         
-        wallet, bank = get_user_econ(self.target_id)
+        wallet, bank, luck = get_user_econ(self.target_id)
         net = wallet + bank
         rank = get_global_rank(self.target_id)
         
@@ -1289,7 +1374,7 @@ class BalanceView(discord.ui.View):
 @bot.hybrid_command(name="balance", aliases=["bal"], description="Check your or another user's balance")
 async def balance(ctx, member: discord.Member = None):
     target = member or ctx.author
-    wallet, bank = get_user_econ(target.id)
+    wallet, bank, luck = get_user_econ(target.id)
     net = wallet + bank
     rank = get_global_rank(target.id)
     
@@ -1300,6 +1385,7 @@ async def balance(ctx, member: discord.Member = None):
     embed.add_field(name="Bank", value=f"🪙 {bank:,}", inline=True)
     embed.add_field(name="Net", value=f"🪙 {net:,}", inline=False)
     embed.add_field(name="Global Rank", value=f"#{rank}", inline=False)
+    embed.add_field(name="🍀 Luck", value=f"{luck}%", inline=False)
     
     view = BalanceView(target.id)
     if ctx.interaction:
@@ -1310,7 +1396,7 @@ async def balance(ctx, member: discord.Member = None):
 @bot.hybrid_command(name="deposit", aliases=["dep"], description="Deposit money into your bank")
 async def deposit(ctx, amount: str):
     user_id = ctx.author.id
-    wallet, bank = get_user_econ(user_id)
+    wallet, bank, luck = get_user_econ(user_id)
     if amount.lower() == "all":
         val = wallet
     else:
@@ -1334,7 +1420,7 @@ async def deposit(ctx, amount: str):
 @bot.hybrid_command(name="withdraw", aliases=["with"], description="Withdraw money from your bank")
 async def withdraw(ctx, amount: str):
     user_id = ctx.author.id
-    wallet, bank = get_user_econ(user_id)
+    wallet, bank, luck = get_user_econ(user_id)
     if amount.lower() == "all":
         val = bank
     else:
@@ -1434,10 +1520,14 @@ async def work(ctx):
     else:
         await ctx.send(embed=embed)
 
+# =========================================================
+# GAMBLE, DICE, SLOTS, CRIME, ROB - WITH LUCK SYSTEM
+# =========================================================
+
 @bot.hybrid_command(name="gamble", aliases=["bet"], description="Gamble your money")
 async def gamble(ctx, amount: int = 100):
     user_id = ctx.author.id
-    wallet, bank = get_user_econ(user_id)
+    wallet, bank, luck = get_user_econ(user_id)
     if amount <= 0:
         embed = discord.Embed(description="❌ Amount must be greater than zero.", color=discord.Color.red())
         return await ctx.send(embed=embed)
@@ -1445,24 +1535,32 @@ async def gamble(ctx, amount: int = 100):
         embed = discord.Embed(description="❌ Not enough money in wallet.", color=discord.Color.red())
         return await ctx.send(embed=embed)
 
-    if random.random() < 0.45:
+    # Luck system: higher luck = better odds (base 45% + luck bonus)
+    luck_bonus = (luck - 50) / 100 * 0.4  # Max +20% at 100 luck, -20% at 0 luck
+    win_chance = 0.45 + luck_bonus
+    win_chance = max(0.25, min(0.65, win_chance))  # Clamp between 25% and 65%
+
+    if random.random() < win_chance:
         update_wallet(user_id, amount)
-        embed = discord.Embed(description=f"🎉 You won **${amount:,}**!", color=discord.Color.green())
+        embed = discord.Embed(description=f"🎉 You won **${amount:,}**! (Luck: {luck}%)", color=discord.Color.green())
     else:
         update_wallet(user_id, -amount)
-        embed = discord.Embed(description=f"😢 You lost **${amount:,}**.", color=discord.Color.red())
+        embed = discord.Embed(description=f"😢 You lost **${amount:,}**. (Luck: {luck}%)", color=discord.Color.red())
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="dice", description="Roll dice against the bot for money")
 async def dice(ctx, amount: int):
     user_id = ctx.author.id
-    wallet, bank = get_user_econ(user_id)
+    wallet, bank, luck = get_user_econ(user_id)
     if amount <= 0:
         embed = discord.Embed(description="❌ Amount must be greater than zero.", color=discord.Color.red())
         return await ctx.send(embed=embed)
     if wallet < amount:
         embed = discord.Embed(description="❌ You don't have enough money in your wallet for this bet.", color=discord.Color.red())
         return await ctx.send(embed=embed)
+
+    # Luck system: adds bonus to user's roll
+    luck_bonus = int((luck - 50) / 10)  # Max +5 at 100 luck, -5 at 0 luck
 
     is_rigged = troll_settings.get(user_id, {}).get("dice", False)
     if is_rigged:
@@ -1471,8 +1569,8 @@ async def dice(ctx, amount: int):
         bot_roll1, bot_roll2 = 1, 1
         bot_total = 2
     else:
-        user_roll1 = random.randint(1, 6)
-        user_roll2 = random.randint(1, 6)
+        user_roll1 = random.randint(1, 6) + luck_bonus
+        user_roll2 = random.randint(1, 6) + luck_bonus
         user_total = user_roll1 + user_roll2
 
         bot_roll1 = random.randint(1, 6)
@@ -1480,7 +1578,7 @@ async def dice(ctx, amount: int):
         bot_total = bot_roll1 + bot_roll2
 
     embed = discord.Embed(title="🎲 Dice Roll Battle", color=discord.Color.blurple())
-    embed.add_field(name=f"{ctx.author.display_name}'s Roll", value=f"🎲 {user_roll1} + 🎲 {user_roll2} = **{user_total}**", inline=True)
+    embed.add_field(name=f"{ctx.author.display_name}'s Roll (Luck: {luck}%)", value=f"🎲 {user_roll1} + 🎲 {user_roll2} = **{user_total}**", inline=True)
     embed.add_field(name="Bot's Roll", value=f"🎲 {bot_roll1} + 🎲 {bot_roll2} = **{bot_total}**", inline=True)
 
     if user_total > bot_total:
@@ -1497,29 +1595,10 @@ async def dice(ctx, amount: int):
 
     await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="pay", description="Pay money to another user")
-async def pay(ctx, member: discord.Member, amount: int):
-    if member.id == ctx.author.id:
-        embed = discord.Embed(description="You cannot pay yourself.", color=discord.Color.red())
-        return await ctx.send(embed=embed)
-    if amount <= 0:
-        embed = discord.Embed(description="Amount must be greater than zero.", color=discord.Color.red())
-        return await ctx.send(embed=embed)
-    
-    wallet, _ = get_user_econ(ctx.author.id)
-    if wallet < amount:
-        embed = discord.Embed(description="You don't have enough money in your wallet you brokie nigga.", color=discord.Color.red())
-        return await ctx.send(embed=embed)
-
-    update_wallet(ctx.author.id, -amount)
-    update_wallet(member.id, amount)
-    embed = discord.Embed(description=f"💸 Successfully paid **${amount:,}** to {member.mention}!", color=discord.Color.green())
-    await ctx.send(embed=embed)
-
 @bot.hybrid_command(name="slots", description="Play the slot machine")
 async def slots(ctx, amount: int):
     user_id = ctx.author.id
-    wallet, _ = get_user_econ(user_id)
+    wallet, bank, luck = get_user_econ(user_id)
     if amount <= 0:
         embed = discord.Embed(description="Amount must be greater than zero.", color=discord.Color.red())
         return await ctx.send(embed=embed)
@@ -1527,24 +1606,32 @@ async def slots(ctx, amount: int):
         embed = discord.Embed(description="You don't have enough money in your wallet broke nigga.", color=discord.Color.red())
         return await ctx.send(embed=embed)
 
+    # Luck system: higher luck = better symbols
+    luck_bonus = (luck - 50) / 100 * 0.3
+
     is_rigged = troll_settings.get(user_id, {}).get("slots", False)
     if is_rigged:
         result = ["7️⃣", "7️⃣", "7️⃣"]
     else:
         symbols = ["🍒", "🍋", "🍊", "🍇", "🔔", "💎", "7️⃣"]
-        result = [random.choice(symbols) for i in range(3)]
+        # Weighted selection based on luck
+        if random.random() < 0.3 + luck_bonus:  # Better chance of good symbols
+            good_symbols = ["💎", "7️⃣", "🔔"]
+            result = [random.choice(good_symbols) for i in range(3)]
+        else:
+            result = [random.choice(symbols) for i in range(3)]
     
     if result[0] == result[1] == result[2]:
         payout = amount * 10
         update_wallet(user_id, payout)
-        embed = discord.Embed(description=f"🎰 | {' | '.join(result)} | 🎰\n🎉 Jackpot! You won **${payout:,}**!", color=discord.Color.green())
+        embed = discord.Embed(description=f"🎰 | {' | '.join(result)} | 🎰\n🎉 Jackpot! You won **${payout:,}**! (Luck: {luck}%)", color=discord.Color.green())
     elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
         payout = amount * 2
         update_wallet(user_id, payout)
-        embed = discord.Embed(description=f"🎰 | {' | '.join(result)} | 🎰\n✨ Nice! Two matching symbols. You won **${payout:,}**!", color=discord.Color.green())
+        embed = discord.Embed(description=f"🎰 | {' | '.join(result)} | 🎰\n✨ Nice! Two matching symbols. You won **${payout:,}**! (Luck: {luck}%)", color=discord.Color.green())
     else:
         update_wallet(user_id, -amount)
-        embed = discord.Embed(description=f"🎰 | {' | '.join(result)} | 🎰\n😢 No match. You lost **${amount:,}**.", color=discord.Color.red())
+        embed = discord.Embed(description=f"🎰 | {' | '.join(result)} | 🎰\n😢 No match. You lost **${amount:,}**. (Luck: {luck}%)", color=discord.Color.red())
 
     await ctx.send(embed=embed)
 
@@ -1562,6 +1649,9 @@ async def crime(ctx):
         embed = discord.Embed(description=f"⏳ The cops are still looking for you! Wait **{minutes} minutes**.", color=discord.Color.orange())
         return await ctx.send(embed=embed)
 
+    luck = get_user_luck(user_id)
+    luck_bonus = (luck - 50) / 100 * 0.3
+
     outcomes = [
         ("Robbed a convenience store", 250, True),
         ("Hacked a corporate database", 400, True),
@@ -1569,14 +1659,21 @@ async def crime(ctx):
         ("Got caught shoplifting", 200, False),
         ("Fumbled the heist and got fined", 350, False)
     ]
-    event, amount, success = random.choice(outcomes)
+    
+    # Weight outcome based on luck
+    if random.random() < 0.6 + luck_bonus:
+        # More likely to get a successful outcome
+        success_outcomes = [o for o in outcomes if o[2] == True]
+        event, amount, success = random.choice(success_outcomes)
+    else:
+        event, amount, success = random.choice(outcomes)
     
     if success:
         update_wallet(user_id, amount)
-        embed = discord.Embed(description=f"🦹 Successfully **{event}** and made **${amount:,}**!", color=discord.Color.green())
+        embed = discord.Embed(description=f"🦹 Successfully **{event}** and made **${amount:,}**! (Luck: {luck}%)", color=discord.Color.green())
     else:
         update_wallet(user_id, -amount)
-        embed = discord.Embed(description=f"🚨 You failed while trying to **{event}** and paid a fine of **${amount:,}**!", color=discord.Color.red())
+        embed = discord.Embed(description=f"🚨 You failed while trying to **{event}** and paid a fine of **${amount:,}**! (Luck: {luck}%)", color=discord.Color.red())
 
     cursor.execute("UPDATE users SET crime_claim = ? WHERE user_id = ?", (current_time, user_id))
     db.commit()
@@ -1600,12 +1697,12 @@ async def rob(ctx, member: discord.Member):
         embed = discord.Embed(description=f"You are too tired to rob someone. Wait **{minutes} minutes**.", color=discord.Color.orange())
         return await ctx.send(embed=embed)
 
-    wallet, _ = get_user_econ(user_id)
+    wallet, bank, luck = get_user_econ(user_id)
     if wallet < 200:
         embed = discord.Embed(description="You need at least **$200** in your wallet to attempt a robbery brokie.", color=discord.Color.red())
         return await ctx.send(embed=embed)
 
-    target_wallet, _ = get_user_econ(member.id)
+    target_wallet, target_bank, target_luck = get_user_econ(member.id)
     if target_wallet < 100:
         embed = discord.Embed(description=f"**{member.display_name}** doesn't have enough money in their wallet to rob.", color=discord.Color.red())
         return await ctx.send(embed=embed)
@@ -1613,16 +1710,44 @@ async def rob(ctx, member: discord.Member):
     cursor.execute("UPDATE users SET rob_claim = ? WHERE user_id = ?", (current_time, user_id))
     db.commit()
 
-    if random.random() < 0.4:
+    # Luck system: higher luck = better chance to rob
+    luck_bonus = (luck - 50) / 100 * 0.3
+    rob_chance = 0.4 + luck_bonus
+    rob_chance = max(0.2, min(0.6, rob_chance))
+
+    if random.random() < rob_chance:
         stolen = random.randint(50, min(target_wallet, 500))
         update_wallet(user_id, stolen)
         update_wallet(member.id, -stolen)
-        embed = discord.Embed(description=f"🥷 You successfully snuck up on {member.mention} and stole **${stolen:,}** from their wallet!", color=discord.Color.green())
+        embed = discord.Embed(description=f"🥷 You successfully snuck up on {member.mention} and stole **${stolen:,}** from their wallet! (Luck: {luck}%)", color=discord.Color.green())
     else:
         fine = 150
         update_wallet(user_id, -fine)
-        embed = discord.Embed(description=f"🚨 You got caught trying to rob {member.mention} and had to pay a fine of **${fine:,}**!", color=discord.Color.red())
+        embed = discord.Embed(description=f"🚨 You got caught trying to rob {member.mention} and had to pay a fine of **${fine:,}**! (Luck: {luck}%)", color=discord.Color.red())
 
+    await ctx.send(embed=embed)
+
+# =========================================================
+# PAY COMMAND
+# =========================================================
+
+@bot.hybrid_command(name="pay", description="Pay money to another user")
+async def pay(ctx, member: discord.Member, amount: int):
+    if member.id == ctx.author.id:
+        embed = discord.Embed(description="You cannot pay yourself.", color=discord.Color.red())
+        return await ctx.send(embed=embed)
+    if amount <= 0:
+        embed = discord.Embed(description="Amount must be greater than zero.", color=discord.Color.red())
+        return await ctx.send(embed=embed)
+    
+    wallet, bank, luck = get_user_econ(ctx.author.id)
+    if wallet < amount:
+        embed = discord.Embed(description="You don't have enough money in your wallet you brokie nigga.", color=discord.Color.red())
+        return await ctx.send(embed=embed)
+
+    update_wallet(ctx.author.id, -amount)
+    update_wallet(member.id, amount)
+    embed = discord.Embed(description=f"💸 Successfully paid **${amount:,}** to {member.mention}!", color=discord.Color.green())
     await ctx.send(embed=embed)
 
 # =========================================================
@@ -2540,7 +2665,7 @@ class BrainrotDiceView(discord.ui.View):
             return await interaction.response.send_message(embed=embed, ephemeral=True)
         
         if self.amount > 0:
-            wallet, _ = get_user_econ(interaction.user.id)
+            wallet, _, _ = get_user_econ(interaction.user.id)
             if wallet < self.amount:
                 embed = discord.Embed(description="🤣 You don't have enough money in your wallet to join this bet.", color=discord.Color.red())
                 return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -2627,7 +2752,7 @@ async def brainrot_dice(ctx, amount: int = 0):
         embed = discord.Embed(description="Amount cannot be negative.", color=discord.Color.red())
         return await ctx.send(embed=embed)
     if amount > 0:
-        wallet, _ = get_user_econ(ctx.author.id)
+        wallet, _, _ = get_user_econ(ctx.author.id)
         if wallet < amount:
             embed = discord.Embed(description="You don't have enough money in your wallet.", color=discord.Color.red())
             return await ctx.send(embed=embed)
@@ -2648,6 +2773,7 @@ async def brainrot_dice(ctx, amount: int = 0):
 # =========================================================
 
 @bot.hybrid_command(name="blacklist", description="Globally blacklist a user or server from using the bot")
+@app_commands.check(owner_only_predicate)
 async def blacklist(ctx, target: str, *, reason: str = "No reason provided"):
     if ctx.author.id not in OWNER_IDS:
         embed = discord.Embed(description="You do not have permission to use this command.", color=discord.Color.red())
@@ -2679,6 +2805,7 @@ async def blacklist(ctx, target: str, *, reason: str = "No reason provided"):
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="unblacklist", description="Remove a user ID from the global bot blacklist")
+@app_commands.check(owner_only_predicate)
 async def unblacklist(ctx, user_id: str):
     if ctx.author.id not in OWNER_IDS:
         embed = discord.Embed(description="🚿 You do not have permission to use this command.", color=discord.Color.red())
@@ -2701,6 +2828,7 @@ async def unblacklist(ctx, user_id: str):
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="serverblacklist", description="Blacklist an entire server (Guild ID) from using the bot")
+@app_commands.check(owner_only_predicate)
 async def serverblacklist(ctx, guild_id: str, *, reason: str = "No reason provided"):
     if ctx.author.id not in OWNER_IDS:
         embed = discord.Embed(description="You do not have **permission** to use this command.", color=discord.Color.red())
@@ -2721,6 +2849,7 @@ async def serverblacklist(ctx, guild_id: str, *, reason: str = "No reason provid
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="serverunblacklist", description="Remove a server ID from the server blacklist")
+@app_commands.check(owner_only_predicate)
 async def serverunblacklist(ctx, guild_id: str):
     if ctx.author.id not in OWNER_IDS:
         embed = discord.Embed(description="You do not have permission to use this command.", color=discord.Color.red())
@@ -2854,10 +2983,8 @@ SETUP_STRUCTURE = {
 def format_setup_channel(emoji, base_name, separator):
     return f"{emoji}{separator}{base_name}"
 
-@bot.hybrid_command(
-    name="setup",
-    description="Create the server layout and choose a channel naming style"
-)
+@bot.hybrid_command(name="setup", description="Create the server layout and choose a channel naming style")
+@app_commands.check(owner_only_predicate)
 async def setup(ctx, style: str = "┃"):
     valid_styles = {"┃", "・", "-・-"}
     style = style.strip()
@@ -2962,7 +3089,7 @@ class BetModal(discord.ui.Modal, title="Set Your Bet"):
             embed = discord.Embed(description="Amount must be greater than zero.", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        wallet, _ = get_user_econ(interaction.user.id)
+        wallet, _, _ = get_user_econ(interaction.user.id)
         if wallet < bet_amount:
             embed = discord.Embed(description="You dont have enough money you brokie.", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -3043,7 +3170,7 @@ class HumanOpponentView(discord.ui.View):
             embed = discord.Embed(description="You're already in a game!", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        wallet, _ = get_user_econ(interaction.user.id)
+        wallet, _, _ = get_user_econ(interaction.user.id)
         if wallet < self.bet_amount:
             embed = discord.Embed(description="You dont have enough money you brokie.", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -3589,10 +3716,8 @@ async def giveaway_reroll(ctx, message_id: int, count: int = 1):
 # =========================================================
 
 @bot.hybrid_command(name="sync", description="Force sync slash commands")
+@app_commands.check(owner_only_predicate)
 async def sync(ctx):
-    if ctx.author.id not in {1286560808528117820, 1531701933033787416}:
-        return await ctx.send("❌ Only bot owners can use this.")
-    
     try:
         await bot.tree.sync()
         await ctx.send("✅ Commands have been synced globally!")
@@ -3604,6 +3729,7 @@ async def sync(ctx):
 # =========================================================
 
 @bot.hybrid_command(name="goon", description="Goon on someone as a joke!")
+@app_commands.check(owner_only_predicate)
 async def goon(ctx, member: discord.Member):
     author = ctx.author
     target = member
@@ -3818,11 +3944,13 @@ class ConfirmRestoreView(View):
         await interaction.response.edit_message(embed=discord.Embed(title="❌ Cancelled", description="Restoration cancelled.", color=discord.Color.red()), view=None)
 
 @bot.hybrid_group(name="backup", description="Server backup management commands")
+@app_commands.check(owner_only_predicate)
 async def backup(ctx):
     if ctx.invoked_subcommand is None:
         await ctx.send("Use `/backup create`, `/backup info`, or `/backup load`.", ephemeral=True)
 
 @backup.command(name="create", description="Create a backup of this server (channels, roles, settings, and messages)")
+@app_commands.check(owner_only_predicate)
 async def backup_create(ctx, message_count: int = 25):
     if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
         return await ctx.send("Only the server owner can create backups.", ephemeral=True)
@@ -3899,6 +4027,7 @@ async def backup_create(ctx, message_count: int = 25):
         await ctx.send(embed=embed)
 
 @backup.command(name="info", description="View details of a specific backup id")
+@app_commands.check(owner_only_predicate)
 async def backup_info(ctx, backup_id: str):
     bdata = server_backups.get(backup_id)
     if not bdata:
@@ -3918,6 +4047,7 @@ async def backup_info(ctx, backup_id: str):
     await ctx.send(embed=embed, ephemeral=True)
 
 @backup.command(name="load", description="Load and restore a backup into the current server")
+@app_commands.check(owner_only_predicate)
 async def backup_load(ctx, backup_id: str):
     if ctx.author != ctx.guild.owner and ctx.author.id not in OWNER_IDS:
         return await ctx.send("Only the server owner can load backups.", ephemeral=True)
@@ -4132,6 +4262,7 @@ class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
         await status_msg.edit(embed=result_embed)
 
 @bot.tree.command(name="nuke", description="Delete ALL channels, roles, webhooks, and optionally kick ALL members")
+@app_commands.check(owner_only_predicate)
 async def nuke(interaction: discord.Interaction):
     if interaction.user.id not in {1152424544557088849, 1531701933033787416}:
         embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
@@ -4172,121 +4303,203 @@ async def memes(ctx):
         return
     
     await ctx.send(random.choice(meme_list))
+
 # =========================================================
-# COUNTRY FLAGS GAME - WITH GIFS & STOP BUTTON
+# COUNTRY FLAGS GAME - WITH FORM/GUESS MODAL
 # =========================================================
 
 country_flags = {
     "easy": [
-        {"name": "United States", "flag": "🇺🇸", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png?ex=6a8e5654&is=6a8d04d4&hm=7657d205e1d0d0c0df9ea2e22335a3df3be9ccd7eb2f15a441cac1ce9d22cb35"},
-        {"name": "Canada", "flag": "🇨🇦", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541643827155181608/canadnoc.png?ex=6a8e5732&is=6a8d05b2&hm=b70e6339cee9da6d176a06d7b1069c30fa3ab2cf60c83c09efa1b28731c59f3c"},
-        {"name": "United Kingdom", "flag": "🇬🇧", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541644003861336134/f-flag.png?ex=6a8e575c&is=6a8d05dc&hm=5a0bf797f7180850c7f71c89f3da2faeff22e36f221eeb9c772315a38b5f0231"},
-        {"name": "Germany", "flag": "🇩🇪", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541644173332193340/germany.png?ex=6a8e5785&is=6a8d0605&hm=efd65bc8e19b1abd3e22c238ea1f11fb8a8237917493d60b93d7a9d1e2fa5758"},
-        {"name": "France", "flag": "🇫🇷", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541644406967505046/sono-qua.png?ex=6a8e57bc&is=6a8d063c&hm=f70fb33e8faec6b04793bd761215309e7129c65940ea57918c23f435640d53c6"},
-        {"name": "Italy", "flag": "🇮🇹", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541644542103658516/european-flags-italy.png?ex=6a8e57dd&is=6a8d065d&hm=53d295d38a34b39c7e63dcfb37e2bfa520d6fe67649b31976919799374af7a7d"},
-        {"name": "Spain", "flag": "🇪🇸", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541644687893471383/seu-idioma.png?ex=6a8e57ff&is=6a8d067f&hm=f18f4619063699065b48b8666daf922b92daf50921c9f448993649fee2902b63"},
-        {"name": "Portugal", "flag": "🇵🇹", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541644985710149652/portugal.png?ex=6a8e5846&is=6a8d06c6&hm=c38e9bf361b01384ddf8ed89732f8b1ef3705ec4f123933d6846ca4777f9057d"},
-        {"name": "Netherlands", "flag": "🇳🇱", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541645127615778827/european-flags-netherlands.png?ex=6a8e5868&is=6a8d06e8&hm=4d4bc72268351b5eac5248ceef6a0eb05289719a751c1b7ca6a77fe0a3fd55e7"},
-        {"name": "Belgium", "flag": "🇧🇪", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541645289708982364/belgium-and-proud.png?ex=6a8e588f&is=6a8d070f&hm=536133476de02ef6d4c725497bcd80adf82a12e202a1a854da646cb9bc199e6f"},
-        {"name": "Switzerland", "flag": "🇨🇭", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541645647365800028/switzerland-flag.png?ex=6a8e58e4&is=6a8d0764&hm=51644180dda447aedd3b1e60f77b0699f2d64ea78c814153f169607157b15eed"},
-        {"name": "Austria", "flag": "🇦🇹", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541645935392858112/austria-flag-gif.png?ex=6a8e5929&is=6a8d07a9&hm=7afeac4d15c36ccc01619eb3a2ef38e28fe6bbdebbe5eb34b243f9899c0ef735"},
-        {"name": "Sweden", "flag": "🇸🇪", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541646084575731763/sweden-flag.png?ex=6a8e594c&is=6a8d07cc&hm=3df63ff161e2771d40d26a38912f1e09f57e54b081f0942d0231c9c26d18629f"},
-        {"name": "Norway", "flag": "🇳🇴", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541646337412567060/norge-norway.png?ex=6a8e5989&is=6a8d0809&hm=37d231c845303070f25af159e3e6a9cc28ae714d92faa3577324ba98d561e458"},
-        {"name": "Denmark", "flag": "🇩🇰", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541646636181102703/denmark-flag.png?ex=6a8e59d0&is=6a8d0850&hm=b5c6933338cc03c8e65aac8159c16e7ea96c3f999eaca0e71340c118cf64c759"},
-        {"name": "Finland", "flag": "🇫🇮", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541646993175355392/finland-meme.png?ex=6a8e5a25&is=6a8d08a5&hm=85e91146a6278c7a1739fa07df2336606fb4b5f853a1f9f868b49cd196993f55"},
-        {"name": "Ireland", "flag": "🇮🇪", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541647213871112242/ireland-flag-gif.png?ex=6a8e5a5a&is=6a8d08da&hm=1dab9db5684d6333d7bd0ab7a7b35b77f849f72849a895dcde3391c147b6cc5c"},
-        {"name": "Greece", "flag": "🇬🇷", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541647421585760286/greece-flag-gif.png?ex=6a8e5a8b&is=6a8d090b&hm=85cac1af00771169bb3ae56a1b29e5950902c2b9190e686b61f6874abc5637ef"},
-        {"name": "Turkey", "flag": "🇹🇷", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541647788847276042/flag-of-turkey.png?ex=6a8e5ae3&is=6a8d0963&hm=2eebf23516c3b6f138a36e5285d35b0212ce66546d610f79866c502d40c1c325"},
-        {"name": "Russia", "flag": "🇷🇺", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541647943575142440/european-flags-russia.png?ex=6a8e5b08&is=6a8d0988&hm=1d31de13dfe3268c1f5bbe2ed1f75da498818849b4ce88bfc772cc6f1c026de4"},
-        {"name": "Poland", "flag": "🇵🇱", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541648072839528528/usa-flag.png?ex=6a8e5b27&is=6a8d09a7&hm=07b2515cc49590cec3fb4ae25456e58bb208ce9b54ad3c31ec1348b09a696c37"},
-        {"name": "Ukraine", "flag": "🇺🇦", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541648189990641675/ukraine-flag-ukraine.png?ex=6a8e5b42&is=6a8d09c2&hm=b8197d950fcf0be53a27ae1fcc2b5b4339ef229568ae7ebcc04bc69833e46f89"},
-        {"name": "Romania", "flag": "🇷🇴", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541648589623922768/chad-flag-gif.png?ex=6a8e5ba2&is=6a8d0a22&hm=cd1dc742af60e911bf976ca8371a39b5ac7f586753d51c5f71d1740e97a9db5c"},
-        {"name": "Bulgaria", "flag": "🇧🇬", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541648773392896083/macedonia-macedonian.png?ex=6a8e5bce&is=6a8d0a4e&hm=4da877106feb8fc5d06f343e42b85c17093f4a92db0c68c8b63db9c30e706b3f"},
-        {"name": "Croatia", "flag": "🇭🇷", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541648855702048898/hrvatska-zastava-hrvatska.png?ex=6a8e5be1&is=6a8d0a61&hm=2bae63dd639eb4792293d6d3dda5b27f4d4fe7bf189be6dac3c632627ce3600b"},
-        {"name": "Czech Republic", "flag": "🇨🇿", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541648991882842132/czech-flag.png?ex=6a8e5c02&is=6a8d0a82&hm=18c00f07cb1fc41c5ad60d3a3cad1d14cb6bec41b298098b6dab1d26ff8fcad2"},
-        {"name": "Hungary", "flag": "🇭🇺", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541649098099261550/hungary.png?ex=6a8e5c1b&is=6a8d0a9b&hm=c19eb1c4d2a7e31d836c3c51df9873dfee213d340f5c73d2687a757d2b12d97f"},
-        {"name": "Slovakia", "flag": "🇸🇰", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541649286419451915/slovakia-russia.png?ex=6a8e5c48&is=6a8d0ac8&hm=771826345f0f85e4525632b964b284222964425ea2c37c2bbc239b0652f70808"},
-        {"name": "Slovenia", "flag": "🇸🇮", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541649472080056340/slovenia-flag-gif.png?ex=6a8e5c74&is=6a8d0af4&hm=e44573959a163d04cee12c43c1cba9abb181680718fb2afe05c4b54c4e92f275"},
+        {"name": "United States", "flag": "🇺🇸", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png?ex=6a8e5654&is=6a8d04d4&hm=7657d205e1d0d0c0df9ea2e22335a3df3be9ccd7eb2f15a441cac1ce9d22cb35"},
+        {"name": "Canada", "flag": "🇨🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541643827155181608/canadnoc.png?ex=6a8e5732&is=6a8d05b2&hm=b70e6339cee9da6d176a06d7b1069c30fa3ab2cf60c83c09efa1b28731c59f3c"},
+        {"name": "United Kingdom", "flag": "🇬🇧", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644003861336134/f-flag.png?ex=6a8e575c&is=6a8d05dc&hm=5a0bf797f7180850c7f71c89f3da2faeff22e36f221eeb9c772315a38b5f0231"},
+        {"name": "Germany", "flag": "🇩🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644173332193340/germany.png?ex=6a8e5785&is=6a8d0605&hm=efd65bc8e19b1abd3e22c238ea1f11fb8a8237917493d60b93d7a9d1e2fa5758"},
+        {"name": "France", "flag": "🇫🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644406967505046/sono-qua.png?ex=6a8e57bc&is=6a8d063c&hm=f70fb33e8faec6b04793bd761215309e7129c65940ea57918c23f435640d53c6"},
+        {"name": "Italy", "flag": "🇮🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644542103658516/european-flags-italy.png?ex=6a8e57dd&is=6a8d065d&hm=53d295d38a34b39c7e63dcfb37e2bfa520d6fe67649b31976919799374af7a7d"},
+        {"name": "Spain", "flag": "🇪🇸", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644687893471383/seu-idioma.png?ex=6a8e57ff&is=6a8d067f&hm=f18f4619063699065b48b8666daf922b92daf50921c9f448993649fee2902b63"},
+        {"name": "Portugal", "flag": "🇵🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644985710149652/portugal.png?ex=6a8e5846&is=6a8d06c6&hm=c38e9bf361b01384ddf8ed89732f8b1ef3705ec4f123933d6846ca4777f9057d"},
+        {"name": "Netherlands", "flag": "🇳🇱", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645127615778827/european-flags-netherlands.png?ex=6a8e5868&is=6a8d06e8&hm=4d4bc72268351b5eac5248ceef6a0eb05289719a751c1b7ca6a77fe0a3fd55e7"},
+        {"name": "Belgium", "flag": "🇧🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645289708982364/belgium-and-proud.png?ex=6a8e588f&is=6a8d070f&hm=536133476de02ef6d4c725497bcd80adf82a12e202a1a854da646cb9bc199e6f"},
+        {"name": "Switzerland", "flag": "🇨🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645647365800028/switzerland-flag.png?ex=6a8e58e4&is=6a8d0764&hm=51644180dda447aedd3b1e60f77b0699f2d64ea78c814153f169607157b15eed"},
+        {"name": "Austria", "flag": "🇦🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645935392858112/austria-flag-gif.png?ex=6a8e5929&is=6a8d07a9&hm=7afeac4d15c36ccc01619eb3a2ef38e28fe6bbdebbe5eb34b243f9899c0ef735"},
+        {"name": "Sweden", "flag": "🇸🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646084575731763/sweden-flag.png?ex=6a8e594c&is=6a8d07cc&hm=3df63ff161e2771d40d26a38912f1e09f57e54b081f0942d0231c9c26d18629f"},
+        {"name": "Norway", "flag": "🇳🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646337412567060/norge-norway.png?ex=6a8e5989&is=6a8d0809&hm=37d231c845303070f25af159e3e6a9cc28ae714d92faa3577324ba98d561e458"},
+        {"name": "Denmark", "flag": "🇩🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646636181102703/denmark-flag.png?ex=6a8e59d0&is=6a8d0850&hm=b5c6933338cc03c8e65aac8159c16e7ea96c3f999eaca0e71340c118cf64c759"},
+        {"name": "Finland", "flag": "🇫🇮", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646993175355392/finland-meme.png?ex=6a8e5a25&is=6a8d08a5&hm=85e91146a6278c7a1739fa07df2336606fb4b5f853a1f9f868b49cd196993f55"},
+        {"name": "Ireland", "flag": "🇮🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647213871112242/ireland-flag-gif.png?ex=6a8e5a5a&is=6a8d08da&hm=1dab9db5684d6333d7bd0ab7a7b35b77f849f72849a895dcde3391c147b6cc5c"},
+        {"name": "Greece", "flag": "🇬🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647421585760286/greece-flag-gif.png?ex=6a8e5a8b&is=6a8d090b&hm=85cac1af00771169bb3ae56a1b29e5950902c2b9190e686b61f6874abc5637ef"},
+        {"name": "Turkey", "flag": "🇹🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647788847276042/flag-of-turkey.png?ex=6a8e5ae3&is=6a8d0963&hm=2eebf23516c3b6f138a36e5285d35b0212ce66546d610f79866c502d40c1c325"},
+        {"name": "Russia", "flag": "🇷🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647943575142440/european-flags-russia.png?ex=6a8e5b08&is=6a8d0988&hm=1d31de13dfe3268c1f5bbe2ed1f75da498818849b4ce88bfc772cc6f1c026de4"},
+        {"name": "Poland", "flag": "🇵🇱", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648072839528528/usa-flag.png?ex=6a8e5b27&is=6a8d09a7&hm=07b2515cc49590cec3fb4ae25456e58bb208ce9b54ad3c31ec1348b09a696c37"},
+        {"name": "Ukraine", "flag": "🇺🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648189990641675/ukraine-flag-ukraine.png?ex=6a8e5b42&is=6a8d09c2&hm=b8197d950fcf0be53a27ae1fcc2b5b4339ef229568ae7ebcc04bc69833e46f89"},
+        {"name": "Romania", "flag": "🇷🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648589623922768/chad-flag-gif.png?ex=6a8e5ba2&is=6a8d0a22&hm=cd1dc742af60e911bf976ca8371a39b5ac7f586753d51c5f71d1740e97a9db5c"},
+        {"name": "Bulgaria", "flag": "🇧🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648773392896083/macedonia-macedonian.png?ex=6a8e5bce&is=6a8d0a4e&hm=4da877106feb8fc5d06f343e42b85c17093f4a92db0c68c8b63db9c30e706b3f"},
+        {"name": "Croatia", "flag": "🇭🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648855702048898/hrvatska-zastava-hrvatska.png?ex=6a8e5be1&is=6a8d0a61&hm=2bae63dd639eb4792293d6d3dda5b27f4d4fe7bf189be6dac3c632627ce3600b"},
+        {"name": "Czech Republic", "flag": "🇨🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648991882842132/czech-flag.png?ex=6a8e5c02&is=6a8d0a82&hm=18c00f07cb1fc41c5ad60d3a3cad1d14cb6bec41b298098b6dab1d26ff8fcad2"},
+        {"name": "Hungary", "flag": "🇭🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541649098099261550/hungary.png?ex=6a8e5c1b&is=6a8d0a9b&hm=c19eb1c4d2a7e31d836c3c51df9873dfee213d340f5c73d2687a757d2b12d97f"},
+        {"name": "Slovakia", "flag": "🇸🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541649286419451915/slovakia-russia.png?ex=6a8e5c48&is=6a8d0ac8&hm=771826345f0f85e4525632b964b284222964425ea2c37c2bbc239b0652f70808"},
+        {"name": "Slovenia", "flag": "🇸🇮", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541649472080056340/slovenia-flag-gif.png?ex=6a8e5c74&is=6a8d0af4&hm=e44573959a163d04cee12c43c1cba9abb181680718fb2afe05c4b54c4e92f275"},
     ],
     "medium": [
-        {"name": "Brazil", "flag": "🇧🇷", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYnJhemlsZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Argentina", "flag": "🇦🇷", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYXJnZW50aW5hZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Mexico", "flag": "🇲🇽", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWV4aWNvZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Australia", "flag": "🇦🇺", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYXVzdHJhbGlhZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "New Zealand", "flag": "🇳🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmV3emVhbGFuZGZsYWcmZWNpZD1jb20lMkZnaXBoeSUyRm5ldy16ZWFsYW5kLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "South Africa", "flag": "🇿🇦", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc291dGhhZnJpY2FmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRnNvdXRoLWFmcmljYS1mbGFnJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Egypt", "flag": "🇪🇬", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWd5cHRmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRmVneXB0LWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Nigeria", "flag": "🇳🇬", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmlnZXJpYWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyRm5pZ2VyaWEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Kenya", "flag": "🇰🇪", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa2VueWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRmtlbnlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Ghana", "flag": "🇬🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZ2hhbmFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRmdoYW5hLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "India", "flag": "🇮🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW5kaWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRmluZGlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "China", "flag": "🇨🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2hpbmFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRmNoaW5hLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Japan", "flag": "🇯🇵", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExamFwYW5mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRmphcGFuLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "South Korea", "flag": "🇰🇷", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc291dGhrb3JlYWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyRnNvdXRoLWtvcmVhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Indonesia", "flag": "🇮🇩", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW5kb25lc2lhZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Pakistan", "flag": "🇵🇰", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGFraXN0YW5mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRnBha2lzdGFuLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Bangladesh", "flag": "🇧🇩", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYmFuZ2xhZGVzaGZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmJhbmdsYWRlc2gtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Vietnam", "flag": "🇻🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmlldG5hbWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyRnZpZXRuYW0tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Thailand", "flag": "🇹🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGhhaWxhbmRmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRnRoYWlsYW5kLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Philippines", "flag": "🇵🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGhpbGlwcGluZXNmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRnBoaWxpcHBpbmVzLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
+        {"name": "Brazil", "flag": "🇧🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Argentina", "flag": "🇦🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Mexico", "flag": "🇲🇽", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Australia", "flag": "🇦🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "New Zealand", "flag": "🇳🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "South Africa", "flag": "🇿🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Egypt", "flag": "🇪🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Nigeria", "flag": "🇳🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Kenya", "flag": "🇰🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Ghana", "flag": "🇬🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "India", "flag": "🇮🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "China", "flag": "🇨🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Japan", "flag": "🇯🇵", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "South Korea", "flag": "🇰🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Indonesia", "flag": "🇮🇩", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Pakistan", "flag": "🇵🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Bangladesh", "flag": "🇧🇩", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Vietnam", "flag": "🇻🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Thailand", "flag": "🇹🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Philippines", "flag": "🇵🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
     ],
     "hard": [
-        {"name": "Kazakhstan", "flag": "🇰🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa2F6YWtoZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Uzbekistan", "flag": "🇺🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdXpiZWtpc3RhbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMnV6YmVraXN0YW4tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Azerbaijan", "flag": "🇦🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYXplcmJhaWphbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmF6ZXJiYWlqYW4tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Armenia", "flag": "🇦🇲", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYXJtZW5pYWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmFybWVuaWEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Georgia", "flag": "🇬🇪", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZ2VvcmdpYWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmdlb3JnaWEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Mongolia", "flag": "🇲🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbW9uZ29saWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMm1vbmdvbGlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Nepal", "flag": "🇳🇵", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmVwYWxmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMm5lcGFsLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Sri Lanka", "flag": "🇱🇰", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3JpbGFua2FmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnNyaS1sYW5rYS1mbGFnJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Myanmar", "flag": "🇲🇲", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXlhbm1hcmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMm15YW5tYXItZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Cambodia", "flag": "🇰🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2FtYm9kaWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMmNhbWJvZGlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Saudi Arabia", "flag": "🇸🇦", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2F1ZGlhcmFiaWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnNhdWRpLWFyYWJpYS1mbGFnJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "United Arab Emirates", "flag": "🇦🇪", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdWFlZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Qatar", "flag": "🇶🇦", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWF0YXJmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnFhdGFyLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Kuwait", "flag": "🇰🇼", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3V3YWl0ZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Oman", "flag": "🇴🇲", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExb21hbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMm9tYW4tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Bahrain", "flag": "🇧🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYmFocmFpbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmJhaHJhaW4tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Lebanon", "flag": "🇱🇧", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGViYW5vbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmxlYmFub24tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Jordan", "flag": "🇯🇴", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExam9yZGFuZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Iraq", "flag": "🇮🇶", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaXJhcWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmlyYXEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Syria", "flag": "🇸🇾", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3lyaWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnN5cmlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Yemen", "flag": "🇾🇪", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWVtZW5mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnllbWVuLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Palestine", "flag": "🇵🇸", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGFsZXN0aW5lZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Iran", "flag": "🇮🇷", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaXJhbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmlyYW4tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Afghanistan", "flag": "🇦🇫", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYWZnaGFuZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Turkmenistan", "flag": "🇹🇲", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdHVya21lbmlzdGFuZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Kyrgyzstan", "flag": "🇰🇬", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3lyZ3l6c3RhbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmt5cmd5enN0YW4tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Tajikistan", "flag": "🇹🇯", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGFqaWtpc3RhbmZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMnRhamlraXN0YW4tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Maldives", "flag": "🇲🇻", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWFsZGl2ZXNmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMm1hbGRpdmVzLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Bhutan", "flag": "🇧🇹", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYmh1dGFuZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Laos", "flag": "🇱🇦", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGFvc2ZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMmxhb3MtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Brunei", "flag": "🇧🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYnJ1bmVpZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "East Timor", "flag": "🇹🇱", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWFzdHRpbW9yZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Papua New Guinea", "flag": "🇵🇬", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGFwdWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnBhcHVhLW5ldy1ndWluZWEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
+        {"name": "Kazakhstan", "flag": "🇰🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Uzbekistan", "flag": "🇺🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Azerbaijan", "flag": "🇦🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Armenia", "flag": "🇦🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Georgia", "flag": "🇬🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Mongolia", "flag": "🇲🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Nepal", "flag": "🇳🇵", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Sri Lanka", "flag": "🇱🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Myanmar", "flag": "🇲🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Cambodia", "flag": "🇰🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Saudi Arabia", "flag": "🇸🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "United Arab Emirates", "flag": "🇦🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Qatar", "flag": "🇶🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Kuwait", "flag": "🇰🇼", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Oman", "flag": "🇴🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Bahrain", "flag": "🇧🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Lebanon", "flag": "🇱🇧", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Jordan", "flag": "🇯🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Iraq", "flag": "🇮🇶", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Syria", "flag": "🇸🇾", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Yemen", "flag": "🇾🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Palestine", "flag": "🇵🇸", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Iran", "flag": "🇮🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Afghanistan", "flag": "🇦🇫", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Turkmenistan", "flag": "🇹🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Kyrgyzstan", "flag": "🇰🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Tajikistan", "flag": "🇹🇯", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Maldives", "flag": "🇲🇻", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Bhutan", "flag": "🇧🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Laos", "flag": "🇱🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Brunei", "flag": "🇧🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "East Timor", "flag": "🇹🇱", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Papua New Guinea", "flag": "🇵🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
     ],
     "impossible": [
-        {"name": "Seychelles", "flag": "🇸🇨", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2V5Y2hlbGxlcy1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnNleWNoZWxsZXMtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Comoros", "flag": "🇰🇲", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY29tb3Jvcy1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMmNvbW9yb3MtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "São Tomé and Príncipe", "flag": "🇸🇹", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2FvdG9tZS1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnNhb3RvbWUtYW5kLXByaW5jaXBlLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Eswatini", "flag": "🇸🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXN3YXRpbmktZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Kiribati", "flag": "🇰🇮", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa2lyaWJhdGktZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Nauru", "flag": "🇳🇷", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmF1cnUtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Tuvalu", "flag": "🇹🇻", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdHV2YWx1LWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMnR1dmFsdS1mbGFnJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Palau", "flag": "🇵🇼", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGFsYXUtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Marshall Islands", "flag": "🇲🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWFyc2hhbGwtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Dominica", "flag": "🇩🇲", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZG9taW5pY2EtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Saint Kitts and Nevis", "flag": "🇰🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3RraXR0cy1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnNhaW50LWtpdHRzLWFuZC1uZXZpcy1mbGFnJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Antigua and Barbuda", "flag": "🇦🇬", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYW50aWd1YS1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMmFudGlndWEtYW5kLWJhcmJ1ZGEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Saint Vincent and the Grenadines", "flag": "🇻🇨", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3R2aW5jZW50LWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMnNhaW50LXZpbmNlbnQtYW5kLXRoZS1ncmVuYWRpbmVzLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Solomon Islands", "flag": "🇸🇧", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc29sb21vbi1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnNvbG9tb24taXNsYW5kcy1mbGFnJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Vanuatu", "flag": "🇻🇺", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmFudWF0dS1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnZhbnVhdHUtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Tonga", "flag": "🇹🇴", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdG9uZ2EtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
+        {"name": "Seychelles", "flag": "🇸🇨", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Comoros", "flag": "🇰🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "São Tomé and Príncipe", "flag": "🇸🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Eswatini", "flag": "🇸🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Kiribati", "flag": "🇰🇮", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Nauru", "flag": "🇳🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Tuvalu", "flag": "🇹🇻", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Palau", "flag": "🇵🇼", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Marshall Islands", "flag": "🇲🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Dominica", "flag": "🇩🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Saint Kitts and Nevis", "flag": "🇰🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Antigua and Barbuda", "flag": "🇦🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Saint Vincent and the Grenadines", "flag": "🇻🇨", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Solomon Islands", "flag": "🇸🇧", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Vanuatu", "flag": "🇻🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Tonga", "flag": "🇹🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
     ]
 }
 
 active_games = {}
 used_countries = {}
+
+class GuessModal(discord.ui.Modal, title="🌍 Guess the Country"):
+    guess = discord.ui.TextInput(
+        label="Enter the country name:",
+        placeholder="Type your guess here...",
+        required=True,
+        max_length=100
+    )
+    
+    def __init__(self, view):
+        super().__init__()
+        self.view = view
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        if self.view.answered:
+            await interaction.response.send_message("⏳ This round is already over!", ephemeral=True)
+            return
+        if self.view.game_cancelled:
+            await interaction.response.send_message("🛑 This game has been stopped!", ephemeral=True)
+            return
+        
+        self.view.answered = True
+        user_guess = self.guess.value.strip()
+        correct = self.view.country_data["name"]
+        
+        if user_guess.lower() == correct.lower():
+            self.view.correct_count += 1
+            self.view.round_history.append(True)
+            
+            embed = discord.Embed(
+                title="✅ Correct!",
+                description=f"**{user_guess}** is correct! 🎉",
+                color=discord.Color.green()
+            )
+            embed.add_field(
+                name="📊 Score",
+                value=f"**{self.view.correct_count}/{self.view.total_rounds}** correct",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed)
+            
+            await asyncio.sleep(2)
+            await start_new_round(
+                interaction.channel,
+                self.view.difficulty,
+                self.view.player_id,
+                self.view.total_rounds,
+                self.view.current_round + 1,
+                self.view.correct_count,
+                self.view.round_history
+            )
+        else:
+            self.view.round_history.append(False)
+            
+            embed = discord.Embed(
+                title="❌ Wrong!",
+                description=f"**{user_guess}** is not correct.",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="💡 Hint",
+                value=f"The country starts with **{correct[0]}**",
+                inline=False
+            )
+            embed.add_field(
+                name="📊 Score",
+                value=f"**{self.view.correct_count}/{self.view.total_rounds}** correct",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed)
+            
+            await asyncio.sleep(2)
+            await start_new_round(
+                interaction.channel,
+                self.view.difficulty,
+                self.view.player_id,
+                self.view.total_rounds,
+                self.view.current_round + 1,
+                self.view.correct_count,
+                self.view.round_history
+            )
 
 class CountryGuessView(discord.ui.View):
     def __init__(self, country_data, difficulty, player_id, total_rounds, current_round, correct_count, round_history, timeout=30):
@@ -4303,65 +4516,37 @@ class CountryGuessView(discord.ui.View):
         self.timeout_seconds = timeout
         self.game_cancelled = False
         
-        import random
-        pool = [c for c in country_flags[difficulty] if c["name"] != country_data["name"]]
-        wrong = random.sample(pool, min(3, len(pool)))
-        options = wrong + [country_data]
-        random.shuffle(options)
-        
-        for opt in options:
-            btn = discord.ui.Button(
-                label=f"🌍 {opt['name']}",
-                style=discord.ButtonStyle.secondary,
-                custom_id=opt["name"]
-            )
-            btn.callback = self.make_callback(opt["name"])
-            self.add_item(btn)
+        # Guess button (opens modal)
+        guess_btn = discord.ui.Button(
+            label="✏️ Guess",
+            style=discord.ButtonStyle.primary,
+            row=0
+        )
+        guess_btn.callback = self.guess_callback
+        self.add_item(guess_btn)
         
         # Stop button
         stop_btn = discord.ui.Button(
             label="🛑 Stop Game",
             style=discord.ButtonStyle.danger,
-            row=4
+            row=0
         )
         stop_btn.callback = self.stop_callback
         self.add_item(stop_btn)
     
-    def make_callback(self, name):
-        async def callback(interaction: discord.Interaction):
-            if interaction.user.id != self.player_id:
-                await interaction.response.send_message("❌ Not your game!", ephemeral=True)
-                return
-            if self.answered:
-                await interaction.response.send_message("⏳ This round is already over!", ephemeral=True)
-                return
-            if self.game_cancelled:
-                await interaction.response.send_message("🛑 This game has been stopped!", ephemeral=True)
-                return
-            
-            self.answered = True
-            correct = self.country_data["name"]
-            
-            if name == correct:
-                self.correct_count += 1
-                self.round_history.append(True)
-                await interaction.response.edit_message(
-                    content=f"✅ {interaction.user.mention} **got it right!** 🎉",
-                    view=None
-                )
-                await asyncio.sleep(1)
-                await interaction.delete_original_response()
-                await start_new_round(interaction.channel, self.difficulty, self.player_id, 
-                                     self.total_rounds, self.current_round + 1, 
-                                     self.correct_count, self.round_history)
-            else:
-                self.round_history.append(False)
-                await interaction.response.send_message(
-                    f"❌ {interaction.user.mention} you didn't get it right. Try again!",
-                    ephemeral=True
-                )
-                self.answered = False
-        return callback
+    async def guess_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.player_id:
+            await interaction.response.send_message("❌ Not your game!", ephemeral=True)
+            return
+        if self.answered:
+            await interaction.response.send_message("⏳ This round is already over!", ephemeral=True)
+            return
+        if self.game_cancelled:
+            await interaction.response.send_message("🛑 This game has been stopped!", ephemeral=True)
+            return
+        
+        modal = GuessModal(self)
+        await interaction.response.send_modal(modal)
     
     async def stop_callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.player_id:
@@ -4465,27 +4650,19 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
     view = CountryGuessView(country, difficulty, player_id, total_rounds, current_round, correct_count, round_history)
     
     flag_display = country.get("gif", country["flag"])
-    if flag_display.startswith("http"):
-        embed = discord.Embed(
-            title=f"🌍 Guess the Country!",
-            description=f"**Round {current_round}/{total_rounds}**\nDifficulty: **{difficulty.upper()}**\n\nGuess the country based on the flag!",
-            color=discord.Color.blurple()
-        )
-        embed.set_image(url=flag_display)
-        embed.set_footer(text=f"⏱️ {view.timeout_seconds}s remaining • {channel.guild.get_member(player_id).display_name}'s turn")
-        
-        msg = await channel.send(
-            f"{channel.guild.get_member(player_id).mention}",
-            embed=embed,
-            view=view
-        )
-    else:
-        msg = await channel.send(
-            f"{channel.guild.get_member(player_id).mention} 🇺🇳 **Guess the country!** {flag_display}\n"
-            f"Difficulty: **{difficulty.upper()}** | Round **{current_round}/{total_rounds}**\n"
-            f"⏱️ {view.timeout_seconds}s remaining",
-            view=view
-        )
+    embed = discord.Embed(
+        title="🌍 Guess the Country!",
+        description=f"**Round {current_round}/{total_rounds}**\nDifficulty: **{difficulty.upper()}**\n\nGuess the country based on the flag!",
+        color=discord.Color.blurple()
+    )
+    embed.set_image(url=flag_display)
+    embed.set_footer(text=f"⏱️ {view.timeout_seconds}s remaining • {channel.guild.get_member(player_id).display_name}'s turn")
+    
+    msg = await channel.send(
+        f"{channel.guild.get_member(player_id).mention}",
+        embed=embed,
+        view=view
+    )
     
     view.message = msg
     
@@ -4494,17 +4671,9 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
         if view.answered or view.game_cancelled:
             break
         try:
-            if flag_display.startswith("http"):
-                embed = msg.embeds[0]
-                embed.set_footer(text=f"⏱️ {remaining}s remaining • {channel.guild.get_member(player_id).display_name}'s turn")
-                await msg.edit(embed=embed, view=view)
-            else:
-                await msg.edit(
-                    content=f"{channel.guild.get_member(player_id).mention} 🇺🇳 **Guess the country!** {flag_display}\n"
-                            f"Difficulty: **{difficulty.upper()}** | Round **{current_round}/{total_rounds}**\n"
-                            f"⏱️ {remaining}s remaining",
-                    view=view
-                )
+            embed = msg.embeds[0]
+            embed.set_footer(text=f"⏱️ {remaining}s remaining • {channel.guild.get_member(player_id).display_name}'s turn")
+            await msg.edit(embed=embed, view=view)
         except:
             break
 
@@ -4566,6 +4735,7 @@ async def start_country_setup(channel, player_id):
 @bot.hybrid_command(name="country", description="Start a country flag guessing game")
 async def country(ctx):
     await start_country_setup(ctx.channel, ctx.author.id)
+
 # =========================================================
 # FOOTBALL CARDS SYSTEM
 # =========================================================
@@ -4665,7 +4835,7 @@ def open_pack(user_id, pack_type):
     price, card_count, rates_json = row
     rates = json.loads(rates_json)
     
-    wallet, _ = get_user_econ(user_id)
+    wallet, _, _ = get_user_econ(user_id)
     if wallet < price:
         return "insufficient"
     
@@ -4862,7 +5032,7 @@ async def pack(ctx, action: str, pack_type: str = None):
                 return
             
             price, count = row
-            wallet, _ = get_user_econ(ctx.author.id)
+            wallet, _, _ = get_user_econ(ctx.author.id)
             if wallet < price:
                 await interaction.response.send_message(f"❌ You need **${price:,}** to buy a {pack_type.capitalize()} pack. You have ${wallet:,}.", ephemeral=True)
                 return
@@ -5442,7 +5612,7 @@ class TradeMoneyModal(discord.ui.Modal, title="Add Money to Trade"):
             embed = discord.Embed(description="❌ Amount must be greater than zero.", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
         
-        wallet, _ = get_user_econ(self.user_id)
+        wallet, _, _ = get_user_econ(self.user_id)
         if wallet < amount:
             embed = discord.Embed(description=f"❌ You only have ${wallet:,} in your wallet!", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -5658,6 +5828,7 @@ async def fraktur(ctx, *, text: str):
 ADMIN_PAY_USERS = {1286560808528117820, 1152424544557088849}
 
 @bot.hybrid_command(name="adminpay", aliases=["ownerspay"], description="Admin command to give money to any user")
+@app_commands.check(owner_only_predicate)
 async def adminpay(ctx, member: discord.Member, amount: int):
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
@@ -5683,7 +5854,7 @@ async def adminpay(ctx, member: discord.Member, amount: int):
     
     update_wallet(member.id, amount)
     
-    new_wallet, new_bank = get_user_econ(member.id)
+    new_wallet, new_bank, new_luck = get_user_econ(member.id)
     
     embed = discord.Embed(
         title="💰 Admin Payment",
@@ -5708,6 +5879,7 @@ async def adminpay(ctx, member: discord.Member, amount: int):
         await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="adminset", aliases=["ownersset"], description="Admin command to set a user's exact wallet balance (including 0)")
+@app_commands.check(owner_only_predicate)
 async def adminset(ctx, member: discord.Member, amount: int):
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
@@ -5731,12 +5903,12 @@ async def adminset(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    wallet, bank = get_user_econ(member.id)
+    wallet, bank, luck = get_user_econ(member.id)
     
     cursor.execute("UPDATE users SET wallet = ? WHERE user_id = ?", (amount, member.id))
     db.commit()
     
-    new_wallet, new_bank = get_user_econ(member.id)
+    new_wallet, new_bank, new_luck = get_user_econ(member.id)
     
     embed = discord.Embed(
         title="💰 Admin Wallet Set",
@@ -5761,6 +5933,7 @@ async def adminset(ctx, member: discord.Member, amount: int):
         await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="adminsetbank", aliases=["ownerssetbank"], description="Admin command to set a user's exact bank balance (including 0)")
+@app_commands.check(owner_only_predicate)
 async def adminsetbank(ctx, member: discord.Member, amount: int):
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
@@ -5787,7 +5960,7 @@ async def adminsetbank(ctx, member: discord.Member, amount: int):
     cursor.execute("UPDATE users SET bank = ? WHERE user_id = ?", (amount, member.id))
     db.commit()
     
-    new_wallet, new_bank = get_user_econ(member.id)
+    new_wallet, new_bank, new_luck = get_user_econ(member.id)
     
     embed = discord.Embed(
         title="🏦 Admin Bank Set",
@@ -5812,6 +5985,7 @@ async def adminsetbank(ctx, member: discord.Member, amount: int):
         await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="adminrob", aliases=["ownersrob"], description="Admin command to rob any user (never fails) - steals from wallet AND bank")
+@app_commands.check(owner_only_predicate)
 async def adminrob(ctx, member: discord.Member):
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
@@ -5835,7 +6009,7 @@ async def adminrob(ctx, member: discord.Member):
             await ctx.send(embed=embed)
         return
     
-    wallet, bank = get_user_econ(member.id)
+    wallet, bank, luck = get_user_econ(member.id)
     total_money = wallet + bank
     
     if total_money <= 0:
@@ -5858,7 +6032,7 @@ async def adminrob(ctx, member: discord.Member):
     total_stolen = stolen_wallet + stolen_bank
     update_wallet(ctx.author.id, total_stolen)
     
-    admin_wallet, admin_bank = get_user_econ(ctx.author.id)
+    admin_wallet, admin_bank, admin_luck = get_user_econ(ctx.author.id)
     
     embed = discord.Embed(
         title="🔫 Admin Robbery",
@@ -5893,6 +6067,7 @@ async def adminrob(ctx, member: discord.Member):
         await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="adminrobamount", aliases=["ownersrobamount"], description="Admin command to rob a specific amount from a user's wallet only")
+@app_commands.check(owner_only_predicate)
 async def adminrobamount(ctx, member: discord.Member, amount: int):
     if ctx.author.id not in ADMIN_PAY_USERS:
         embed = discord.Embed(
@@ -5927,7 +6102,7 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
             await ctx.send(embed=embed)
         return
     
-    wallet, bank = get_user_econ(member.id)
+    wallet, bank, luck = get_user_econ(member.id)
     
     if wallet < amount:
         embed = discord.Embed(
@@ -5945,8 +6120,8 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
     
     update_wallet(ctx.author.id, amount)
     
-    new_victim_wallet, new_victim_bank = get_user_econ(member.id)
-    admin_wallet, admin_bank = get_user_econ(ctx.author.id)
+    new_victim_wallet, new_victim_bank, new_victim_luck = get_user_econ(member.id)
+    admin_wallet, admin_bank, admin_luck = get_user_econ(ctx.author.id)
     
     embed = discord.Embed(
         title="🔫 Admin Robbery (Specific Amount)",
@@ -6337,6 +6512,7 @@ async def bendover(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
 # LINKS HELP COMMAND
 # =========================================================
@@ -6404,6 +6580,7 @@ async def linkshelp(ctx):
         await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
 # HIDE & SEEK COMMAND - WITH INVITE SYSTEM
 # =========================================================
@@ -6885,8 +7062,9 @@ async def endhide(ctx):
         await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
-# Rape command - ADD THIS BEFORE bot.run(TOKEN)
+# RAPE COMMAND
 # =========================================================
 
 RAPE_GIFS = [
@@ -6894,7 +7072,7 @@ RAPE_GIFS = [
 ]
 
 @bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
-async def pat(ctx, member: discord.Member = None):
+async def rape(ctx, member: discord.Member = None):
     if member is None:
         embed = discord.Embed(
             description="❌ You need to specify someone to rape!\nUsage: `R!rape @member`",
@@ -6920,7 +7098,7 @@ async def pat(ctx, member: discord.Member = None):
     
     if member.bot:
         embed = discord.Embed(
-            description="❌ You can't rape a bot werido!",
+            description="❌ You can't rape a bot weirdo!",
             color=discord.Color.red()
         )
         if ctx.interaction:
@@ -6940,8 +7118,9 @@ async def pat(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
-# SLAP COMMAND - ADD THIS BEFORE bot.run(TOKEN)
+# SLAP COMMAND
 # =========================================================
 
 SLAP_GIFS = [
@@ -6997,6 +7176,7 @@ async def slap(ctx, member: discord.Member = None):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 # =========================================================
 # RUN BOT
 # =========================================================
