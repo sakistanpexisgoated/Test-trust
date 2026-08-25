@@ -4318,6 +4318,7 @@ class CountryGuessView(discord.ui.View):
         options = wrong + [country_data]
         random.shuffle(options)
         
+        
         for opt in options:
     btn = discord.ui.Button(
         label=f"🌍 {opt['name']}",
