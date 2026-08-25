@@ -4178,7 +4178,7 @@ async def memes(ctx):
 
 country_flags = {
     "easy": [
-        {"name": "United States", "flag": "🇺🇸", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdW5pdGVkc3RhdGVzZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
+        {"name": "United States", "flag": "🇺🇸", "gif": "https://cdn.discordapp.com/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png?ex=6a8e5654&is=6a8d04d4&hm=7657d205e1d0d0c0df9ea2e22335a3df3be9ccd7eb2f15a441cac1ce9d22cb35"},
         {"name": "Canada", "flag": "🇨🇦", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2FuYWRhZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
         {"name": "United Kingdom", "flag": "🇬🇧", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdWtmbGFnZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
         {"name": "Germany", "flag": "🇩🇪", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZ2VybWFueWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyRmdlcm1hbnktZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
