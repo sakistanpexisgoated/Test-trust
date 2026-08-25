@@ -19,7 +19,7 @@ from discord.ext import commands
 # OWNER & TOKEN SETUP
 # =========================================================
 
-OWNER_IDS = {1286560808528117820, 1152424544557088849}
+OWNER_IDS = {1286560808528117820}
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
