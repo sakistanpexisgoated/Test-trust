@@ -4172,9 +4172,8 @@ async def memes(ctx):
         return
     
     await ctx.send(random.choice(meme_list))
-
 # =========================================================
-# COUNTRY FLAGS GAME
+# COUNTRY FLAGS GAME - WITH GIFS & STOP BUTTON
 # =========================================================
 
 country_flags = {
@@ -4230,15 +4229,6 @@ country_flags = {
         {"name": "Vietnam", "flag": "🇻🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmlldG5hbWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyRnZpZXRuYW0tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
         {"name": "Thailand", "flag": "🇹🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGhhaWxhbmRmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRnRoYWlsYW5kLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
         {"name": "Philippines", "flag": "🇵🇭", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGhpbGlwcGluZXNmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRnBoaWxpcHBpbmVzLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Morocco", "flag": "🇲🇦", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbW9yb2Njby1mbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRm1vcm9jY28tZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Algeria", "flag": "🇩🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYWxnZXJpYWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyRmFsZ2VyaWEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Tunisia", "flag": "🇹🇳", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdHVuaXNpYWZsYWcmZWNpZD1jb20lMkZnaXBoeSUyMnR1bmlzaWEtZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Libya", "flag": "🇱🇾", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGlieWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMmxpYnlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Ethiopia", "flag": "🇪🇹", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXRoaW9waWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMmV0aGlvcGlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Tanzania", "flag": "🇹🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGFuemFuaWFmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnRhbnphbmlhLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Uganda", "flag": "🇺🇬", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdWdhbmRhZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Zambia", "flag": "🇿🇲", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExemFtYmlhZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
-        {"name": "Zimbabwe", "flag": "🇿🇼", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExemltYmFid2VmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyMnppbWJhYndlLWZsYWcmZXA9djFfZ2lmc19zZWFyY2gmY2Q9Zw/3o7TKM7tKzKxLzKxLz/giphy.gif"},
     ],
     "hard": [
         {"name": "Kazakhstan", "flag": "🇰🇿", "gif": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa2F6YWtoZmxhZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif"},
@@ -4398,8 +4388,7 @@ class CountryGuessView(discord.ui.View):
         if self.player_id in used_countries:
             del used_countries[self.player_id]
     
-   
-          async def on_timeout(self):
+    async def on_timeout(self):
         if not self.answered and not self.game_cancelled:
             self.round_history.append(False)
             await self.message.edit(
@@ -4416,7 +4405,7 @@ class CountryGuessView(discord.ui.View):
                 self.correct_count,
                 self.round_history
             )
-            
+
 async def start_new_round(channel, difficulty, player_id, total_rounds, current_round, correct_count, round_history):
     if current_round > total_rounds:
         if player_id in used_countries:
@@ -4427,6 +4416,22 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
             content = f"🎉 {channel.guild.get_member(player_id).mention} **You got all {total_rounds} countries right!** 🏆"
         else:
             content = f"📊 {channel.guild.get_member(player_id).mention} Game over! You got **{total_correct}/{total_rounds}** correct."
+        
+        embed = discord.Embed(
+            title="🏁 Game Over!",
+            description=content,
+            color=discord.Color.green() if total_correct == total_rounds else discord.Color.orange()
+        )
+        embed.add_field(
+            name="📊 Final Score",
+            value=f"**{total_correct}/{total_rounds}** correct",
+            inline=True
+        )
+        embed.add_field(
+            name="📈 Accuracy",
+            value=f"**{round(total_correct / total_rounds * 100)}%**",
+            inline=True
+        )
         
         view = discord.ui.View()
         restart_btn = discord.ui.Button(label="🔄 Start Again", style=discord.ButtonStyle.success)
@@ -4442,11 +4447,8 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
         restart_btn.callback = restart_callback
         view.add_item(restart_btn)
         
-        await channel.send(content, view=view)
+        await channel.send(embed=embed, view=view)
         return
-    
-    import random
-    import copy
     
     if player_id not in used_countries:
         used_countries[player_id] = []
@@ -4462,26 +4464,47 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
     
     view = CountryGuessView(country, difficulty, player_id, total_rounds, current_round, correct_count, round_history)
     
-    timer_msg = f"⏱️ 30s remaining"
-    msg = await channel.send(
-        f"{channel.guild.get_member(player_id).mention} 🇺🇳 **Guess the country!** {country['flag']}\n"
-        f"Difficulty: **{difficulty.upper()}** | Round **{current_round}/{total_rounds}**\n"
-        f"{timer_msg}",
-        view=view
-    )
+    flag_display = country.get("gif", country["flag"])
+    if flag_display.startswith("http"):
+        embed = discord.Embed(
+            title=f"🌍 Guess the Country!",
+            description=f"**Round {current_round}/{total_rounds}**\nDifficulty: **{difficulty.upper()}**\n\nGuess the country based on the flag!",
+            color=discord.Color.blurple()
+        )
+        embed.set_image(url=flag_display)
+        embed.set_footer(text=f"⏱️ {view.timeout_seconds}s remaining • {channel.guild.get_member(player_id).display_name}'s turn")
+        
+        msg = await channel.send(
+            f"{channel.guild.get_member(player_id).mention}",
+            embed=embed,
+            view=view
+        )
+    else:
+        msg = await channel.send(
+            f"{channel.guild.get_member(player_id).mention} 🇺🇳 **Guess the country!** {flag_display}\n"
+            f"Difficulty: **{difficulty.upper()}** | Round **{current_round}/{total_rounds}**\n"
+            f"⏱️ {view.timeout_seconds}s remaining",
+            view=view
+        )
+    
     view.message = msg
     
-    for remaining in range(29, 0, -1):
+    for remaining in range(view.timeout_seconds - 1, 0, -1):
         await asyncio.sleep(1)
-        if view.answered:
+        if view.answered or view.game_cancelled:
             break
         try:
-            await msg.edit(
-                content=f"{channel.guild.get_member(player_id).mention} 🇺🇳 **Guess the country!** {country['flag']}\n"
-                        f"Difficulty: **{difficulty.upper()}** | Round **{current_round}/{total_rounds}**\n"
-                        f"⏱️ {remaining}s remaining",
-                view=view
-            )
+            if flag_display.startswith("http"):
+                embed = msg.embeds[0]
+                embed.set_footer(text=f"⏱️ {remaining}s remaining • {channel.guild.get_member(player_id).display_name}'s turn")
+                await msg.edit(embed=embed, view=view)
+            else:
+                await msg.edit(
+                    content=f"{channel.guild.get_member(player_id).mention} 🇺🇳 **Guess the country!** {flag_display}\n"
+                            f"Difficulty: **{difficulty.upper()}** | Round **{current_round}/{total_rounds}**\n"
+                            f"⏱️ {remaining}s remaining",
+                    view=view
+                )
         except:
             break
 
@@ -4529,10 +4552,10 @@ async def start_country_setup(channel, player_id):
             view=round_view
         )
     
-    for diff in ["easy", "medium", "hard"]:
+    for diff in ["easy", "medium", "hard", "impossible"]:
         btn = discord.ui.Button(
-            label=f"{diff.capitalize()} ({len(country_flags[diff])} flags)",
-            style=discord.ButtonStyle.success if diff == "easy" else discord.ButtonStyle.primary if diff == "medium" else discord.ButtonStyle.danger,
+            label=f"🌍 {diff.capitalize()} ({len(country_flags[diff])} flags)",
+            style=discord.ButtonStyle.secondary,
             custom_id=diff
         )
         btn.callback = lambda i, d=diff: difficulty_callback(i, d)
@@ -4543,7 +4566,6 @@ async def start_country_setup(channel, player_id):
 @bot.hybrid_command(name="country", description="Start a country flag guessing game")
 async def country(ctx):
     await start_country_setup(ctx.channel, ctx.author.id)
-
 # =========================================================
 # FOOTBALL CARDS SYSTEM
 # =========================================================
