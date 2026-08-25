@@ -4311,6 +4311,7 @@ class CountryGuessView(discord.ui.View):
         self.answered = False
         self.start_time = time.time()
         self.timeout_seconds = timeout
+        self.game_cancelled = False
         
         import random
         pool = [c for c in country_flags[difficulty] if c["name"] != country_data["name"]]
@@ -4318,15 +4319,23 @@ class CountryGuessView(discord.ui.View):
         options = wrong + [country_data]
         random.shuffle(options)
         
-        
         for opt in options:
-    btn = discord.ui.Button(
-        label=f"🌍 {opt['name']}",
-        style=discord.ButtonStyle.secondary,
-        custom_id=opt["name"]
-    )
-    btn.callback = self.make_callback(opt["name"])
-    self.add_item(btn)
+            btn = discord.ui.Button(
+                label=f"🌍 {opt['name']}",
+                style=discord.ButtonStyle.secondary,
+                custom_id=opt["name"]
+            )
+            btn.callback = self.make_callback(opt["name"])
+            self.add_item(btn)
+        
+        # Stop button
+        stop_btn = discord.ui.Button(
+            label="🛑 Stop Game",
+            style=discord.ButtonStyle.danger,
+            row=4
+        )
+        stop_btn.callback = self.stop_callback
+        self.add_item(stop_btn)
     
     def make_callback(self, name):
         async def callback(interaction: discord.Interaction):
@@ -4335,6 +4344,9 @@ class CountryGuessView(discord.ui.View):
                 return
             if self.answered:
                 await interaction.response.send_message("⏳ This round is already over!", ephemeral=True)
+                return
+            if self.game_cancelled:
+                await interaction.response.send_message("🛑 This game has been stopped!", ephemeral=True)
                 return
             
             self.answered = True
@@ -4361,18 +4373,50 @@ class CountryGuessView(discord.ui.View):
                 self.answered = False
         return callback
     
-    async def on_timeout(self):
-        if not self.answered:
+    async def stop_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.player_id:
+            await interaction.response.send_message("❌ Not your game!", ephemeral=True)
+            return
+        
+        self.game_cancelled = True
+        self.answered = True
+        for child in self.children:
+            child.disabled = True
+        
+        embed = discord.Embed(
+            title="🛑 Game Stopped",
+            description=f"{interaction.user.mention} stopped the country guessing game.",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="📊 Your Score",
+            value=f"**{self.correct_count}/{self.total_rounds}** correct",
+            inline=False
+        )
+        await interaction.response.edit_message(content=None, embed=embed, view=None)
+        
+        if self.player_id in used_countries:
+            del used_countries[self.player_id]
+    
+   
+          async def on_timeout(self):
+        if not self.answered and not self.game_cancelled:
             self.round_history.append(False)
             await self.message.edit(
                 content=f"⏰ Time's up! The flag was **{self.country_data['name']}** {self.country_data['flag']}",
                 view=None
             )
             await asyncio.sleep(2)
-            await start_new_round(self.message.channel, self.difficulty, self.player_id,
-                                 self.total_rounds, self.current_round + 1,
-                                 self.correct_count, self.round_history)
-
+            await start_new_round(
+                self.message.channel,
+                self.difficulty,
+                self.player_id,
+                self.total_rounds,
+                self.current_round + 1,
+                self.correct_count,
+                self.round_history
+            )
+            
 async def start_new_round(channel, difficulty, player_id, total_rounds, current_round, correct_count, round_history):
     if current_round > total_rounds:
         if player_id in used_countries:
