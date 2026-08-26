@@ -5000,7 +5000,23 @@ async def auto_spawn_football():
                         description=f"**Club:** {player['club']}\n**Nationality:** {player['nationality']}\n**Position:** {player['position']}\n**Rating:** {player['rating']}\n**Rarity:** {player['rarity'].upper()}",
                         color=color
                     )
-                    embed.set_image(url="https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png")
+                    
+                    # --- ADD GIF SUPPORT FOR FOOTBALL ---
+                    # Try to use player-specific GIF or fallback to default flag
+                    player_gifs = {
+                        "Lionel Messi": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWVzc2lnZWZmbGFnJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRm1lc3NpLWdpZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Cristiano Ronaldo": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY3Jpc3RpYW5vcm9uYWxkb2dpZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Kylian Mbappé": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWJhcHBlZ29pZmluZ2lmJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRm1iYXBwZS1naWYmcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Erling Haaland": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGFhbGFuZ2dpZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Vinícius Júnior": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmluaWNpdXNnaWYmbWNpZD1jb20lMkZnaXBoeSUyRnZpbmljaXVzLWdpZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Jude Bellingham": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExanVkZWJlbGxpbmdhbWdpZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Harry Kane": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGFycnlrYW5lZ2lmJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRmhhcnJ5LWthbmUtZ2lmJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Mohamed Salah": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbW9oYW1lZHNhbGFoZ2lmJmVjPWdpcGh5JmNpZD1jb20lMkZnaXBoeSUyRm1vaGFtZWQtc2FsYWgtZ2lmJmVwPXYxX2dpZnNfc2VhcmNoJmNkPWc/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                        "Kevin De Bruyne": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa2V2aW5kZWJydXluZWdpZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKM7tKzKxLzKxLz/giphy.gif",
+                    }
+                    
+                    gif_url = player_gifs.get(player['name'], "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png")
+                    embed.set_image(url=gif_url)
                     embed.set_footer(text="Use /collect to claim this card!")
                     
                     global current_football_spawn
@@ -5023,14 +5039,6 @@ async def auto_spawn_football():
         except Exception as e:
             print(f"Auto-spawn error: {e}")
             await asyncio.sleep(5)
-
-@bot.event
-async def on_ready():
-    global football_spawn_task
-    if not football_spawn_task:
-        football_spawn_task = bot.loop.create_task(auto_spawn_football())
-    print(f"{bot.user} is online!")
-
 # =========================================================
 # PAT COMMAND
 # =========================================================
