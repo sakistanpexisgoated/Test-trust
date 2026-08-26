@@ -239,21 +239,7 @@ async def on_message(message):
         and message.reference is None
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
-
-    if is_standalone_bot_mention:
-        embed = discord.Embed(
-            title="🤖 Bot Help Panel",
-            description="hello i am rynx i was created by dust and gingerini my prefixs are R! and /",
-            color=discord.Color.from_rgb(30, 31, 34)
-        )
-        embed.add_field(name="📌 Prefixes", value="`R!` or `/`", inline=True)
-        embed.add_field(name="👑 Creators", value="`dust` & `gingerini`", inline=True)
-        embed.add_field(name="💰 Economy", value="`balance`, `daily`, `work`, `gamble`, `dice`, `slots`, `crime`, `rob`, `pay`, `deposit`, `withdraw`", inline=False)
-        embed.add_field(name="🎉 Fun & Social", value="`cf`, `8ball`, `gayrate`, `pp`, `iq`, `roast`, `kiss`, `gif`, `hack`, `brainrot_dice`, `marry`, `divorce`, `mock`", inline=False)
-        embed.add_field(name="🛡️ Moderation & Utility", value="`afk`, `ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `help`, `trollpanel`, `whitelist`, `unwhitelist`, `ghostping`, `fakenuke`, `blacklist`, `serverblacklist`", inline=False)
-        await message.channel.send(embed=embed)
-        return
-
+    
     if message.mentions:
         for member in message.mentions:
             if member.id in afk_users:
