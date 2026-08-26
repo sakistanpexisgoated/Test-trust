@@ -36,11 +36,9 @@ if not TOKEN:
 # =========================================================
 
 async def owner_only_predicate(interaction: discord.Interaction):
-    """Predicate for owner-only commands"""
     return interaction.user.id in OWNER_IDS
 
 async def whitelisted_predicate(interaction: discord.Interaction):
-    """Predicate for whitelisted commands"""
     cursor.execute("SELECT 1 FROM troll_whitelist WHERE user_id = ?", (interaction.user.id,))
     is_whitelisted = cursor.fetchone() is not None
     return interaction.user.id in OWNER_IDS or is_whitelisted
@@ -134,7 +132,6 @@ CREATE TABLE IF NOT EXISTS giveaways (
 )
 """)
 
-# ALLOWED LINKS TABLES
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS allowed_links (
     guild_id INTEGER,
@@ -185,14 +182,12 @@ def _is_server_mod(member: discord.Member) -> bool:
     return any(role.name in mod_role_names for role in member.roles)
 
 def extract_domain(link: str) -> str:
-    """Extract domain from a URL."""
     clean = re.sub(r'^https?://', '', link)
     clean = re.sub(r'^www\.', '', clean)
     domain = clean.split('/')[0].split('?')[0].split('#')[0]
     return domain.lower() if domain else None
 
 def format_duration(seconds: int) -> str:
-    """Format seconds into readable duration."""
     if seconds < 60:
         return f"{seconds}s"
     elif seconds < 3600:
@@ -254,7 +249,6 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-    # --- AFK MENTION CHECK ---
     if message.mentions:
         for member in message.mentions:
             if member.id in afk_users:
@@ -271,7 +265,6 @@ async def on_message(message):
                 )
                 await message.channel.send(embed=embed)
 
-    # --- AFK RETURN CHECK ---
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
@@ -309,13 +302,10 @@ async def on_message(message):
 
         await message.channel.send(embed=embed)
 
-    # --- LINK FILTERING - ONLY BLOCK LINKS, NOT GIFS ---
     if message.guild and link_check_enabled.get(message.guild.id, False):
-        # Check if message contains a link (not an image/gif attachment)
         url_pattern = r'https?://[^\s]+|www\.[^\s]+'
         links = re.findall(url_pattern, message.content)
         
-        # Skip if message is just an image/gif attachment
         if message.attachments:
             is_media = all(att.content_type and att.content_type.startswith(('image/', 'video/')) for att in message.attachments)
             if is_media and not links:
@@ -341,7 +331,6 @@ async def on_message(message):
                         await message.channel.send(f"❌ Failed to mute {message.author.mention}: {e}")
                     break
 
-    # --- THIS MUST BE THE VERY LAST LINE ---
     await bot.process_commands(message)
 
 # =========================================================
@@ -452,7 +441,7 @@ async def globally_block_blacklisted(ctx):
     return True
 
 # =========================================================
-# ERROR HANDLER & COMMAND LISTINGS
+# ERROR HANDLER
 # =========================================================
 
 COMMAND_USAGE = {
@@ -515,9 +504,19 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.command and ctx.command.name in ["mute", "unmute"]:
+            return
+        msg = f"{ctx.author.mention} You are missing the required permissions."
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(msg, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(msg)
+
     if isinstance(error, commands.MissingRequiredArgument):
         msg = f"{ctx.author.mention} You are missing an argument."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -527,17 +526,6 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.BadArgument):
         msg = f"{ctx.author.mention} You provided an invalid argument."
-        
-        if ctx.interaction:
-            try:
-                return await ctx.interaction.followup.send(msg, ephemeral=True)
-            except Exception:
-                return
-        return await ctx.send(msg)
-
-    if isinstance(error, commands.MissingPermissions):
-        msg = f"{ctx.author.mention} You are missing the required permissions."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -547,7 +535,6 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.BotMissingPermissions):
         msg = f"{ctx.author.mention} I am missing the required permissions."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -557,7 +544,6 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.MemberNotFound):
         msg = f"{ctx.author.mention} I couldn't find that member."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -567,7 +553,6 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.CommandOnCooldown):
         msg = f"{ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -577,7 +562,6 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.RoleNotFound):
         msg = f"{ctx.author.mention} I couldn't find that role."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -587,7 +571,6 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.NotOwner):
         msg = f"{ctx.author.mention} Only the bot owner can use this command."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -597,7 +580,6 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.NSFWChannelRequired):
         msg = f"{ctx.author.mention} This command can only be used in NSFW channels."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -606,7 +588,6 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     msg = f"{ctx.author.mention} Something went wrong."
-    
     if ctx.interaction:
         try:
             return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -615,21 +596,12 @@ async def on_command_error(ctx, error):
     return await ctx.send(msg)
 
 # =========================================================
-# ALLOWED LINKS COMMANDS - UPDATED WITH SIMPLER UI
+# ALLOWED LINKS COMMANDS
 # =========================================================
 
 @bot.hybrid_command(name="allowed", aliases=["links"], description="Manage allowed links for the server")
 @commands.has_permissions(administrator=True)
 async def allowed(ctx, action: str = None, *, link: str = None):
-    """
-    Simplified Usage:
-    R!allowed link <link> - Add a link to whitelist
-    R!allowed unlink <link> - Remove a link from whitelist
-    R!allowed list - Show all allowed links
-    R!allowed enable - Turn on link filtering
-    R!allowed disable - Turn off link filtering
-    R!allowed time <duration> - Set mute time (e.g. 10m, 30m, 1h)
-    """
     guild_id = ctx.guild.id
     
     if action is None:
@@ -638,7 +610,6 @@ async def allowed(ctx, action: str = None, *, link: str = None):
             description="**Commands:**\n`R!allowed link <url>` - Add a link\n`R!allowed unlink <url>` - Remove a link\n`R!allowed list` - Show allowed links\n`R!allowed enable` - Turn ON filtering\n`R!allowed disable` - Turn OFF filtering\n`R!allowed time <duration>` - Set mute time",
             color=discord.Color.blue()
         )
-        # Check current status
         status = "✅ ENABLED" if link_check_enabled.get(guild_id, False) else "❌ DISABLED"
         cursor.execute("SELECT mute_duration FROM link_punishment WHERE guild_id = ?", (guild_id,))
         row = cursor.fetchone()
@@ -776,7 +747,6 @@ async def allowed(ctx, action: str = None, *, link: str = None):
 async def luck(ctx, member: discord.Member = None, amount: int = None):
     target = member or ctx.author
     
-    # If setting luck (owner only)
     if amount is not None:
         if ctx.author.id not in OWNER_IDS:
             embed = discord.Embed(description="❌ Only the bot owner can set luck!", color=discord.Color.red())
@@ -801,7 +771,6 @@ async def luck(ctx, member: discord.Member = None, amount: int = None):
             return await ctx.interaction.response.send_message(embed=embed)
         return await ctx.send(embed=embed)
     
-    # Check luck
     luck_val = get_user_luck(target.id)
     embed = discord.Embed(
         title="🍀 Luck",
@@ -1030,35 +999,30 @@ class GhostPingControlView(discord.ui.View):
             except Exception:
                 pass
 
-
 @bot.hybrid_command(
     name="ghostping",
     description="Ghost ping a user with stop button."
 )
 @app_commands.describe(member="The member to ghost-ping", times="How many times (1-100)", message="Optional message after the mention")
 async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str = ""):
-    # permission / whitelist check
     if not is_troll_whitelisted(ctx.author.id):
         embed = discord.Embed(description="You are not whitelisted to use this troll command.", color=discord.Color.red())
         if ctx.interaction:
             return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
 
-    # sanitize times
     try:
         times = int(times)
     except Exception:
         times = 1
     times = max(1, min(100, times))
 
-    # delete invoking message for prefix usage if possible
     if not ctx.interaction and ctx.message:
         try:
             await ctx.message.delete()
         except Exception:
             pass
 
-    # prepare view + embed
     view = GhostPingControlView(owner_id=ctx.author.id)
     embed = discord.Embed(
         title=f"👻 Ghost pinging {member.display_name} x{times}...",
@@ -1067,7 +1031,6 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
     )
     embed.set_footer(text="Press Stop to cancel the ghost pings.")
 
-    # Send status: ephemeral for slash, channel message for prefix
     status_msg = None
     if ctx.interaction:
         try:
@@ -1082,7 +1045,6 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
     else:
         status_msg = await ctx.channel.send(embed=embed, view=view)
 
-    # INTERVAL SET TO 1 SECOND
     delay = 1.0
 
     async def do_send():
@@ -1093,17 +1055,14 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
                 break
             try:
                 ping_msg = await ctx.channel.send(content)
-                # delete right away (best-effort)
                 try:
                     await ping_msg.delete()
                 except Exception:
                     pass
                 sent += 1
             except Exception:
-                # stop on repeated send failures
                 break
 
-            # update status embed after each sent ping
             try:
                 embed.description = f"Progress: {sent}/{times}"
                 embed.set_footer(text=f"Press Stop to cancel — sent {sent}/{times}")
@@ -1111,11 +1070,9 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
             except Exception:
                 pass
 
-            # wait 1 second between pings (balances rate and load)
             if i != times - 1:
                 await asyncio.sleep(delay)
 
-        # Finalize status
         if view.stop_event.is_set():
             embed.title = "🛑 Ghost pinging stopped"
             if view.stopped_by:
@@ -1535,10 +1492,9 @@ async def gamble(ctx, amount: int = 100):
         embed = discord.Embed(description="❌ Not enough money in wallet.", color=discord.Color.red())
         return await ctx.send(embed=embed)
 
-    # Luck system: higher luck = better odds (base 45% + luck bonus)
-    luck_bonus = (luck - 50) / 100 * 0.4  # Max +20% at 100 luck, -20% at 0 luck
-    win_chance = 0.45 + luck_bonus
-    win_chance = max(0.25, min(0.65, win_chance))  # Clamp between 25% and 65%
+    luck_bonus = (luck - 50) / 100 * 0.4
+    win_chance = 0.55 + luck_bonus
+    win_chance = max(0.35, min(0.75, win_chance))
 
     if random.random() < win_chance:
         update_wallet(user_id, amount)
@@ -1559,10 +1515,9 @@ async def dice(ctx, amount: int):
         embed = discord.Embed(description="❌ You don't have enough money in your wallet for this bet.", color=discord.Color.red())
         return await ctx.send(embed=embed)
 
-    # Luck system: adds bonus to user's roll
-    luck_bonus = int((luck - 50) / 10)  # Max +5 at 100 luck, -5 at 0 luck
-
+    luck_bonus = int((luck - 50) / 8)
     is_rigged = troll_settings.get(user_id, {}).get("dice", False)
+    
     if is_rigged:
         user_roll1, user_roll2 = 6, 6
         user_total = 12
@@ -1572,7 +1527,6 @@ async def dice(ctx, amount: int):
         user_roll1 = random.randint(1, 6) + luck_bonus
         user_roll2 = random.randint(1, 6) + luck_bonus
         user_total = user_roll1 + user_roll2
-
         bot_roll1 = random.randint(1, 6)
         bot_roll2 = random.randint(1, 6)
         bot_total = bot_roll1 + bot_roll2
@@ -1606,16 +1560,14 @@ async def slots(ctx, amount: int):
         embed = discord.Embed(description="You don't have enough money in your wallet broke nigga.", color=discord.Color.red())
         return await ctx.send(embed=embed)
 
-    # Luck system: higher luck = better symbols
-    luck_bonus = (luck - 50) / 100 * 0.3
-
+    luck_bonus = (luck - 50) / 100 * 0.4
     is_rigged = troll_settings.get(user_id, {}).get("slots", False)
+    
     if is_rigged:
         result = ["7️⃣", "7️⃣", "7️⃣"]
     else:
         symbols = ["🍒", "🍋", "🍊", "🍇", "🔔", "💎", "7️⃣"]
-        # Weighted selection based on luck
-        if random.random() < 0.3 + luck_bonus:  # Better chance of good symbols
+        if random.random() < 0.35 + luck_bonus:
             good_symbols = ["💎", "7️⃣", "🔔"]
             result = [random.choice(good_symbols) for i in range(3)]
         else:
@@ -1650,7 +1602,7 @@ async def crime(ctx):
         return await ctx.send(embed=embed)
 
     luck = get_user_luck(user_id)
-    luck_bonus = (luck - 50) / 100 * 0.3
+    luck_bonus = (luck - 50) / 100 * 0.35
 
     outcomes = [
         ("Robbed a convenience store", 250, True),
@@ -1660,9 +1612,7 @@ async def crime(ctx):
         ("Fumbled the heist and got fined", 350, False)
     ]
     
-    # Weight outcome based on luck
-    if random.random() < 0.6 + luck_bonus:
-        # More likely to get a successful outcome
+    if random.random() < 0.65 + luck_bonus:
         success_outcomes = [o for o in outcomes if o[2] == True]
         event, amount, success = random.choice(success_outcomes)
     else:
@@ -1710,10 +1660,9 @@ async def rob(ctx, member: discord.Member):
     cursor.execute("UPDATE users SET rob_claim = ? WHERE user_id = ?", (current_time, user_id))
     db.commit()
 
-    # Luck system: higher luck = better chance to rob
-    luck_bonus = (luck - 50) / 100 * 0.3
-    rob_chance = 0.4 + luck_bonus
-    rob_chance = max(0.2, min(0.6, rob_chance))
+    luck_bonus = (luck - 50) / 100 * 0.35
+    rob_chance = 0.45 + luck_bonus
+    rob_chance = max(0.25, min(0.65, rob_chance))
 
     if random.random() < rob_chance:
         stolen = random.randint(50, min(target_wallet, 500))
@@ -2148,33 +2097,38 @@ async def kick_error(ctx, error):
             await ctx.send(f"❌ {ctx.author.mention} You are missing Kick Members permission.")
 
 # =========================================================
-# MUTE COMMAND
+# MUTE COMMAND - SILENT FAIL FOR NON-MODS
 # =========================================================
 
 @bot.hybrid_command(name="mute", description="Mute a member")
 @commands.has_permissions(manage_roles=True)
 async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str = "No reason provided"):
+    is_mod = ctx.author.guild_permissions.manage_roles or ctx.author.id in OWNER_IDS
+    
+    if not is_mod:
+        return
+    
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot mute the server owner.", ephemeral=True)
-        return await ctx.send(f"❌ {ctx.author.mention} you cannot mute the server owner.")
+            return await ctx.interaction.response.send_message(f"❌ You cannot mute the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ You cannot mute the server owner.")
     
-    if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
+    if member.guild_permissions.manage_roles:
         if ctx.author.id != ctx.guild.owner_id:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot mute a staff member.", ephemeral=True)
-            return await ctx.send(f"❌ {ctx.author.mention} you cannot mute a staff member.")
+                return await ctx.interaction.response.send_message(f"❌ You cannot mute a staff member.", ephemeral=True)
+            return await ctx.send(f"❌ You cannot mute a staff member.")
     
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot mute them.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot mute them.")
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me.")
 
     seconds = parse_duration(duration)
     if not seconds:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message("❌ Invalid duration format. Use e.g. `10s`, `5m`, `2h`, `1d`.", ephemeral=True)
-        return await ctx.send("❌ Invalid duration format. Use e.g. `10s`, `5m`, `2h`, `1d`.")
+            return await ctx.interaction.response.send_message("❌ Invalid duration. Use: `10s`, `5m`, `2h`, `1d`.", ephemeral=True)
+        return await ctx.send("❌ Invalid duration. Use: `10s`, `5m`, `2h`, `1d`.")
     
     try:
         await member.timeout(timedelta(seconds=seconds), reason=reason)
@@ -2199,30 +2153,27 @@ async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str
         else:
             await ctx.send(f"❌ Failed to mute member: {e}")
 
-@mute.error
-async def mute_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Mute Perms.", ephemeral=True)
-        else:
-            await ctx.send(f"❌ {ctx.author.mention} You are missing Mute permissions.")
-
 # =========================================================
-# UNMUTE COMMAND
+# UNMUTE COMMAND - SILENT FAIL FOR NON-MODS
 # =========================================================
 
 @bot.hybrid_command(name="unmute", description="Remove a member's timeout")
 @commands.has_permissions(manage_roles=True)
 async def unmute(ctx, member: discord.Member):
+    is_mod = ctx.author.guild_permissions.manage_roles or ctx.author.id in OWNER_IDS
+    
+    if not is_mod:
+        return
+    
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot unmute the server owner.", ephemeral=True)
-        return await ctx.send(f"❌ {ctx.author.mention} you cannot unmute the server owner.")
+            return await ctx.interaction.response.send_message(f"❌ You cannot unmute the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ You cannot unmute the server owner.")
     
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot unmute them.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot unmute them.")
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me.")
     
     try:
         await member.timeout(None, reason=f"Unmuted by {ctx.author}")
@@ -2244,19 +2195,6 @@ async def unmute(ctx, member: discord.Member):
             await ctx.interaction.response.send_message(f"❌ Failed to unmute member: {e}", ephemeral=True)
         else:
             await ctx.send(f"❌ Failed to unmute member: {e}")
-
-@unmute.error
-async def unmute_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Manage Roles permission.", ephemeral=True)
-        else:
-            await ctx.send(f"❌ {ctx.author.mention} You are missing Manage Roles permission.")
-    if isinstance(error, commands.MemberNotFound):
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
-        else:
-            await ctx.send(f"❌ Member not found.")
 
 # =========================================================
 # WARN COMMAND
@@ -2655,10 +2593,10 @@ class BrainrotDiceView(discord.ui.View):
         self.add_item(self.p2_brainrot)
         self.add_item(self.p2_color)
 
-    @discord.ui.button(label="Join Game", style=discord.ButtonStyle.green, row=4)
+    @discord.ui.button(label="🎮 Join Game", style=discord.ButtonStyle.success, row=4)
     async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id == self.host_id:
-            embed = discord.Embed(description="You cannot join your own game as the opponent!", color=discord.Color.red())
+            embed = discord.Embed(description="You cannot join your own game!", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
         if self.p2_id is not None:
             embed = discord.Embed(description="🎭 The opponent spot is already filled!", color=discord.Color.red())
@@ -2667,13 +2605,13 @@ class BrainrotDiceView(discord.ui.View):
         if self.amount > 0:
             wallet, _, _ = get_user_econ(interaction.user.id)
             if wallet < self.amount:
-                embed = discord.Embed(description="🤣 You don't have enough money in your wallet to join this bet.", color=discord.Color.red())
+                embed = discord.Embed(description="🤣 You don't have enough money to join this bet!", color=discord.Color.red())
                 return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         self.p2_id = interaction.user.id
         self.p2_brainrot.disabled = False
         self.p2_color.disabled = False
-        button.label = f"Joined: {interaction.user.display_name}"
+        button.label = f"✅ Joined: {interaction.user.display_name}"
         button.style = discord.ButtonStyle.secondary
         button.disabled = True
 
@@ -2681,7 +2619,7 @@ class BrainrotDiceView(discord.ui.View):
         embed.description = f"💸 **Brainrot Dice Showdown**\nHost: <@{self.host_id}>\nOpponent: <@{self.p2_id}>\n\nBoth players, select your Brainrot & Color from the dropdowns, then click **🎲 Roll!**"
         await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(label="🎲 Roll!", style=discord.ButtonStyle.success, row=4)
+    @discord.ui.button(label="🎲 Roll!", style=discord.ButtonStyle.primary, row=4)
     async def roll_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in (self.host_id, self.p2_id if self.p2_id else -1):
             if self.p2_id is None:
@@ -3501,7 +3439,6 @@ class GiveawayEntryView(discord.ui.View):
         if message_id:
             bot.loop.create_task(do_join(message_id, interaction.user.id))
 
-
 @giveaway_group.command(name="create", description="Create a giveaway (button entry)")
 async def giveaway_create(
     ctx,
@@ -3567,7 +3504,6 @@ async def giveaway_create(
         await ctx.send(embed=confirm, delete_after=10)
 
     bot.loop.create_task(_handle_giveaway_end(giveaway_msg.id, target_channel.id, ctx.guild.id, prize, winners, end_ts, ctx.author.id))
-
 
 async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, prize: str, winners_count: int, end_time_unix: int, host_id: int):
     wait_for = max(0, end_time_unix - int(time.time()))
@@ -3638,7 +3574,6 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
             await message.edit(embed=ended_embed, view=None)
     except Exception:
         pass
-
 
 @giveaway_group.command(name="reroll", description="Reroll winners for a giveaway by message ID (host only)")
 async def giveaway_reroll(ctx, message_id: int, count: int = 1):
@@ -4305,125 +4240,244 @@ async def memes(ctx):
     await ctx.send(random.choice(meme_list))
 
 # =========================================================
-# COUNTRY FLAGS GAME - WITH FORM/GUESS MODAL
+# COUNTRY FLAGS GAME
 # =========================================================
 
 country_flags = {
     "easy": [
-        {"name": "United States", "flag": "🇺🇸", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png?ex=6a8e5654&is=6a8d04d4&hm=7657d205e1d0d0c0df9ea2e22335a3df3be9ccd7eb2f15a441cac1ce9d22cb35"},
-        {"name": "Canada", "flag": "🇨🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541643827155181608/canadnoc.png?ex=6a8e5732&is=6a8d05b2&hm=b70e6339cee9da6d176a06d7b1069c30fa3ab2cf60c83c09efa1b28731c59f3c"},
-        {"name": "United Kingdom", "flag": "🇬🇧", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644003861336134/f-flag.png?ex=6a8e575c&is=6a8d05dc&hm=5a0bf797f7180850c7f71c89f3da2faeff22e36f221eeb9c772315a38b5f0231"},
-        {"name": "Germany", "flag": "🇩🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644173332193340/germany.png?ex=6a8e5785&is=6a8d0605&hm=efd65bc8e19b1abd3e22c238ea1f11fb8a8237917493d60b93d7a9d1e2fa5758"},
-        {"name": "France", "flag": "🇫🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644406967505046/sono-qua.png?ex=6a8e57bc&is=6a8d063c&hm=f70fb33e8faec6b04793bd761215309e7129c65940ea57918c23f435640d53c6"},
-        {"name": "Italy", "flag": "🇮🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644542103658516/european-flags-italy.png?ex=6a8e57dd&is=6a8d065d&hm=53d295d38a34b39c7e63dcfb37e2bfa520d6fe67649b31976919799374af7a7d"},
-        {"name": "Spain", "flag": "🇪🇸", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644687893471383/seu-idioma.png?ex=6a8e57ff&is=6a8d067f&hm=f18f4619063699065b48b8666daf922b92daf50921c9f448993649fee2902b63"},
-        {"name": "Portugal", "flag": "🇵🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541644985710149652/portugal.png?ex=6a8e5846&is=6a8d06c6&hm=c38e9bf361b01384ddf8ed89732f8b1ef3705ec4f123933d6846ca4777f9057d"},
-        {"name": "Netherlands", "flag": "🇳🇱", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645127615778827/european-flags-netherlands.png?ex=6a8e5868&is=6a8d06e8&hm=4d4bc72268351b5eac5248ceef6a0eb05289719a751c1b7ca6a77fe0a3fd55e7"},
-        {"name": "Belgium", "flag": "🇧🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645289708982364/belgium-and-proud.png?ex=6a8e588f&is=6a8d070f&hm=536133476de02ef6d4c725497bcd80adf82a12e202a1a854da646cb9bc199e6f"},
-        {"name": "Switzerland", "flag": "🇨🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645647365800028/switzerland-flag.png?ex=6a8e58e4&is=6a8d0764&hm=51644180dda447aedd3b1e60f77b0699f2d64ea78c814153f169607157b15eed"},
-        {"name": "Austria", "flag": "🇦🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541645935392858112/austria-flag-gif.png?ex=6a8e5929&is=6a8d07a9&hm=7afeac4d15c36ccc01619eb3a2ef38e28fe6bbdebbe5eb34b243f9899c0ef735"},
-        {"name": "Sweden", "flag": "🇸🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646084575731763/sweden-flag.png?ex=6a8e594c&is=6a8d07cc&hm=3df63ff161e2771d40d26a38912f1e09f57e54b081f0942d0231c9c26d18629f"},
-        {"name": "Norway", "flag": "🇳🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646337412567060/norge-norway.png?ex=6a8e5989&is=6a8d0809&hm=37d231c845303070f25af159e3e6a9cc28ae714d92faa3577324ba98d561e458"},
-        {"name": "Denmark", "flag": "🇩🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646636181102703/denmark-flag.png?ex=6a8e59d0&is=6a8d0850&hm=b5c6933338cc03c8e65aac8159c16e7ea96c3f999eaca0e71340c118cf64c759"},
-        {"name": "Finland", "flag": "🇫🇮", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541646993175355392/finland-meme.png?ex=6a8e5a25&is=6a8d08a5&hm=85e91146a6278c7a1739fa07df2336606fb4b5f853a1f9f868b49cd196993f55"},
-        {"name": "Ireland", "flag": "🇮🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647213871112242/ireland-flag-gif.png?ex=6a8e5a5a&is=6a8d08da&hm=1dab9db5684d6333d7bd0ab7a7b35b77f849f72849a895dcde3391c147b6cc5c"},
-        {"name": "Greece", "flag": "🇬🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647421585760286/greece-flag-gif.png?ex=6a8e5a8b&is=6a8d090b&hm=85cac1af00771169bb3ae56a1b29e5950902c2b9190e686b61f6874abc5637ef"},
-        {"name": "Turkey", "flag": "🇹🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647788847276042/flag-of-turkey.png?ex=6a8e5ae3&is=6a8d0963&hm=2eebf23516c3b6f138a36e5285d35b0212ce66546d610f79866c502d40c1c325"},
-        {"name": "Russia", "flag": "🇷🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541647943575142440/european-flags-russia.png?ex=6a8e5b08&is=6a8d0988&hm=1d31de13dfe3268c1f5bbe2ed1f75da498818849b4ce88bfc772cc6f1c026de4"},
-        {"name": "Poland", "flag": "🇵🇱", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648072839528528/usa-flag.png?ex=6a8e5b27&is=6a8d09a7&hm=07b2515cc49590cec3fb4ae25456e58bb208ce9b54ad3c31ec1348b09a696c37"},
-        {"name": "Ukraine", "flag": "🇺🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648189990641675/ukraine-flag-ukraine.png?ex=6a8e5b42&is=6a8d09c2&hm=b8197d950fcf0be53a27ae1fcc2b5b4339ef229568ae7ebcc04bc69833e46f89"},
-        {"name": "Romania", "flag": "🇷🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648589623922768/chad-flag-gif.png?ex=6a8e5ba2&is=6a8d0a22&hm=cd1dc742af60e911bf976ca8371a39b5ac7f586753d51c5f71d1740e97a9db5c"},
-        {"name": "Bulgaria", "flag": "🇧🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648773392896083/macedonia-macedonian.png?ex=6a8e5bce&is=6a8d0a4e&hm=4da877106feb8fc5d06f343e42b85c17093f4a92db0c68c8b63db9c30e706b3f"},
-        {"name": "Croatia", "flag": "🇭🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648855702048898/hrvatska-zastava-hrvatska.png?ex=6a8e5be1&is=6a8d0a61&hm=2bae63dd639eb4792293d6d3dda5b27f4d4fe7bf189be6dac3c632627ce3600b"},
-        {"name": "Czech Republic", "flag": "🇨🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541648991882842132/czech-flag.png?ex=6a8e5c02&is=6a8d0a82&hm=18c00f07cb1fc41c5ad60d3a3cad1d14cb6bec41b298098b6dab1d26ff8fcad2"},
-        {"name": "Hungary", "flag": "🇭🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541649098099261550/hungary.png?ex=6a8e5c1b&is=6a8d0a9b&hm=c19eb1c4d2a7e31d836c3c51df9873dfee213d340f5c73d2687a757d2b12d97f"},
-        {"name": "Slovakia", "flag": "🇸🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541649286419451915/slovakia-russia.png?ex=6a8e5c48&is=6a8d0ac8&hm=771826345f0f85e4525632b964b284222964425ea2c37c2bbc239b0652f70808"},
-        {"name": "Slovenia", "flag": "🇸🇮", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541649472080056340/slovenia-flag-gif.png?ex=6a8e5c74&is=6a8d0af4&hm=e44573959a163d04cee12c43c1cba9abb181680718fb2afe05c4b54c4e92f275"},
+        {"name": "United States", "flag": "🇺🇸"},
+        {"name": "Canada", "flag": "🇨🇦"},
+        {"name": "United Kingdom", "flag": "🇬🇧"},
+        {"name": "Germany", "flag": "🇩🇪"},
+        {"name": "France", "flag": "🇫🇷"},
+        {"name": "Italy", "flag": "🇮🇹"},
+        {"name": "Spain", "flag": "🇪🇸"},
+        {"name": "Portugal", "flag": "🇵🇹"},
+        {"name": "Netherlands", "flag": "🇳🇱"},
+        {"name": "Belgium", "flag": "🇧🇪"},
+        {"name": "Switzerland", "flag": "🇨🇭"},
+        {"name": "Austria", "flag": "🇦🇹"},
+        {"name": "Sweden", "flag": "🇸🇪"},
+        {"name": "Norway", "flag": "🇳🇴"},
+        {"name": "Denmark", "flag": "🇩🇰"},
+        {"name": "Finland", "flag": "🇫🇮"},
+        {"name": "Ireland", "flag": "🇮🇪"},
+        {"name": "Greece", "flag": "🇬🇷"},
+        {"name": "Turkey", "flag": "🇹🇷"},
+        {"name": "Russia", "flag": "🇷🇺"},
+        {"name": "Poland", "flag": "🇵🇱"},
+        {"name": "Ukraine", "flag": "🇺🇦"},
+        {"name": "Romania", "flag": "🇷🇴"},
+        {"name": "Bulgaria", "flag": "🇧🇬"},
+        {"name": "Croatia", "flag": "🇭🇷"},
+        {"name": "Czech Republic", "flag": "🇨🇿"},
+        {"name": "Hungary", "flag": "🇭🇺"},
+        {"name": "Slovakia", "flag": "🇸🇰"},
+        {"name": "Slovenia", "flag": "🇸🇮"},
     ],
     "medium": [
-        {"name": "Brazil", "flag": "🇧🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Argentina", "flag": "🇦🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Mexico", "flag": "🇲🇽", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Australia", "flag": "🇦🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "New Zealand", "flag": "🇳🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "South Africa", "flag": "🇿🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Egypt", "flag": "🇪🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Nigeria", "flag": "🇳🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Kenya", "flag": "🇰🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Ghana", "flag": "🇬🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "India", "flag": "🇮🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "China", "flag": "🇨🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Japan", "flag": "🇯🇵", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "South Korea", "flag": "🇰🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Indonesia", "flag": "🇮🇩", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Pakistan", "flag": "🇵🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Bangladesh", "flag": "🇧🇩", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Vietnam", "flag": "🇻🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Thailand", "flag": "🇹🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Philippines", "flag": "🇵🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Brazil", "flag": "🇧🇷"},
+        {"name": "Argentina", "flag": "🇦🇷"},
+        {"name": "Mexico", "flag": "🇲🇽"},
+        {"name": "Australia", "flag": "🇦🇺"},
+        {"name": "New Zealand", "flag": "🇳🇿"},
+        {"name": "South Africa", "flag": "🇿🇦"},
+        {"name": "Egypt", "flag": "🇪🇬"},
+        {"name": "Nigeria", "flag": "🇳🇬"},
+        {"name": "Kenya", "flag": "🇰🇪"},
+        {"name": "Ghana", "flag": "🇬🇭"},
+        {"name": "India", "flag": "🇮🇳"},
+        {"name": "China", "flag": "🇨🇳"},
+        {"name": "Japan", "flag": "🇯🇵"},
+        {"name": "South Korea", "flag": "🇰🇷"},
+        {"name": "Indonesia", "flag": "🇮🇩"},
+        {"name": "Pakistan", "flag": "🇵🇰"},
+        {"name": "Bangladesh", "flag": "🇧🇩"},
+        {"name": "Vietnam", "flag": "🇻🇳"},
+        {"name": "Thailand", "flag": "🇹🇭"},
+        {"name": "Philippines", "flag": "🇵🇭"},
+        {"name": "Morocco", "flag": "🇲🇦"},
+        {"name": "Algeria", "flag": "🇩🇿"},
+        {"name": "Tunisia", "flag": "🇹🇳"},
+        {"name": "Libya", "flag": "🇱🇾"},
+        {"name": "Ethiopia", "flag": "🇪🇹"},
+        {"name": "Tanzania", "flag": "🇹🇿"},
+        {"name": "Uganda", "flag": "🇺🇬"},
+        {"name": "Zambia", "flag": "🇿🇲"},
+        {"name": "Zimbabwe", "flag": "🇿🇼"},
     ],
     "hard": [
-        {"name": "Kazakhstan", "flag": "🇰🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Uzbekistan", "flag": "🇺🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Azerbaijan", "flag": "🇦🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Armenia", "flag": "🇦🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Georgia", "flag": "🇬🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Mongolia", "flag": "🇲🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Nepal", "flag": "🇳🇵", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Sri Lanka", "flag": "🇱🇰", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Myanmar", "flag": "🇲🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Cambodia", "flag": "🇰🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Saudi Arabia", "flag": "🇸🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "United Arab Emirates", "flag": "🇦🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Qatar", "flag": "🇶🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Kuwait", "flag": "🇰🇼", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Oman", "flag": "🇴🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Bahrain", "flag": "🇧🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Lebanon", "flag": "🇱🇧", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Jordan", "flag": "🇯🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Iraq", "flag": "🇮🇶", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Syria", "flag": "🇸🇾", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Yemen", "flag": "🇾🇪", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Palestine", "flag": "🇵🇸", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Iran", "flag": "🇮🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Afghanistan", "flag": "🇦🇫", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Turkmenistan", "flag": "🇹🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Kyrgyzstan", "flag": "🇰🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Tajikistan", "flag": "🇹🇯", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Maldives", "flag": "🇲🇻", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Bhutan", "flag": "🇧🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Laos", "flag": "🇱🇦", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Brunei", "flag": "🇧🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "East Timor", "flag": "🇹🇱", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Papua New Guinea", "flag": "🇵🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Kazakhstan", "flag": "🇰🇿"},
+        {"name": "Uzbekistan", "flag": "🇺🇿"},
+        {"name": "Azerbaijan", "flag": "🇦🇿"},
+        {"name": "Armenia", "flag": "🇦🇲"},
+        {"name": "Georgia", "flag": "🇬🇪"},
+        {"name": "Mongolia", "flag": "🇲🇳"},
+        {"name": "Nepal", "flag": "🇳🇵"},
+        {"name": "Sri Lanka", "flag": "🇱🇰"},
+        {"name": "Myanmar", "flag": "🇲🇲"},
+        {"name": "Cambodia", "flag": "🇰🇭"},
+        {"name": "Saudi Arabia", "flag": "🇸🇦"},
+        {"name": "United Arab Emirates", "flag": "🇦🇪"},
+        {"name": "Qatar", "flag": "🇶🇦"},
+        {"name": "Kuwait", "flag": "🇰🇼"},
+        {"name": "Oman", "flag": "🇴🇲"},
+        {"name": "Bahrain", "flag": "🇧🇭"},
+        {"name": "Lebanon", "flag": "🇱🇧"},
+        {"name": "Jordan", "flag": "🇯🇴"},
+        {"name": "Iraq", "flag": "🇮🇶"},
+        {"name": "Syria", "flag": "🇸🇾"},
+        {"name": "Yemen", "flag": "🇾🇪"},
+        {"name": "Palestine", "flag": "🇵🇸"},
+        {"name": "Iran", "flag": "🇮🇷"},
+        {"name": "Afghanistan", "flag": "🇦🇫"},
+        {"name": "Turkmenistan", "flag": "🇹🇲"},
+        {"name": "Kyrgyzstan", "flag": "🇰🇬"},
+        {"name": "Tajikistan", "flag": "🇹🇯"},
+        {"name": "Maldives", "flag": "🇲🇻"},
+        {"name": "Bhutan", "flag": "🇧🇹"},
+        {"name": "Laos", "flag": "🇱🇦"},
+        {"name": "Brunei", "flag": "🇧🇳"},
+        {"name": "East Timor", "flag": "🇹🇱"},
+        {"name": "Papua New Guinea", "flag": "🇵🇬"},
     ],
     "impossible": [
-        {"name": "Seychelles", "flag": "🇸🇨", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Comoros", "flag": "🇰🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "São Tomé and Príncipe", "flag": "🇸🇹", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Eswatini", "flag": "🇸🇿", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Kiribati", "flag": "🇰🇮", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Nauru", "flag": "🇳🇷", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Tuvalu", "flag": "🇹🇻", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Palau", "flag": "🇵🇼", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Marshall Islands", "flag": "🇲🇭", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Dominica", "flag": "🇩🇲", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Saint Kitts and Nevis", "flag": "🇰🇳", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Antigua and Barbuda", "flag": "🇦🇬", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Saint Vincent and the Grenadines", "flag": "🇻🇨", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Solomon Islands", "flag": "🇸🇧", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Vanuatu", "flag": "🇻🇺", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
-        {"name": "Tonga", "flag": "🇹🇴", "gif": "https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png"},
+        {"name": "Seychelles", "flag": "🇸🇨"},
+        {"name": "Comoros", "flag": "🇰🇲"},
+        {"name": "São Tomé and Príncipe", "flag": "🇸🇹"},
+        {"name": "Eswatini", "flag": "🇸🇿"},
+        {"name": "Kiribati", "flag": "🇰🇮"},
+        {"name": "Nauru", "flag": "🇳🇷"},
+        {"name": "Tuvalu", "flag": "🇹🇻"},
+        {"name": "Palau", "flag": "🇵🇼"},
+        {"name": "Marshall Islands", "flag": "🇲🇭"},
+        {"name": "Dominica", "flag": "🇩🇲"},
+        {"name": "Saint Kitts and Nevis", "flag": "🇰🇳"},
+        {"name": "Antigua and Barbuda", "flag": "🇦🇬"},
+        {"name": "Saint Vincent and the Grenadines", "flag": "🇻🇨"},
+        {"name": "Solomon Islands", "flag": "🇸🇧"},
+        {"name": "Vanuatu", "flag": "🇻🇺"},
+        {"name": "Tonga", "flag": "🇹🇴"},
     ]
+}
+
+# =========================================================
+# COUNTRY ABBREVIATIONS
+# =========================================================
+
+COUNTRY_ABBREVIATIONS = {
+    "united states": ["us", "usa", "america"],
+    "united kingdom": ["uk", "britain", "england"],
+    "united arab emirates": ["uae"],
+    "south korea": ["korea"],
+    "czech republic": ["czechia"],
+    "new zealand": ["nz"],
+    "south africa": ["sa"],
+    "saudi arabia": ["ksa"],
+    "papua new guinea": ["png"],
+    "saint kitts and nevis": ["st kitts", "saint kitts"],
+    "saint vincent and the grenadines": ["st vincent"],
+    "sao tome and principe": ["sao tome"],
+    "antigua and barbuda": ["antigua"],
+    "marshall islands": ["marshall"],
+    "solomon islands": ["solomon"],
 }
 
 active_games = {}
 used_countries = {}
 
-class GuessModal(discord.ui.Modal, title="🌍 Guess the Country"):
+class CountryGuessView(discord.ui.View):
+    def __init__(self, country_data, difficulty, player_id, total_rounds, current_round, correct_count, round_history, timeout=30):
+        super().__init__(timeout=timeout)
+        self.country_data = country_data
+        self.difficulty = difficulty
+        self.player_id = player_id
+        self.total_rounds = total_rounds
+        self.current_round = current_round
+        self.correct_count = correct_count
+        self.round_history = round_history
+        self.answered = False
+        self.start_time = time.time()
+        self.timeout_seconds = timeout
+        self.game_cancelled = False
+        
+        guess_btn = discord.ui.Button(
+            label="✏️ Guess",
+            style=discord.ButtonStyle.primary,
+            row=0
+        )
+        guess_btn.callback = self.guess_callback
+        self.add_item(guess_btn)
+        
+        stop_btn = discord.ui.Button(
+            label="🛑 Stop Game",
+            style=discord.ButtonStyle.danger,
+            row=0
+        )
+        stop_btn.callback = self.stop_callback
+        self.add_item(stop_btn)
+    
+    async def guess_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.player_id:
+            await interaction.response.send_message("❌ Not your game!", ephemeral=True)
+            return
+        if self.answered:
+            await interaction.response.send_message("⏳ This round is already over!", ephemeral=True)
+            return
+        if self.game_cancelled:
+            await interaction.response.send_message("🛑 This game has been stopped!", ephemeral=True)
+            return
+        
+        modal = GuessCountryModal(self)
+        await interaction.response.send_modal(modal)
+    
+    async def stop_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.player_id:
+            await interaction.response.send_message("❌ Not your game!", ephemeral=True)
+            return
+        
+        self.game_cancelled = True
+        self.answered = True
+        for child in self.children:
+            child.disabled = True
+        
+        embed = discord.Embed(
+            title="🛑 Game Stopped",
+            description=f"{interaction.user.mention} stopped the country guessing game.",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="📊 Your Score",
+            value=f"**{self.correct_count}/{self.total_rounds}** correct",
+            inline=False
+        )
+        await interaction.response.edit_message(content=None, embed=embed, view=None)
+        
+        if self.player_id in used_countries:
+            del used_countries[self.player_id]
+    
+    async def on_timeout(self):
+        if not self.answered and not self.game_cancelled:
+            self.round_history.append(False)
+            await self.message.edit(
+                content=f"⏰ Time's up! The flag was **{self.country_data['name']}** {self.country_data['flag']}",
+                view=None
+            )
+            await asyncio.sleep(2)
+            await start_new_round(
+                self.message.channel,
+                self.difficulty,
+                self.player_id,
+                self.total_rounds,
+                self.current_round + 1,
+                self.correct_count,
+                self.round_history
+            )
+
+class GuessCountryModal(discord.ui.Modal, title="🌍 Guess the Country"):
     guess = discord.ui.TextInput(
-        label="Enter the country name:",
-        placeholder="Type your guess here...",
+        label="Enter the country name or abbreviation:",
+        placeholder="e.g. USA, UK, France...",
         required=True,
         max_length=100
     )
@@ -4444,7 +4498,24 @@ class GuessModal(discord.ui.Modal, title="🌍 Guess the Country"):
         user_guess = self.guess.value.strip()
         correct = self.view.country_data["name"]
         
-        if user_guess.lower() == correct.lower():
+        # Check if guess matches a country or its abbreviation
+        def is_country_match(guess, country_name):
+            guess_lower = guess.lower().strip()
+            country_lower = country_name.lower().strip()
+            
+            if guess_lower == country_lower:
+                return True
+            
+            for country_key, abbrevs in COUNTRY_ABBREVIATIONS.items():
+                if country_lower == country_key.lower():
+                    for abbrev in abbrevs:
+                        if guess_lower == abbrev.lower():
+                            return True
+            return False
+        
+        match_found = is_country_match(user_guess, correct)
+        
+        if match_found:
             self.view.correct_count += 1
             self.view.round_history.append(True)
             
@@ -4499,96 +4570,6 @@ class GuessModal(discord.ui.Modal, title="🌍 Guess the Country"):
                 self.view.current_round + 1,
                 self.view.correct_count,
                 self.view.round_history
-            )
-
-class CountryGuessView(discord.ui.View):
-    def __init__(self, country_data, difficulty, player_id, total_rounds, current_round, correct_count, round_history, timeout=30):
-        super().__init__(timeout=timeout)
-        self.country_data = country_data
-        self.difficulty = difficulty
-        self.player_id = player_id
-        self.total_rounds = total_rounds
-        self.current_round = current_round
-        self.correct_count = correct_count
-        self.round_history = round_history
-        self.answered = False
-        self.start_time = time.time()
-        self.timeout_seconds = timeout
-        self.game_cancelled = False
-        
-        # Guess button (opens modal)
-        guess_btn = discord.ui.Button(
-            label="✏️ Guess",
-            style=discord.ButtonStyle.primary,
-            row=0
-        )
-        guess_btn.callback = self.guess_callback
-        self.add_item(guess_btn)
-        
-        # Stop button
-        stop_btn = discord.ui.Button(
-            label="🛑 Stop Game",
-            style=discord.ButtonStyle.danger,
-            row=0
-        )
-        stop_btn.callback = self.stop_callback
-        self.add_item(stop_btn)
-    
-    async def guess_callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.player_id:
-            await interaction.response.send_message("❌ Not your game!", ephemeral=True)
-            return
-        if self.answered:
-            await interaction.response.send_message("⏳ This round is already over!", ephemeral=True)
-            return
-        if self.game_cancelled:
-            await interaction.response.send_message("🛑 This game has been stopped!", ephemeral=True)
-            return
-        
-        modal = GuessModal(self)
-        await interaction.response.send_modal(modal)
-    
-    async def stop_callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.player_id:
-            await interaction.response.send_message("❌ Not your game!", ephemeral=True)
-            return
-        
-        self.game_cancelled = True
-        self.answered = True
-        for child in self.children:
-            child.disabled = True
-        
-        embed = discord.Embed(
-            title="🛑 Game Stopped",
-            description=f"{interaction.user.mention} stopped the country guessing game.",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="📊 Your Score",
-            value=f"**{self.correct_count}/{self.total_rounds}** correct",
-            inline=False
-        )
-        await interaction.response.edit_message(content=None, embed=embed, view=None)
-        
-        if self.player_id in used_countries:
-            del used_countries[self.player_id]
-    
-    async def on_timeout(self):
-        if not self.answered and not self.game_cancelled:
-            self.round_history.append(False)
-            await self.message.edit(
-                content=f"⏰ Time's up! The flag was **{self.country_data['name']}** {self.country_data['flag']}",
-                view=None
-            )
-            await asyncio.sleep(2)
-            await start_new_round(
-                self.message.channel,
-                self.difficulty,
-                self.player_id,
-                self.total_rounds,
-                self.current_round + 1,
-                self.correct_count,
-                self.round_history
             )
 
 async def start_new_round(channel, difficulty, player_id, total_rounds, current_round, correct_count, round_history):
@@ -4649,13 +4630,13 @@ async def start_new_round(channel, difficulty, player_id, total_rounds, current_
     
     view = CountryGuessView(country, difficulty, player_id, total_rounds, current_round, correct_count, round_history)
     
-    flag_display = country.get("gif", country["flag"])
+    flag_display = country["flag"]
     embed = discord.Embed(
         title="🌍 Guess the Country!",
         description=f"**Round {current_round}/{total_rounds}**\nDifficulty: **{difficulty.upper()}**\n\nGuess the country based on the flag!",
         color=discord.Color.blurple()
     )
-    embed.set_image(url=flag_display)
+    embed.add_field(name="Flag", value=flag_display, inline=False)
     embed.set_footer(text=f"⏱️ {view.timeout_seconds}s remaining • {channel.guild.get_member(player_id).display_name}'s turn")
     
     msg = await channel.send(
@@ -4994,636 +4975,61 @@ async def collect(ctx):
     else:
         await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="pack", description="Buy or open a football card pack")
-async def pack(ctx, action: str, pack_type: str = None):
-    action = action.lower()
-    
-    if action == "buy":
-        embed = discord.Embed(
-            title="📦 Buy a Pack",
-            description="Select a pack type from the dropdown below:",
-            color=discord.Color.blue()
-        )
-        
-        cursor.execute("SELECT pack_type, price, card_count FROM football_packs")
-        packs = cursor.fetchall()
-        
-        view = PackBuyView(ctx.author.id)
-        for pack in packs:
-            pack_name = pack[0].capitalize()
-            price = pack[1]
-            count = pack[2]
-            view.add_item(discord.ui.Button(
-                label=f"{pack_name} Pack (${price:,}) - {count} cards",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"buy_{pack[0]}"
-            ))
-        
-        async def button_callback(interaction: discord.Interaction):
-            if interaction.user.id != ctx.author.id:
-                await interaction.response.send_message("❌ This isn't your purchase!", ephemeral=True)
-                return
-            
-            pack_type = interaction.data["custom_id"].replace("buy_", "")
-            cursor.execute("SELECT price, card_count FROM football_packs WHERE pack_type = ?", (pack_type,))
-            row = cursor.fetchone()
-            if not row:
-                await interaction.response.send_message("❌ Invalid pack type!", ephemeral=True)
-                return
-            
-            price, count = row
-            wallet, _, _ = get_user_econ(ctx.author.id)
-            if wallet < price:
-                await interaction.response.send_message(f"❌ You need **${price:,}** to buy a {pack_type.capitalize()} pack. You have ${wallet:,}.", ephemeral=True)
-                return
-            
-            update_wallet(ctx.author.id, -price)
-            
-            cursor.execute("INSERT OR REPLACE INTO football_packs_inventory (user_id, pack_type, quantity) VALUES (?, ?, COALESCE((SELECT quantity FROM football_packs_inventory WHERE user_id = ? AND pack_type = ?), 0) + 1)", 
-                          (ctx.author.id, pack_type, ctx.author.id, pack_type))
-            db.commit()
-            
-            embed = discord.Embed(
-                title=f"✅ {pack_type.capitalize()} Pack Purchased!",
-                description=f"You bought a {pack_type.capitalize()} pack for **${price:,}**!\n\nUse `/pack open` to see your packs and open them.",
-                color=discord.Color.green()
-            )
-            await interaction.response.edit_message(embed=embed, view=None)
-        
-        for child in view.children:
-            child.callback = button_callback
-        
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        else:
-            await ctx.send(embed=embed, view=view)
-    
-    elif action == "open":
-        cursor.execute("SELECT pack_type, quantity FROM football_packs_inventory WHERE user_id = ? AND quantity > 0", (ctx.author.id,))
-        packs = cursor.fetchall()
-        
-        if not packs:
-            embed = discord.Embed(
-                description="❌ You don't have any packs! Use `/pack buy` to purchase some.",
-                color=discord.Color.red()
-            )
-            if ctx.interaction:
-                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
-            return
-        
-        embed = discord.Embed(
-            title="🎴 Your Packs",
-            description="Select a pack to open:",
-            color=discord.Color.blue()
-        )
-        
-        view = PackOpenView(ctx.author.id)
-        for pack_type, quantity in packs:
-            view.add_item(discord.ui.Button(
-                label=f"{pack_type.capitalize()} Pack (x{quantity})",
-                style=discord.ButtonStyle.success,
-                custom_id=f"open_{pack_type}"
-            ))
-        
-        async def open_callback(interaction: discord.Interaction):
-            if interaction.user.id != ctx.author.id:
-                await interaction.response.send_message("❌ This isn't your pack!", ephemeral=True)
-                return
-            
-            pack_type = interaction.data["custom_id"].replace("open_", "")
-            
-            cursor.execute("SELECT quantity FROM football_packs_inventory WHERE user_id = ? AND pack_type = ?", (ctx.author.id, pack_type))
-            row = cursor.fetchone()
-            if not row or row[0] <= 0:
-                await interaction.response.send_message("❌ You don't have any {pack_type.capitalize()} packs!", ephemeral=True)
-                return
-            
-            result = open_pack(ctx.author.id, pack_type)
-            if result == "insufficient":
-                await interaction.response.send_message("❌ You don't have enough money to open this pack!", ephemeral=True)
-                return
-            elif result is None:
-                await interaction.response.send_message("❌ Invalid pack type!", ephemeral=True)
-                return
-            
-            cursor.execute("UPDATE football_packs_inventory SET quantity = quantity - 1 WHERE user_id = ? AND pack_type = ?", (ctx.author.id, pack_type))
-            db.commit()
-            
-            cards = result
-            embed = discord.Embed(
-                title=f"🎴 {pack_type.capitalize()} Pack Opened!",
-                description=f"You got {len(cards)} cards:",
-                color=discord.Color.green()
-            )
-            card_list = []
-            for card in cards:
-                p = card["player"]
-                card_list.append(f"• **{p['name']}** ({p['rarity'].upper()}) - {p['rating']} OVR")
-            embed.add_field(name="Cards", value="\n".join(card_list) or "No cards found.", inline=False)
-            
-            await interaction.response.edit_message(embed=embed, view=None)
-        
-        for child in view.children:
-            child.callback = open_callback
-        
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        else:
-            await ctx.send(embed=embed, view=view)
-    
-    else:
-        embed = discord.Embed(
-            description="❌ Invalid action. Use `/pack buy` or `/pack open`.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
+# =========================================================
+# FOOTBALL AUTO-SPAWN SYSTEM
+# =========================================================
 
-class PackBuyView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=120)
-        self.user_id = user_id
+football_spawn_task = None
+current_football_spawn = None
 
-class PackOpenView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=120)
-        self.user_id = user_id
-
-@bot.hybrid_command(name="sell", description="Sell a football card for money")
-async def sell(ctx, card_id: str = None):
-    if card_id is None:
-        cards = get_player_cards(ctx.author.id)
-        if not cards:
-            embed = discord.Embed(
-                description="❌ You don't have any cards to sell!",
-                color=discord.Color.red()
-            )
-            if ctx.interaction:
-                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                await ctx.send(embed=embed)
-            return
-        
-        embed = discord.Embed(
-            title="💰 Sell a Card",
-            description="Select a card to sell from the dropdown below:",
-            color=discord.Color.gold()
-        )
-        
-        view = SellView(ctx.author.id)
-        options = []
-        for card in cards[:25]:
-            price = RARITY_SELL_PRICES.get(card[5], 50)
-            options.append(discord.SelectOption(
-                label=f"{card[2]} ({card[5].upper()}) - {card[6]} OVR",
-                description=f"Sell for ${price:,}",
-                value=str(card[0])
-            ))
-        
-        select = discord.ui.Select(placeholder="Select a card to sell...", options=options)
-        
-        async def select_callback(interaction: discord.Interaction):
-            if interaction.user.id != ctx.author.id:
-                await interaction.response.send_message("❌ This isn't your sale!", ephemeral=True)
-                return
-            
-            card_id = int(select.values[0])
-            card = get_card_by_id(card_id, ctx.author.id)
-            if not card:
-                await interaction.response.send_message("❌ Card not found!", ephemeral=True)
-                return
-            
-            price = RARITY_SELL_PRICES.get(card[5], 50)
-            
-            if delete_card(card_id, ctx.author.id):
-                update_wallet(ctx.author.id, price)
-                embed = discord.Embed(
-                    title="💰 Card Sold!",
-                    description=f"You sold **{card[2]}** ({card[5].upper()}) for **${price:,}**!",
-                    color=discord.Color.green()
-                )
-                await interaction.response.edit_message(embed=embed, view=None)
-            else:
-                await interaction.response.send_message("❌ Failed to sell card!", ephemeral=True)
-        
-        select.callback = select_callback
-        view.add_item(select)
-        
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        else:
-            await ctx.send(embed=embed, view=view)
-        return
-    
-    try:
-        card_id = int(card_id)
-    except ValueError:
-        embed = discord.Embed(
-            description="❌ Please provide a valid card ID.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    card = get_card_by_id(card_id, ctx.author.id)
-    if not card:
-        embed = discord.Embed(
-            description="❌ Card not found! Use `/sell` to see your cards.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    price = RARITY_SELL_PRICES.get(card[5], 50)
-    
-    if delete_card(card_id, ctx.author.id):
-        update_wallet(ctx.author.id, price)
-        embed = discord.Embed(
-            title="💰 Card Sold!",
-            description=f"You sold **{card[2]}** ({card[5].upper()}) for **${price:,}**!",
-            color=discord.Color.green()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed)
-        else:
-            await ctx.send(embed=embed)
-    else:
-        embed = discord.Embed(
-            description="❌ Failed to sell card!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-
-class SellView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=120)
-        self.user_id = user_id
-
-@bot.hybrid_command(name="collection", aliases=["cards"], description="View your football card collection")
-async def collection(ctx, member: discord.Member = None):
-    target = member or ctx.author
-    cards = get_player_cards(target.id)
-    
-    if not cards:
-        embed = discord.Embed(
-            description=f"{target.mention} has no football cards yet!",
-            color=discord.Color.orange()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    total = len(cards)
-    legendary = get_rarity_count(target.id, "legendary")
-    epic = get_rarity_count(target.id, "epic")
-    rare = get_rarity_count(target.id, "rare")
-    common = get_rarity_count(target.id, "common")
-    
-    embed = discord.Embed(
-        title=f"🎴 {target.display_name}'s Collection",
-        description=f"Total Cards: **{total}**\n👑 Legendary: {legendary} | ⭐ Epic: {epic} | 🔵 Rare: {rare} | ⚪ Common: {common}",
-        color=discord.Color.blue()
-    )
-    
-    top_cards = get_top_cards(target.id, 10)
-    card_list = []
-    for card in top_cards:
-        rarity_emoji = "👑" if card[5] == "legendary" else "⭐" if card[5] == "epic" else "🔵" if card[5] == "rare" else "⚪"
-        card_list.append(f"{rarity_emoji} **{card[2]}** ({card[5].upper()}) - {card[6]} OVR")
-    
-    embed.add_field(name="Top Cards", value="\n".join(card_list) or "No cards", inline=False)
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
-    else:
-        await ctx.send(embed=embed)
-
-@bot.hybrid_command(name="debate", description="Debate another member using football cards")
-async def debate(ctx, member: discord.Member):
-    if member.id == ctx.author.id:
-        embed = discord.Embed(description="❌ You can't debate yourself!", color=discord.Color.red())
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    if member.bot:
-        embed = discord.Embed(description="❌ You can't debate a bot!", color=discord.Color.red())
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    p1_cards = get_top_cards(ctx.author.id, 3)
-    p2_cards = get_top_cards(member.id, 3)
-    
-    if not p1_cards or not p2_cards:
-        embed = discord.Embed(
-            description="❌ Both players need at least 1 card to debate!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    p1_score = sum(card[6] for card in p1_cards) + len(p1_cards) * 2
-    p2_score = sum(card[6] for card in p2_cards) + len(p2_cards) * 2
-    
-    embed = discord.Embed(
-        title="⚔️ Debate Battle!",
-        color=discord.Color.gold()
-    )
-    
-    p1_names = "\n".join([f"• {card[2]} ({card[6]} OVR)" for card in p1_cards[:3]])
-    p2_names = "\n".join([f"• {card[2]} ({card[6]} OVR)" for card in p2_cards[:3]])
-    
-    embed.add_field(
-        name=f"{ctx.author.display_name} (Score: {p1_score})",
-        value=p1_names or "No cards",
-        inline=True
-    )
-    embed.add_field(
-        name=f"{member.display_name} (Score: {p2_score})",
-        value=p2_names or "No cards",
-        inline=True
-    )
-    
-    if p1_score > p2_score:
-        embed.add_field(
-            name="🏆 Winner",
-            value=f"{ctx.author.mention} wins the debate!",
-            inline=False
-        )
-        embed.color = discord.Color.green()
-    elif p2_score > p1_score:
-        embed.add_field(
-            name="🏆 Winner",
-            value=f"{member.mention} wins the debate!",
-            inline=False
-        )
-        embed.color = discord.Color.green()
-    else:
-        embed.add_field(
-            name="🤝 Result",
-            value="It's a tie! Both debaters are evenly matched!",
-            inline=False
-        )
-        embed.color = discord.Color.orange()
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
-    else:
-        await ctx.send(embed=embed)
-
-@bot.hybrid_command(name="trade", description="Send a trade request to another member")
-async def trade(ctx, member: discord.Member):
-    if member.id == ctx.author.id:
-        embed = discord.Embed(description="❌ You can't trade with yourself!", color=discord.Color.red())
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    if member.bot:
-        embed = discord.Embed(description="❌ You can't trade with a bot!", color=discord.Color.red())
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    p1_cards = get_player_cards(ctx.author.id)
-    p2_cards = get_player_cards(member.id)
-    
-    if not p1_cards:
-        embed = discord.Embed(description="❌ You have no cards to trade!", color=discord.Color.red())
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    if not p2_cards:
-        embed = discord.Embed(description=f"❌ {member.display_name} has no cards to trade!", color=discord.Color.red())
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
-    
-    view = TradeView(ctx.author.id, member.id)
-    embed = discord.Embed(
-        title="🔄 Trade Request",
-        description=f"{ctx.author.mention} wants to trade with {member.mention}!\n\nSelect the cards you want to offer and what you want from the other player.\n\n**Your Cards:** {len(p1_cards)}\n**{member.display_name}'s Cards:** {len(p2_cards)}",
-        color=discord.Color.blue()
-    )
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, view=view)
-    else:
-        await ctx.send(embed=embed, view=view)
-
-class TradeView(discord.ui.View):
-    def __init__(self, proposer_id, target_id):
-        super().__init__(timeout=180)
-        self.proposer_id = proposer_id
-        self.target_id = target_id
-        self.proposer_selected = None
-        self.target_selected = None
-        self.proposer_money = 0
-        self.target_money = 0
-        self.accepted = False
-    
-    @discord.ui.select(
-        placeholder="Select a card to offer (you)",
-        min_values=0,
-        max_values=1,
-        options=[]
-    )
-    async def proposer_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        if interaction.user.id != self.proposer_id:
-            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
-            return
-        if select.values:
-            self.proposer_selected = int(select.values[0])
-        else:
-            self.proposer_selected = None
-        await interaction.response.defer()
-        await self.update_embed(interaction)
-    
-    @discord.ui.select(
-        placeholder="Select a card to receive (from them)",
-        min_values=0,
-        max_values=1,
-        options=[]
-    )
-    async def target_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        if interaction.user.id != self.target_id:
-            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
-            return
-        if select.values:
-            self.target_selected = int(select.values[0])
-        else:
-            self.target_selected = None
-        await interaction.response.defer()
-        await self.update_embed(interaction)
-    
-    async def update_embed(self, interaction: discord.Interaction):
-        p1_cards = get_player_cards(self.proposer_id)
-        p2_cards = get_player_cards(self.target_id)
-        
-        self.proposer_select.options = [
-            discord.SelectOption(
-                label=f"{card[2]} ({card[5].upper()}) - {card[6]} OVR",
-                value=str(card[0]),
-                default=(card[0] == self.proposer_selected)
-            ) for card in p1_cards[:25]
-        ]
-        self.target_select.options = [
-            discord.SelectOption(
-                label=f"{card[2]} ({card[5].upper()}) - {card[6]} OVR",
-                value=str(card[0]),
-                default=(card[0] == self.target_selected)
-            ) for card in p2_cards[:25]
-        ]
-        
-        embed = discord.Embed(
-            title="🔄 Trade Request",
-            description=f"<@{self.proposer_id}> wants to trade with <@{self.target_id}>!\n\n**Your Card:** {self.get_card_name(self.proposer_selected, p1_cards) or 'None'}\n**Their Card:** {self.get_card_name(self.target_selected, p2_cards) or 'None'}\n\nOffer money (use buttons below)",
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="💰 Money Offer", value=f"<@{self.proposer_id}>: ${self.proposer_money:,}\n<@{self.target_id}>: ${self.target_money:,}", inline=False)
-        
-        await interaction.message.edit(embed=embed, view=self)
-    
-    def get_card_name(self, card_id, cards):
-        if card_id is None:
-            return None
-        for card in cards:
-            if card[0] == card_id:
-                return f"{card[2]} ({card[5].upper()}) - {card[6]} OVR"
-        return None
-    
-    @discord.ui.button(label="💰 Add Money (You)", style=discord.ButtonStyle.secondary)
-    async def add_money(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id not in (self.proposer_id, self.target_id):
-            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
-            return
-        
-        modal = TradeMoneyModal(interaction.user.id, self)
-        await interaction.response.send_modal(modal)
-    
-    @discord.ui.button(label="✅ Accept Trade", style=discord.ButtonStyle.success)
-    async def accept_trade(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id not in (self.proposer_id, self.target_id):
-            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
-            return
-        
-        if self.proposer_selected is None and self.target_selected is None and self.proposer_money == 0 and self.target_money == 0:
-            await interaction.response.send_message("❌ You must select at least one card or money to trade!", ephemeral=True)
-            return
-        
-        if not self.accepted:
-            self.accepted = True
-            await interaction.response.send_message("✅ Trade accepted by one party. Waiting for the other to accept...", ephemeral=True)
-            
-            embed = discord.Embed(
-                title="✅ Trade Finalized!",
-                description="Both parties have accepted the trade!",
-                color=discord.Color.green()
-            )
-            await interaction.message.edit(embed=embed, view=None)
-            
-            if self.proposer_selected:
-                cursor.execute("DELETE FROM football_cards WHERE id = ? AND user_id = ?", (self.proposer_selected, self.proposer_id))
-            if self.target_selected:
-                cursor.execute("DELETE FROM football_cards WHERE id = ? AND user_id = ?", (self.target_selected, self.target_id))
-            
-            if self.proposer_selected:
-                cursor.execute("UPDATE football_cards SET user_id = ? WHERE id = ?", (self.target_id, self.proposer_selected))
-            if self.target_selected:
-                cursor.execute("UPDATE football_cards SET user_id = ? WHERE id = ?", (self.proposer_id, self.target_selected))
-            
-            if self.proposer_money > 0:
-                update_wallet(self.proposer_id, -self.proposer_money)
-                update_wallet(self.target_id, self.proposer_money)
-            if self.target_money > 0:
-                update_wallet(self.target_id, -self.target_money)
-                update_wallet(self.proposer_id, self.target_money)
-            
-            db.commit()
-            
-            result_embed = discord.Embed(
-                title="🔄 Trade Completed!",
-                description=f"Trade between <@{self.proposer_id}> and <@{self.target_id}> was successful!",
-                color=discord.Color.green()
-            )
-            await interaction.channel.send(embed=result_embed)
-    
-    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.danger)
-    async def cancel_trade(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id not in (self.proposer_id, self.target_id):
-            await interaction.response.send_message("❌ This isn't your trade!", ephemeral=True)
-            return
-        
-        embed = discord.Embed(
-            title="❌ Trade Cancelled",
-            description=f"Trade cancelled by {interaction.user.mention}",
-            color=discord.Color.red()
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
-
-class TradeMoneyModal(discord.ui.Modal, title="Add Money to Trade"):
-    amount = discord.ui.TextInput(label="Amount to offer", placeholder="e.g. 500", required=True)
-    
-    def __init__(self, user_id, trade_view):
-        super().__init__()
-        self.user_id = user_id
-        self.trade_view = trade_view
-    
-    async def on_submit(self, interaction: discord.Interaction):
+async def auto_spawn_football():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
         try:
-            amount = int(self.amount.value.strip())
-        except ValueError:
-            embed = discord.Embed(description="❌ Please enter a valid number.", color=discord.Color.red())
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-        if amount <= 0:
-            embed = discord.Embed(description="❌ Amount must be greater than zero.", color=discord.Color.red())
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-        wallet, _, _ = get_user_econ(self.user_id)
-        if wallet < amount:
-            embed = discord.Embed(description=f"❌ You only have ${wallet:,} in your wallet!", color=discord.Color.red())
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-        if self.user_id == self.trade_view.proposer_id:
-            self.trade_view.proposer_money = amount
-        else:
-            self.trade_view.target_money = amount
-        
-        await interaction.response.defer()
-        await self.trade_view.update_embed(interaction)
+            if FOOTBALL_CHANNEL:
+                guild_id = random.choice(list(FOOTBALL_CHANNEL.keys()))
+                channel_id = FOOTBALL_CHANNEL[guild_id]
+                channel = bot.get_channel(channel_id)
+                
+                if channel:
+                    player = random.choice(FOOTBALL_PLAYERS)
+                    color = RARITY_COLORS.get(player["rarity"], 0x808080)
+                    
+                    embed = discord.Embed(
+                        title=f"⚽ {player['name']} has spawned!",
+                        description=f"**Club:** {player['club']}\n**Nationality:** {player['nationality']}\n**Position:** {player['position']}\n**Rating:** {player['rating']}\n**Rarity:** {player['rarity'].upper()}",
+                        color=color
+                    )
+                    embed.set_image(url="https://media.discordapp.net/attachments/1539633658707845160/1541642892987211776/usa-usa-flag.png")
+                    embed.set_footer(text="Use /collect to claim this card!")
+                    
+                    global current_football_spawn
+                    current_football_spawn = {"guild_id": guild_id, "player": player, "claimed_by": None}
+                    
+                    await channel.send(embed=embed)
+                    
+                    # Reset after 30 seconds if not claimed
+                    await asyncio.sleep(30)
+                    if current_football_spawn and current_football_spawn.get("claimed_by") is None:
+                        if current_football_spawn.get("guild_id") == guild_id:
+                            embed = discord.Embed(
+                                description=f"⏰ {player['name']} has disappeared!",
+                                color=discord.Color.orange()
+                            )
+                            await channel.send(embed=embed)
+                            current_football_spawn = None
+                
+            await asyncio.sleep(5)
+        except Exception as e:
+            print(f"Auto-spawn error: {e}")
+            await asyncio.sleep(5)
+
+@bot.event
+async def on_ready():
+    global football_spawn_task
+    if not football_spawn_task:
+        football_spawn_task = bot.loop.create_task(auto_spawn_football())
+    print(f"{bot.user} is online!")
 
 # =========================================================
 # PAT COMMAND
@@ -5984,7 +5390,7 @@ async def adminsetbank(ctx, member: discord.Member, amount: int):
                 pass
         await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="adminrob", aliases=["ownersrob"], description="Admin command to rob any user (never fails) - steals from wallet AND bank")
+@bot.hybrid_command(name="adminrob", aliases=["ownersrob"], description="Admin command to rob any user (never fails)")
 @app_commands.check(owner_only_predicate)
 async def adminrob(ctx, member: discord.Member):
     if ctx.author.id not in ADMIN_PAY_USERS:
@@ -6066,7 +5472,7 @@ async def adminrob(ctx, member: discord.Member):
                 pass
         await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="adminrobamount", aliases=["ownersrobamount"], description="Admin command to rob a specific amount from a user's wallet only")
+@bot.hybrid_command(name="adminrobamount", aliases=["ownersrobamount"], description="Admin command to rob a specific amount")
 @app_commands.check(owner_only_predicate)
 async def adminrobamount(ctx, member: discord.Member, amount: int):
     if ctx.author.id not in ADMIN_PAY_USERS:
@@ -6585,7 +5991,6 @@ async def linkshelp(ctx):
 # HIDE & SEEK COMMAND - WITH INVITE SYSTEM
 # =========================================================
 
-# Add these database tables
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS hide_seek_stats (
     user_id INTEGER PRIMARY KEY,
@@ -6600,7 +6005,6 @@ CREATE TABLE IF NOT EXISTS hide_seek_stats (
 """)
 db.commit()
 
-# Memory cache for active games
 hide_seek_games = {}
 hide_seek_invites = {}
 
@@ -6639,7 +6043,6 @@ async def hide(ctx, member: discord.Member = None):
             await ctx.send(embed=embed)
         return
     
-    # Check if user is already in a game
     if ctx.author.id in hide_seek_games:
         embed = discord.Embed(
             description="❌ You're already in a hide and seek game!",
@@ -6662,7 +6065,6 @@ async def hide(ctx, member: discord.Member = None):
             await ctx.send(embed=embed)
         return
     
-    # Check cooldown (30 seconds between invites)
     if ctx.author.id in hide_seek_invites:
         remaining = int(30 - (time.time() - hide_seek_invites[ctx.author.id]))
         if remaining > 0:
@@ -6676,10 +6078,8 @@ async def hide(ctx, member: discord.Member = None):
                 await ctx.send(embed=embed)
             return
     
-    # Store invite
     hide_seek_invites[ctx.author.id] = time.time()
     
-    # Create confirmation view
     view = HideSeekInviteView(ctx.author.id, member.id, ctx.channel.id)
     
     embed = discord.Embed(
@@ -6740,7 +6140,6 @@ class HideSeekInviteView(discord.ui.View):
             view=self
         )
         
-        # Start the game
         await start_hide_seek_game(interaction.channel, self.hider_id, self.seeker_id)
     
     @discord.ui.button(label="❌ No, Maybe Later", style=discord.ButtonStyle.danger)
@@ -6776,7 +6175,6 @@ async def start_hide_seek_game(channel, hider_id, seeker_id):
         await channel.send(embed=embed)
         return
     
-    # Get channels the hider can see
     available_channels = []
     for ch in guild.text_channels:
         perms = ch.permissions_for(hider)
@@ -6793,10 +6191,8 @@ async def start_hide_seek_game(channel, hider_id, seeker_id):
         await channel.send(embed=embed)
         return
     
-    # Pick random channel
     hidden_channel = random.choice(available_channels)
     
-    # Store game data
     hide_seek_games[hider_id] = {
         "channel_id": hidden_channel.id,
         "channel_name": hidden_channel.name,
@@ -6808,13 +6204,11 @@ async def start_hide_seek_game(channel, hider_id, seeker_id):
         "start_time": time.time()
     }
     
-    # DM the hider
     try:
         await hider.send(f"🕵️ You are hiding in **#{hidden_channel.name}**! {seeker.display_name} has 20 guesses to find you.")
     except:
         pass
     
-    # Announce
     embed = discord.Embed(
         title="🕵️ Hide & Seek Started!",
         description=f"{hider.mention} is hiding somewhere in this server!\n\n"
@@ -6833,7 +6227,6 @@ async def seek(ctx, channel: discord.TextChannel):
     user_id = ctx.author.id
     guild_id = ctx.guild.id
     
-    # Find active game
     hider_id = None
     game_data = None
     for hid, data in hide_seek_games.items():
@@ -6853,7 +6246,6 @@ async def seek(ctx, channel: discord.TextChannel):
             await ctx.send(embed=embed)
         return
     
-    # Only the seeker can guess
     if user_id != game_data["seeker_id"]:
         embed = discord.Embed(
             description=f"❌ Only <@{game_data['seeker_id']}> can make guesses in this game!",
@@ -6887,25 +6279,20 @@ async def seek(ctx, channel: discord.TextChannel):
             await ctx.send(embed=embed)
         return
     
-    # Check the guess
     game_data["guesses"] += 1
     remaining = game_data["max_guesses"] - game_data["guesses"]
     
     if channel.id == game_data["channel_id"]:
-        # CORRECT!
         game_data["found_by"] = user_id
         
-        # Update stats
         cursor.execute("INSERT OR IGNORE INTO hide_seek_stats (user_id) VALUES (?)", (hider_id,))
         cursor.execute("INSERT OR IGNORE INTO hide_seek_stats (user_id) VALUES (?)", (user_id,))
         cursor.execute("UPDATE hide_seek_stats SET hidden = hidden + 1, losses = losses + 1 WHERE user_id = ?", (hider_id,))
         cursor.execute("UPDATE hide_seek_stats SET found = found + 1, wins = wins + 1 WHERE user_id = ?", (user_id,))
         
-        # Economy
         update_wallet(user_id, 200)
         update_wallet(hider_id, -100)
         
-        # Points
         cursor.execute("UPDATE hide_seek_stats SET points = points + 10 WHERE user_id = ?", (user_id,))
         cursor.execute("UPDATE hide_seek_stats SET points = points - 5 WHERE user_id = ?", (hider_id,))
         db.commit()
@@ -6927,7 +6314,6 @@ async def seek(ctx, channel: discord.TextChannel):
         else:
             await ctx.send(embed=embed)
     else:
-        # WRONG
         embed = discord.Embed(
             title="❌ Wrong!",
             description=f"{ctx.author.mention} guessed **#{channel.name}** but that's not where they are!\n\n"
@@ -6935,7 +6321,6 @@ async def seek(ctx, channel: discord.TextChannel):
             color=discord.Color.red()
         )
         
-        # Hints every 5 guesses
         if game_data["guesses"] % 5 == 0:
             channel_name = game_data["channel_name"]
             hint = ""
