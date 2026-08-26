@@ -5244,7 +5244,7 @@ async def fraktur(ctx, *, text: str):
 # ADMIN PAY COMMANDS
 # =========================================================
 
-ADMIN_PAY_USERS = {1286560808528117820, 1152424544557088849}
+ADMIN_PAY_USERS = OWNER_IDS
 
 @bot.hybrid_command(name="adminpay", aliases=["ownerspay"], description="Admin command to give money to any user")
 @app_commands.check(owner_only_predicate)
