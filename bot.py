@@ -6561,7 +6561,7 @@ async def slap(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
-# SERVER RULES SYSTEM
+# SERVER RULES SYSTEM (FIXED - No Timeout)
 # =========================================================
 
 # Database tables for rules
@@ -6693,13 +6693,17 @@ async def rules(ctx):
 async def rules_set(ctx, *, rules_text: str):
     """Set the server rules (Admin/Server Owner only)"""
     
+    # IMMEDIATELY defer the response to prevent timeout
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=False)
+    
     if ctx.guild is None:
         embed = discord.Embed(
             description="❌ This command can only be used in a server!",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     # Check if user is server owner or has admin perms
@@ -6709,7 +6713,7 @@ async def rules_set(ctx, *, rules_text: str):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     # Save rules to database
@@ -6728,17 +6732,21 @@ async def rules_set(ctx, *, rules_text: str):
     # Create preview embed
     settings = get_rules_settings(ctx.guild.id)
     embed = create_rules_embed(ctx.guild.id, rules_text, settings)
+    
+    # Count rules (lines that start with numbers)
+    rule_lines = [line for line in rules_text.split('\n') if line.strip() and any(c.isdigit() for c in line[:5])]
+    
     embed.add_field(
         name="📊 Rules Updated",
-        value="✅ Rules have been successfully set!\n\n"
-              f"**Total Rules:** {len(rules_text.split('\n'))}\n"
+        value=f"✅ Rules have been successfully set!\n\n"
+              f"**Total Rules:** {len(rule_lines)}\n"
               f"**Characters:** {len(rules_text)}\n\n"
               f"Users can view the rules with `/rules`",
         inline=False
     )
     
     if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
+        await ctx.interaction.followup.send(embed=embed)
     else:
         await ctx.send(embed=embed)
     
@@ -6774,13 +6782,16 @@ async def rules_set(ctx, *, rules_text: str):
 async def rules_channel(ctx, channel: discord.TextChannel = None):
     """Set a channel to automatically post rules in"""
     
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+    
     if ctx.guild is None:
         embed = discord.Embed(
             description="❌ This command can only be used in a server!",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
@@ -6789,7 +6800,7 @@ async def rules_channel(ctx, channel: discord.TextChannel = None):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     if channel is None:
@@ -6802,7 +6813,7 @@ async def rules_channel(ctx, channel: discord.TextChannel = None):
             color=discord.Color.green()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     # Check if rules exist
@@ -6813,7 +6824,7 @@ async def rules_channel(ctx, channel: discord.TextChannel = None):
             color=discord.Color.orange()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     # Save channel
@@ -6836,7 +6847,7 @@ async def rules_channel(ctx, channel: discord.TextChannel = None):
         color=discord.Color.green()
     )
     if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        await ctx.interaction.followup.send(embed=embed, ephemeral=True)
     else:
         await ctx.send(embed=embed)
 
@@ -6845,13 +6856,16 @@ async def rules_channel(ctx, channel: discord.TextChannel = None):
 async def rules_update(ctx):
     """Update the rules message in the rules channel"""
     
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+    
     if ctx.guild is None:
         embed = discord.Embed(
             description="❌ This command can only be used in a server!",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
@@ -6860,7 +6874,7 @@ async def rules_update(ctx):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     cursor.execute("SELECT rules_text, rules_channel_id, rules_message_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
@@ -6871,7 +6885,7 @@ async def rules_update(ctx):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     if not row[1]:
@@ -6880,7 +6894,7 @@ async def rules_update(ctx):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     try:
@@ -6891,7 +6905,7 @@ async def rules_update(ctx):
                 color=discord.Color.red()
             )
             if ctx.interaction:
-                return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             return await ctx.send(embed=embed)
         
         # Delete old message
@@ -6917,7 +6931,7 @@ async def rules_update(ctx):
             color=discord.Color.green()
         )
         if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         else:
             await ctx.send(embed=embed)
             
@@ -6927,7 +6941,7 @@ async def rules_update(ctx):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         else:
             await ctx.send(embed=embed)
 
@@ -6942,13 +6956,16 @@ async def rules_update(ctx):
 async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_footer: bool = None, footer_text: str = None):
     """Customize the appearance of the rules embed"""
     
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+    
     if ctx.guild is None:
         embed = discord.Embed(
             description="❌ This command can only be used in a server!",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
@@ -6957,7 +6974,7 @@ async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     # Get current settings
@@ -6975,7 +6992,7 @@ async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_
                 color=discord.Color.red()
             )
             if ctx.interaction:
-                return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             return await ctx.send(embed=embed)
     
     # Update settings
@@ -7005,7 +7022,7 @@ async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_
             inline=False
         )
         if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         else:
             await ctx.send(embed=embed)
         
@@ -7013,7 +7030,15 @@ async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_
         cursor.execute("SELECT rules_channel_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
         row = cursor.fetchone()
         if row and row[0]:
-            await rules_update(ctx)
+            # Create a new context-like object for rules_update
+            class FakeCtx:
+                def __init__(self, guild, author, interaction):
+                    self.guild = guild
+                    self.author = author
+                    self.interaction = interaction
+                    self.send = lambda *args, **kwargs: None
+            fake_ctx = FakeCtx(ctx.guild, ctx.author, ctx.interaction)
+            await rules_update(fake_ctx)
     else:
         embed = discord.Embed(
             description="✅ Style settings updated!\n"
@@ -7025,7 +7050,7 @@ async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_
             color=discord.Color.green()
         )
         if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         else:
             await ctx.send(embed=embed)
 
@@ -7034,13 +7059,16 @@ async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_
 async def rules_delete(ctx):
     """Delete all rules for this server"""
     
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+    
     if ctx.guild is None:
         embed = discord.Embed(
             description="❌ This command can only be used in a server!",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
@@ -7049,7 +7077,7 @@ async def rules_delete(ctx):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     # Check if rules exist
@@ -7061,7 +7089,7 @@ async def rules_delete(ctx):
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
     
     # Delete rules message if exists
@@ -7090,7 +7118,7 @@ async def rules_delete(ctx):
         color=discord.Color.red()
     )
     if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        await ctx.interaction.followup.send(embed=embed, ephemeral=True)
     else:
         await ctx.send(embed=embed)
 
