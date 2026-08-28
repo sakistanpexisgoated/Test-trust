@@ -6561,7 +6561,7 @@ async def slap(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
-# SERVER RULES SYSTEM (FIXED - No Timeout)
+# SERVER RULES SYSTEM (FULLY FIXED)
 # =========================================================
 
 # Database tables for rules
@@ -6581,8 +6581,7 @@ CREATE TABLE IF NOT EXISTS server_rules_settings (
     embed_color INTEGER DEFAULT 0x5865F2,
     show_timestamp BOOLEAN DEFAULT 1,
     show_footer BOOLEAN DEFAULT 1,
-    footer_text TEXT DEFAULT 'Use common sense',
-    auto_post_on_join BOOLEAN DEFAULT 0
+    footer_text TEXT DEFAULT 'Use common sense'
 )
 """)
 db.commit()
@@ -6652,282 +6651,228 @@ def create_rules_embed(guild_id, rules_text, settings=None):
     
     return embed
 
+# =========================================================
+# RULES COMMANDS (FIXED)
+# =========================================================
+
 @bot.hybrid_command(name="rules", description="View the server rules")
 async def rules(ctx):
     """Display the server rules"""
-    
-    if ctx.guild is None:
+    try:
+        if ctx.guild is None:
+            embed = discord.Embed(
+                description="❌ This command can only be used in a server!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        # Check if rules exist
+        rules_data = rules_cache.get(ctx.guild.id)
+        if not rules_data or not rules_data.get("rules_text"):
+            embed = discord.Embed(
+                description="📋 No rules have been set for this server yet!\n\n"
+                           f"Server owners can use `/rules_set` to add rules.",
+                color=discord.Color.orange()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        settings = get_rules_settings(ctx.guild.id)
+        embed = create_rules_embed(ctx.guild.id, rules_data["rules_text"], settings)
+        
+        view = RulesView(ctx.guild.id)
+        
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, view=view)
+        else:
+            await ctx.send(embed=embed, view=view)
+    except Exception as e:
+        print(f"Rules command error: {e}")
         embed = discord.Embed(
-            description="❌ This command can only be used in a server!",
+            description="❌ Something went wrong while fetching rules.",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Check if rules exist
-    rules_data = rules_cache.get(ctx.guild.id)
-    if not rules_data or not rules_data.get("rules_text"):
-        embed = discord.Embed(
-            description="📋 No rules have been set for this server yet!\n\n"
-                       f"Server owners can use `/rules_set` to add rules.",
-            color=discord.Color.orange()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    settings = get_rules_settings(ctx.guild.id)
-    embed = create_rules_embed(ctx.guild.id, rules_data["rules_text"], settings)
-    
-    view = RulesView(ctx.guild.id)
-    
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, view=view)
-    else:
-        await ctx.send(embed=embed, view=view)
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="rules_set", description="Set or update the server rules (Server Owner only)")
 @app_commands.describe(rules_text="The rules text (use numbered lines for best results)")
 @commands.has_permissions(administrator=True)
 async def rules_set(ctx, *, rules_text: str):
     """Set the server rules (Admin/Server Owner only)"""
-    
-    # IMMEDIATELY defer the response to prevent timeout
-    if ctx.interaction:
-        await ctx.interaction.response.defer(ephemeral=False)
-    
-    if ctx.guild is None:
-        embed = discord.Embed(
-            description="❌ This command can only be used in a server!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Check if user is server owner or has admin perms
-    if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
-        embed = discord.Embed(
-            description="👑 Only the server owner or administrators can set rules!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Save rules to database
-    cursor.execute("""
-        INSERT OR REPLACE INTO server_rules (guild_id, rules_text, updated_at) 
-        VALUES (?, ?, ?)
-    """, (ctx.guild.id, rules_text, time.time()))
-    db.commit()
-    
-    # Update cache
-    rules_cache[ctx.guild.id] = {
-        "rules_text": rules_text,
-        "updated_at": time.time()
-    }
-    
-    # Create preview embed
-    settings = get_rules_settings(ctx.guild.id)
-    embed = create_rules_embed(ctx.guild.id, rules_text, settings)
-    
-    # Count rules (lines that start with numbers)
-    rule_lines = [line for line in rules_text.split('\n') if line.strip() and any(c.isdigit() for c in line[:5])]
-    
-    embed.add_field(
-        name="📊 Rules Updated",
-        value=f"✅ Rules have been successfully set!\n\n"
-              f"**Total Rules:** {len(rule_lines)}\n"
-              f"**Characters:** {len(rules_text)}\n\n"
-              f"Users can view the rules with `/rules`",
-        inline=False
-    )
-    
-    if ctx.interaction:
-        await ctx.interaction.followup.send(embed=embed)
-    else:
-        await ctx.send(embed=embed)
-    
-    # If there's a designated rules channel, update it
-    cursor.execute("SELECT rules_channel_id, rules_message_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
-    row = cursor.fetchone()
-    if row and row[0]:
-        try:
-            channel = ctx.guild.get_channel(row[0]) or await bot.fetch_channel(row[0])
-            if channel:
-                # Delete old message if exists
-                if row[1]:
-                    try:
-                        old_msg = await channel.fetch_message(row[1])
-                        await old_msg.delete()
-                    except:
-                        pass
-                
-                # Send new rules message
-                new_embed = create_rules_embed(ctx.guild.id, rules_text, settings)
-                view = RulesView(ctx.guild.id)
-                new_msg = await channel.send(embed=new_embed, view=view)
-                
-                # Update message ID
-                cursor.execute("UPDATE server_rules SET rules_message_id = ? WHERE guild_id = ?", (new_msg.id, ctx.guild.id))
-                db.commit()
-        except:
-            pass
-
-@bot.hybrid_command(name="rules_channel", description="Set a channel to auto-post rules (Server Owner only)")
-@app_commands.describe(channel="The channel to post rules in")
-@commands.has_permissions(administrator=True)
-async def rules_channel(ctx, channel: discord.TextChannel = None):
-    """Set a channel to automatically post rules in"""
-    
-    if ctx.interaction:
-        await ctx.interaction.response.defer(ephemeral=True)
-    
-    if ctx.guild is None:
-        embed = discord.Embed(
-            description="❌ This command can only be used in a server!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
-        embed = discord.Embed(
-            description="👑 Only the server owner or administrators can set rules channel!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    if channel is None:
-        # Clear rules channel
-        cursor.execute("UPDATE server_rules SET rules_channel_id = NULL, rules_message_id = NULL WHERE guild_id = ?", (ctx.guild.id,))
-        db.commit()
-        
-        embed = discord.Embed(
-            description="✅ Rules channel has been cleared!",
-            color=discord.Color.green()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Check if rules exist
-    rules_data = rules_cache.get(ctx.guild.id)
-    if not rules_data or not rules_data.get("rules_text"):
-        embed = discord.Embed(
-            description="⚠️ You need to set rules first! Use `/rules_set` to add rules.",
-            color=discord.Color.orange()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Save channel
-    cursor.execute("UPDATE server_rules SET rules_channel_id = ? WHERE guild_id = ?", (channel.id, ctx.guild.id))
-    db.commit()
-    
-    # Post rules in channel
-    settings = get_rules_settings(ctx.guild.id)
-    embed = create_rules_embed(ctx.guild.id, rules_data["rules_text"], settings)
-    view = RulesView(ctx.guild.id)
-    msg = await channel.send(embed=embed, view=view)
-    
-    # Save message ID
-    cursor.execute("UPDATE server_rules SET rules_message_id = ? WHERE guild_id = ?", (msg.id, ctx.guild.id))
-    db.commit()
-    
-    embed = discord.Embed(
-        description=f"✅ Rules will be posted in {channel.mention}!\n"
-                    f"Rules message: [Click to view]({msg.jump_url})",
-        color=discord.Color.green()
-    )
-    if ctx.interaction:
-        await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-    else:
-        await ctx.send(embed=embed)
-
-@bot.hybrid_command(name="rules_update", description="Update the rules message in the rules channel (Server Owner only)")
-@commands.has_permissions(administrator=True)
-async def rules_update(ctx):
-    """Update the rules message in the rules channel"""
-    
-    if ctx.interaction:
-        await ctx.interaction.response.defer(ephemeral=True)
-    
-    if ctx.guild is None:
-        embed = discord.Embed(
-            description="❌ This command can only be used in a server!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
-        embed = discord.Embed(
-            description="👑 Only the server owner or administrators can update rules!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    cursor.execute("SELECT rules_text, rules_channel_id, rules_message_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
-    row = cursor.fetchone()
-    if not row or not row[0]:
-        embed = discord.Embed(
-            description="❌ No rules set! Use `/rules_set` first.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    if not row[1]:
-        embed = discord.Embed(
-            description="❌ No rules channel set! Use `/rules_channel #channel` first.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
     try:
-        channel = ctx.guild.get_channel(row[1]) or await bot.fetch_channel(row[1])
-        if not channel:
+        # IMMEDIATELY defer the response to prevent timeout
+        if ctx.interaction:
+            await ctx.interaction.response.defer(ephemeral=False)
+        
+        if ctx.guild is None:
             embed = discord.Embed(
-                description="❌ Rules channel not found! Set a new one with `/rules_channel`.",
+                description="❌ This command can only be used in a server!",
                 color=discord.Color.red()
             )
             if ctx.interaction:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             return await ctx.send(embed=embed)
         
-        # Delete old message
-        if row[2]:
+        # Check if user is server owner or has admin perms
+        if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
+            embed = discord.Embed(
+                description="👑 Only the server owner or administrators can set rules!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        # Save rules to database
+        cursor.execute("""
+            INSERT OR REPLACE INTO server_rules (guild_id, rules_text, updated_at) 
+            VALUES (?, ?, ?)
+        """, (ctx.guild.id, rules_text, time.time()))
+        db.commit()
+        
+        # Update cache
+        rules_cache[ctx.guild.id] = {
+            "rules_text": rules_text,
+            "updated_at": time.time()
+        }
+        
+        # Create preview embed
+        settings = get_rules_settings(ctx.guild.id)
+        embed = create_rules_embed(ctx.guild.id, rules_text, settings)
+        
+        # Count rules (lines that start with numbers)
+        rule_lines = [line for line in rules_text.split('\n') if line.strip() and any(c.isdigit() for c in line[:5])]
+        
+        embed.add_field(
+            name="📊 Rules Updated",
+            value=f"✅ Rules have been successfully set!\n\n"
+                  f"**Total Rules:** {len(rule_lines)}\n"
+                  f"**Characters:** {len(rules_text)}\n\n"
+                  f"Users can view the rules with `/rules`",
+            inline=False
+        )
+        
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        
+        # If there's a designated rules channel, update it
+        cursor.execute("SELECT rules_channel_id, rules_message_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
+        row = cursor.fetchone()
+        if row and row[0]:
             try:
-                old_msg = await channel.fetch_message(row[2])
-                await old_msg.delete()
+                channel = ctx.guild.get_channel(row[0])
+                if not channel:
+                    channel = await bot.fetch_channel(row[0])
+                if channel:
+                    # Delete old message if exists
+                    if row[1]:
+                        try:
+                            old_msg = await channel.fetch_message(row[1])
+                            await old_msg.delete()
+                        except:
+                            pass
+                    
+                    # Send new rules message
+                    new_embed = create_rules_embed(ctx.guild.id, rules_text, settings)
+                    view = RulesView(ctx.guild.id)
+                    new_msg = await channel.send(embed=new_embed, view=view)
+                    
+                    # Update message ID
+                    cursor.execute("UPDATE server_rules SET rules_message_id = ? WHERE guild_id = ?", (new_msg.id, ctx.guild.id))
+                    db.commit()
+            except Exception as e:
+                print(f"Failed to update rules channel: {e}")
+                
+    except Exception as e:
+        print(f"Rules set error: {e}")
+        embed = discord.Embed(
+            description=f"❌ Failed to set rules: {str(e)[:100]}",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             except:
                 pass
+        else:
+            await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="rules_channel", description="Set a channel to auto-post rules (Server Owner only)")
+@app_commands.describe(channel="The channel to post rules in")
+@commands.has_permissions(administrator=True)
+async def rules_channel(ctx, channel: discord.TextChannel = None):
+    """Set a channel to automatically post rules in"""
+    try:
+        if ctx.interaction:
+            await ctx.interaction.response.defer(ephemeral=True)
         
-        # Send new message
+        if ctx.guild is None:
+            embed = discord.Embed(
+                description="❌ This command can only be used in a server!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
+            embed = discord.Embed(
+                description="👑 Only the server owner or administrators can set rules channel!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        if channel is None:
+            # Clear rules channel
+            cursor.execute("UPDATE server_rules SET rules_channel_id = NULL, rules_message_id = NULL WHERE guild_id = ?", (ctx.guild.id,))
+            db.commit()
+            
+            embed = discord.Embed(
+                description="✅ Rules channel has been cleared!",
+                color=discord.Color.green()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        # Check if rules exist
+        rules_data = rules_cache.get(ctx.guild.id)
+        if not rules_data or not rules_data.get("rules_text"):
+            embed = discord.Embed(
+                description="⚠️ You need to set rules first! Use `/rules_set` to add rules.",
+                color=discord.Color.orange()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        # Save channel
+        cursor.execute("UPDATE server_rules SET rules_channel_id = ? WHERE guild_id = ?", (channel.id, ctx.guild.id))
+        db.commit()
+        
+        # Post rules in channel
         settings = get_rules_settings(ctx.guild.id)
-        embed = create_rules_embed(ctx.guild.id, row[0], settings)
+        embed = create_rules_embed(ctx.guild.id, rules_data["rules_text"], settings)
         view = RulesView(ctx.guild.id)
-        new_msg = await channel.send(embed=embed, view=view)
+        msg = await channel.send(embed=embed, view=view)
         
-        cursor.execute("UPDATE server_rules SET rules_message_id = ? WHERE guild_id = ?", (new_msg.id, ctx.guild.id))
+        # Save message ID
+        cursor.execute("UPDATE server_rules SET rules_message_id = ? WHERE guild_id = ?", (msg.id, ctx.guild.id))
         db.commit()
         
         embed = discord.Embed(
-            description=f"✅ Rules updated in {channel.mention}!\n"
-                        f"New message: [Click to view]({new_msg.jump_url})",
+            description=f"✅ Rules will be posted in {channel.mention}!\n"
+                        f"Rules message: [Click to view]({msg.jump_url})",
             color=discord.Color.green()
         )
         if ctx.interaction:
@@ -6936,14 +6881,117 @@ async def rules_update(ctx):
             await ctx.send(embed=embed)
             
     except Exception as e:
+        print(f"Rules channel error: {e}")
         embed = discord.Embed(
-            description=f"❌ Failed to update rules: {str(e)}",
+            description=f"❌ Failed to set rules channel: {str(e)[:100]}",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            try:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except:
+                pass
         else:
             await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="rules_update", description="Update the rules message in the rules channel (Server Owner only)")
+@commands.has_permissions(administrator=True)
+async def rules_update(ctx):
+    """Update the rules message in the rules channel"""
+    try:
+        if ctx.interaction:
+            await ctx.interaction.response.defer(ephemeral=True)
+        
+        if ctx.guild is None:
+            embed = discord.Embed(
+                description="❌ This command can only be used in a server!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
+            embed = discord.Embed(
+                description="👑 Only the server owner or administrators can update rules!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        cursor.execute("SELECT rules_text, rules_channel_id, rules_message_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            embed = discord.Embed(
+                description="❌ No rules set! Use `/rules_set` first.",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        if not row[1]:
+            embed = discord.Embed(
+                description="❌ No rules channel set! Use `/rules_channel #channel` first.",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        try:
+            channel = ctx.guild.get_channel(row[1])
+            if not channel:
+                channel = await bot.fetch_channel(row[1])
+            if not channel:
+                embed = discord.Embed(
+                    description="❌ Rules channel not found! Set a new one with `/rules_channel`.",
+                    color=discord.Color.red()
+                )
+                if ctx.interaction:
+                    return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.send(embed=embed)
+            
+            # Delete old message
+            if row[2]:
+                try:
+                    old_msg = await channel.fetch_message(row[2])
+                    await old_msg.delete()
+                except:
+                    pass
+            
+            # Send new message
+            settings = get_rules_settings(ctx.guild.id)
+            embed = create_rules_embed(ctx.guild.id, row[0], settings)
+            view = RulesView(ctx.guild.id)
+            new_msg = await channel.send(embed=embed, view=view)
+            
+            cursor.execute("UPDATE server_rules SET rules_message_id = ? WHERE guild_id = ?", (new_msg.id, ctx.guild.id))
+            db.commit()
+            
+            embed = discord.Embed(
+                description=f"✅ Rules updated in {channel.mention}!\n"
+                            f"New message: [Click to view]({new_msg.jump_url})",
+                color=discord.Color.green()
+            )
+            if ctx.interaction:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+                
+        except Exception as e:
+            embed = discord.Embed(
+                description=f"❌ Failed to update rules: {str(e)[:100]}",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+                
+    except Exception as e:
+        print(f"Rules update error: {e}")
 
 @bot.hybrid_command(name="rules_style", description="Customize the rules embed style (Server Owner only)")
 @app_commands.describe(
@@ -6955,102 +7003,102 @@ async def rules_update(ctx):
 @commands.has_permissions(administrator=True)
 async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_footer: bool = None, footer_text: str = None):
     """Customize the appearance of the rules embed"""
-    
-    if ctx.interaction:
-        await ctx.interaction.response.defer(ephemeral=True)
-    
-    if ctx.guild is None:
-        embed = discord.Embed(
-            description="❌ This command can only be used in a server!",
-            color=discord.Color.red()
-        )
+    try:
         if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
-        embed = discord.Embed(
-            description="👑 Only the server owner or administrators can customize rules!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Get current settings
-    current = get_rules_settings(ctx.guild.id)
-    
-    # Parse color
-    embed_color = current["color"]
-    if color:
-        try:
-            color_hex = color.lstrip('#')
-            embed_color = int(color_hex, 16)
-        except:
+            await ctx.interaction.response.defer(ephemeral=True)
+        
+        if ctx.guild is None:
             embed = discord.Embed(
-                description="❌ Invalid color format! Use hex like `#5865F2` or `5865F2`",
+                description="❌ This command can only be used in a server!",
                 color=discord.Color.red()
             )
             if ctx.interaction:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
             return await ctx.send(embed=embed)
-    
-    # Update settings
-    cursor.execute("""
-        INSERT OR REPLACE INTO server_rules_settings (guild_id, embed_color, show_timestamp, show_footer, footer_text)
-        VALUES (?, ?, ?, ?, ?)
-    """, (
-        ctx.guild.id,
-        embed_color if color is not None else current["color"],
-        show_timestamp if show_timestamp is not None else current["show_timestamp"],
-        show_footer if show_footer is not None else current["show_footer"],
-        footer_text if footer_text is not None else current["footer_text"]
-    ))
-    db.commit()
-    
-    # Show preview
-    rules_data = rules_cache.get(ctx.guild.id)
-    if rules_data and rules_data.get("rules_text"):
-        settings = get_rules_settings(ctx.guild.id)
-        embed = create_rules_embed(ctx.guild.id, rules_data["rules_text"], settings)
-        embed.add_field(
-            name="✅ Style Updated!",
-            value=f"**Color:** `{hex(embed_color)}`\n"
-                  f"**Timestamp:** {'✅' if settings['show_timestamp'] else '❌'}\n"
-                  f"**Footer:** {'✅' if settings['show_footer'] else '❌'}\n"
-                  f"**Footer Text:** `{settings['footer_text']}`",
-            inline=False
-        )
-        if ctx.interaction:
-            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
         
-        # Auto-update rules channel if exists
-        cursor.execute("SELECT rules_channel_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
-        row = cursor.fetchone()
-        if row and row[0]:
-            # Create a new context-like object for rules_update
-            class FakeCtx:
-                def __init__(self, guild, author, interaction):
-                    self.guild = guild
-                    self.author = author
-                    self.interaction = interaction
-                    self.send = lambda *args, **kwargs: None
-            fake_ctx = FakeCtx(ctx.guild, ctx.author, ctx.interaction)
-            await rules_update(fake_ctx)
-    else:
+        if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
+            embed = discord.Embed(
+                description="👑 Only the server owner or administrators can customize rules!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        # Get current settings
+        current = get_rules_settings(ctx.guild.id)
+        
+        # Parse color
+        embed_color = current["color"]
+        if color:
+            try:
+                color_hex = color.lstrip('#')
+                embed_color = int(color_hex, 16)
+            except:
+                embed = discord.Embed(
+                    description="❌ Invalid color format! Use hex like `#5865F2` or `5865F2`",
+                    color=discord.Color.red()
+                )
+                if ctx.interaction:
+                    return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                return await ctx.send(embed=embed)
+        
+        # Update settings
+        cursor.execute("""
+            INSERT OR REPLACE INTO server_rules_settings (guild_id, embed_color, show_timestamp, show_footer, footer_text)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            ctx.guild.id,
+            embed_color if color is not None else current["color"],
+            show_timestamp if show_timestamp is not None else current["show_timestamp"],
+            show_footer if show_footer is not None else current["show_footer"],
+            footer_text if footer_text is not None else current["footer_text"]
+        ))
+        db.commit()
+        
+        # Show preview
+        rules_data = rules_cache.get(ctx.guild.id)
+        if rules_data and rules_data.get("rules_text"):
+            settings = get_rules_settings(ctx.guild.id)
+            embed = create_rules_embed(ctx.guild.id, rules_data["rules_text"], settings)
+            embed.add_field(
+                name="✅ Style Updated!",
+                value=f"**Color:** `{hex(embed_color)}`\n"
+                      f"**Timestamp:** {'✅' if settings['show_timestamp'] else '❌'}\n"
+                      f"**Footer:** {'✅' if settings['show_footer'] else '❌'}\n"
+                      f"**Footer Text:** `{settings['footer_text']}`",
+                inline=False
+            )
+            if ctx.interaction:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+        else:
+            embed = discord.Embed(
+                description="✅ Style settings updated!\n"
+                            f"**Color:** `{hex(embed_color)}`\n"
+                            f"**Timestamp:** {'✅' if (show_timestamp if show_timestamp is not None else current['show_timestamp']) else '❌'}\n"
+                            f"**Footer:** {'✅' if (show_footer if show_footer is not None else current['show_footer']) else '❌'}\n"
+                            f"**Footer Text:** `{footer_text if footer_text is not None else current['footer_text']}`\n\n"
+                            f"Set rules with `/rules_set` to see the new style!",
+                color=discord.Color.green()
+            )
+            if ctx.interaction:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await ctx.send(embed=embed)
+                
+    except Exception as e:
+        print(f"Rules style error: {e}")
         embed = discord.Embed(
-            description="✅ Style settings updated!\n"
-                        f"**Color:** `{hex(embed_color)}`\n"
-                        f"**Timestamp:** {'✅' if (show_timestamp if show_timestamp is not None else current['show_timestamp']) else '❌'}\n"
-                        f"**Footer:** {'✅' if (show_footer if show_footer is not None else current['show_footer']) else '❌'}\n"
-                        f"**Footer Text:** `{footer_text if footer_text is not None else current['footer_text']}`\n\n"
-                        f"Set rules with `/rules_set` to see the new style!",
-            color=discord.Color.green()
+            description=f"❌ Failed to update style: {str(e)[:100]}",
+            color=discord.Color.red()
         )
         if ctx.interaction:
-            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            try:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except:
+                pass
         else:
             await ctx.send(embed=embed)
 
@@ -7058,80 +7106,97 @@ async def rules_style(ctx, color: str = None, show_timestamp: bool = None, show_
 @commands.has_permissions(administrator=True)
 async def rules_delete(ctx):
     """Delete all rules for this server"""
-    
-    if ctx.interaction:
-        await ctx.interaction.response.defer(ephemeral=True)
-    
-    if ctx.guild is None:
+    try:
+        if ctx.interaction:
+            await ctx.interaction.response.defer(ephemeral=True)
+        
+        if ctx.guild is None:
+            embed = discord.Embed(
+                description="❌ This command can only be used in a server!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
+            embed = discord.Embed(
+                description="👑 Only the server owner or administrators can delete rules!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        # Check if rules exist
+        cursor.execute("SELECT rules_text, rules_channel_id, rules_message_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            embed = discord.Embed(
+                description="❌ No rules to delete!",
+                color=discord.Color.red()
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+        
+        # Delete rules message if exists
+        if row[1] and row[2]:
+            try:
+                channel = ctx.guild.get_channel(row[1])
+                if channel:
+                    try:
+                        msg = await channel.fetch_message(row[2])
+                        await msg.delete()
+                    except:
+                        pass
+            except:
+                pass
+        
+        # Delete from database
+        cursor.execute("DELETE FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
+        cursor.execute("DELETE FROM server_rules_settings WHERE guild_id = ?", (ctx.guild.id,))
+        db.commit()
+        
+        # Remove from cache
+        rules_cache.pop(ctx.guild.id, None)
+        
         embed = discord.Embed(
-            description="❌ This command can only be used in a server!",
+            description="🗑️ All rules have been deleted for this server!",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    if ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+            
+    except Exception as e:
+        print(f"Rules delete error: {e}")
         embed = discord.Embed(
-            description="👑 Only the server owner or administrators can delete rules!",
+            description=f"❌ Failed to delete rules: {str(e)[:100]}",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Check if rules exist
-    cursor.execute("SELECT rules_text, rules_channel_id, rules_message_id FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
-    row = cursor.fetchone()
-    if not row or not row[0]:
-        embed = discord.Embed(
-            description="❌ No rules to delete!",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    # Delete rules message if exists
-    if row[1] and row[2]:
-        try:
-            channel = ctx.guild.get_channel(row[1])
-            if channel:
-                try:
-                    msg = await channel.fetch_message(row[2])
-                    await msg.delete()
-                except:
-                    pass
-        except:
-            pass
-    
-    # Delete from database
-    cursor.execute("DELETE FROM server_rules WHERE guild_id = ?", (ctx.guild.id,))
-    cursor.execute("DELETE FROM server_rules_settings WHERE guild_id = ?", (ctx.guild.id,))
-    db.commit()
-    
-    # Remove from cache
-    rules_cache.pop(ctx.guild.id, None)
-    
-    embed = discord.Embed(
-        description="🗑️ All rules have been deleted for this server!",
-        color=discord.Color.red()
-    )
-    if ctx.interaction:
-        await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-    else:
-        await ctx.send(embed=embed)
+            try:
+                await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except:
+                pass
+        else:
+            await ctx.send(embed=embed)
 
 # Load rules into cache on startup
 @bot.event
 async def on_ready():
     # Load rules from database
-    cursor.execute("SELECT guild_id, rules_text FROM server_rules")
-    for row in cursor.fetchall():
-        rules_cache[row[0]] = {
-            "rules_text": row[1],
-            "updated_at": time.time()
-        }
+    try:
+        cursor.execute("SELECT guild_id, rules_text FROM server_rules")
+        for row in cursor.fetchall():
+            rules_cache[row[0]] = {
+                "rules_text": row[1],
+                "updated_at": time.time()
+            }
+    except:
+        pass
     
     print(f'✅ Logged in as {bot.user}')
     print(f'📡 Connected to {len(bot.guilds)} servers')
@@ -7139,8 +7204,8 @@ async def on_ready():
     print(f'📋 Loaded rules for {len(rules_cache)} servers')
     await bot.change_presence(
         activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name=f"{len(bot.guilds)} servers | /help"
+            type=discord.ActivityType.listening,
+            name=f"{len(bot.guilds)} servers | R!help"
         )
     )
 # =========================================================
