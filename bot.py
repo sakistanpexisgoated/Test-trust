@@ -430,62 +430,9 @@ async def globally_block_blacklisted(ctx):
                 pass
         return False
     return True
-
 # =========================================================
 # ERROR HANDLER
 # =========================================================
-
-COMMAND_USAGE = {
-    "help": ",,help",
-    "afk": ",,afk [reason]",
-    "ban": ",,ban <member> [reason]",
-    "unban": ",,unban <user_id>",
-    "mute": ",,mute <member> [duration] [reason]",
-    "kick": ",,kick <member> [reason]",
-    "warn": ",,warn <member> [reason]",
-    "pay": ",,pay <member> <amount>",
-    "gamble": ",,gamble <amount>",
-    "dice": ",,dice <amount>",
-    "slots": ",,slots <amount>",
-    "crime": ",,crime",
-    "rob": ",,rob <member>",
-    "work": ",,work",
-    "deposit": ",,deposit <amount>",
-    "withdraw": ",,withdraw <amount>",
-    "marry": ",,marry <member>",
-    "divorce": ",,divorce",
-    "avatar": ",,avatar [member]",
-    "cf": ",,cf",
-    "gayrate": ",,gayrate [member]",
-    "8ball": ",,8ball <question>",
-    "pp": ",,pp [member]",
-    "roast": ",,roast [member1] [member2] [member3]",
-    "iq": ",,iq [member]",
-    "kiss": ",,kiss <member>",
-    "gif": ",,gif <search_term>",
-    "snipe": ",,snipe [number]",
-    "editsnipe": ",,editsnipe",
-    "hack": ",,hack <member>",
-    "poll": ",,poll <question>",
-    "say": ",,say <message>",
-    "embed": ",,embed <title> | <description>",
-    "clear": ",,clear <amount>",
-    "purge": ",,purge <amount>",
-    "slowmode": ",,slowmode <seconds>",
-    "brainrot_dice": ",,brainrot_dice [amount]",
-    "blacklist": ",,blacklist <user_id_or_mention> [reason]",
-    "unblacklist": ",,unblacklist <user_id>",
-    "serverblacklist": ",,serverblacklist <guild_id> [reason]",
-    "serverunblacklist": ",,serverunblacklist <guild_id>",
-    "trollpanel": ",,trollpanel",
-    "whitelist": ",,whitelist <member>",
-    "unwhitelist": ",,unwhitelist <member>",
-    "ghostping": ",,ghostping <member>",
-    "mock": ",,mock <text>",
-    "fakenuke": ",,fakenuke [member]",
-    "masscreate": ",,masscreate <count> <name>",
-    "setup": ",,setup [style]"
-}
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -498,7 +445,7 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         if ctx.command and ctx.command.name in ["mute", "unmute"]:
             return
-        msg = f"{ctx.author.mention} You are missing the required permissions."
+        msg = f"❌ {ctx.author.mention} You are missing the required permissions."
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -507,7 +454,73 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.MissingRequiredArgument):
-        msg = f"{ctx.author.mention} You are missing an argument."
+        cmd_name = ctx.command.name if ctx.command else "unknown"
+        
+        custom_messages = {
+            "ban": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,ban @member [reason]`\n📝 **Example:** `,,ban @Spammer Raiding the server`",
+            "unban": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,unban <user_id>`\n📝 **Example:** `,,unban 123456789012345678`",
+            "mute": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,mute @member [duration] [reason]`\n📝 **Example:** `,,mute @Spammer 1h Spamming in chat`\n⏱️ **Duration:** `10s`, `5m`, `2h`, `1d`",
+            "kick": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,kick @member [reason]`\n📝 **Example:** `,,kick @ToxicUser Breaking rules`",
+            "warn": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,warn @member [reason]`\n📝 **Example:** `,,warn @RudeUser Being disrespectful`",
+            "role": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,role @member <role_name>`\n📝 **Example:** `,,role @John Member`",
+            "pay": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,pay @member <amount>`\n📝 **Example:** `,,pay @John 500`",
+            "gamble": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,gamble <amount>`\n📝 **Example:** `,,gamble 100`",
+            "dice": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,dice <amount>`\n📝 **Example:** `,,dice 200`",
+            "slots": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,slots <amount>`\n📝 **Example:** `,,slots 50`",
+            "rob": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,rob @member`\n📝 **Example:** `,,rob @RichUser`",
+            "deposit": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,deposit <amount>` or `,,deposit all`\n📝 **Example:** `,,deposit 1000`",
+            "withdraw": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,withdraw <amount>` or `,,withdraw all`\n📝 **Example:** `,,withdraw 500`",
+            "marry": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,marry @member`\n📝 **Example:** `,,marry @Crush`",
+            "kiss": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,kiss @member`\n📝 **Example:** `,,kiss @Bae`",
+            "slap": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,slap @member`\n📝 **Example:** `,,slap @AnnoyingUser`",
+            "spank": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,spank @member`\n📝 **Example:** `,,spank @BadUser`",
+            "pat": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,pat @member`\n📝 **Example:** `,,pat @Friend`",
+            "tape": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,tape @member`\n📝 **Example:** `,,tape @AnnoyingUser`",
+            "hack": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,hack @member`\n📝 **Example:** `,,hack @Victim`",
+            "poll": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,poll <question>`\n📝 **Example:** `,,poll Should we add more bots?`",
+            "say": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,say <message>`\n📝 **Example:** `,,say Hello everyone!`",
+            "embed": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,embed <title> | <description>`\n📝 **Example:** `,,embed Announcement | Server update coming soon!`",
+            "clear": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,clear <amount>`\n📝 **Example:** `,,clear 50` (1-100)",
+            "purge": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,purge <amount>`\n📝 **Example:** `,,purge 100` (1-100)",
+            "slowmode": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,slowmode <seconds>`\n📝 **Example:** `,,slowmode 5` (set to 5 seconds)",
+            "gif": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,gif <search_term>`\n📝 **Example:** `,,gif funny cat`",
+            "8ball": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,8ball <question>`\n📝 **Example:** `,,8ball Will I win the lottery?`",
+            "mock": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,mock <text>`\n📝 **Example:** `,,mock This is hilarious`",
+            "ghostping": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,ghostping @member [times] [message]`\n📝 **Example:** `,,ghostping @User 5 Stop it`",
+            "fakenuke": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,fakenuke [@member]`\n📝 **Example:** `,,fakenuke @Victim`",
+            "masscreate": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,masscreate <count> <name>`\n📝 **Example:** `,,masscreate 10 testing`",
+            "hide": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,hide @member`\n📝 **Example:** `,,hide @Friend`",
+            "seek": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,seek #channel`\n📝 **Example:** `,,seek #general`",
+            "stealurl": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,steal <emoji_id_or_link>`\n📝 **Example:** `,,steal 123456789012345678`",
+            "setup": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,setup [style]`\n📝 **Example:** `,,setup ┃` (styles: `┃`, `・`, `-・-`)",
+            "blacklist": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,blacklist <user_id_or_mention> [reason]`\n📝 **Example:** `,,blacklist @Hacker Raiding`",
+            "whitelist": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,whitelist @member`\n📝 **Example:** `,,whitelist @TrustedUser`",
+            "unwhitelist": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,unwhitelist @member`\n📝 **Example:** `,,unwhitelist @User`",
+            "country": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,country`\n📝 **Example:** `,,country`",
+            "brainrot_dice": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,brainrot_dice [amount]`\n📝 **Example:** `,,brainrot_dice 100`",
+            "trollpanel": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,trollpanel`\n📝 **Example:** `,,trollpanel`",
+            "afk": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,afk [reason]`\n📝 **Example:** `,,afk Eating dinner`",
+            "avatar": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,avatar [member]`\n📝 **Example:** `,,avatar @User`",
+            "cf": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,cf`\n📝 **Example:** `,,cf`",
+            "gayrate": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,gayrate [member]`\n📝 **Example:** `,,gayrate @User`",
+            "pp": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,pp [member]`\n📝 **Example:** `,,pp @User`",
+            "iq": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,iq [member]`\n📝 **Example:** `,,iq @User`",
+            "roast": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,roast [member1] [member2] [member3]`\n📝 **Example:** `,,roast @User1 @User2`",
+            "snipe": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,snipe [number]`\n📝 **Example:** `,,snipe 5`",
+            "editsnipe": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,editsnipe`\n📝 **Example:** `,,editsnipe`",
+            "divorce": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,divorce`\n📝 **Example:** `,,divorce`",
+            "work": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,work`\n📝 **Example:** `,,work`",
+            "crime": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,crime`\n📝 **Example:** `,,crime`",
+            "daily": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,daily`\n📝 **Example:** `,,daily`",
+            "balance": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,balance [member]`\n📝 **Example:** `,,balance @User`",
+            "luck": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,luck [member]`\n📝 **Example:** `,,luck @User`",
+            "pfps": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,pfps`\n📝 **Example:** `,,pfps`",
+            "memes": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,memes`\n📝 **Example:** `,,memes`",
+            "fraktur": f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,fraktur <text>`\n📝 **Example:** `,,fraktur Hello world`",
+        }
+        
+        msg = custom_messages.get(cmd_name, f"⚠️ **{ctx.author.mention}** You are missing an argument!\n\n✅ **Usage:** `,,{cmd_name} <arguments>`")
+        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -516,7 +529,18 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.BadArgument):
-        msg = f"{ctx.author.mention} You provided an invalid argument."
+        cmd_name = ctx.command.name if ctx.command else "unknown"
+        if cmd_name in ["ban", "kick", "mute", "unmute", "warn", "rob", "marry", "kiss", "slap", "spank", "pat", "tape", "hack", "hide", "pay", "whitelist", "unwhitelist"]:
+            msg = f"⚠️ **{ctx.author.mention}** Invalid member mentioned! Please mention a valid user.\n\n✅ **Usage:** `,,{cmd_name} @member`"
+        elif cmd_name == "role":
+            msg = f"⚠️ **{ctx.author.mention}** Invalid member or role! Please check the member and role name.\n\n✅ **Usage:** `,,role @member <role_name>`"
+        elif cmd_name in ["gamble", "dice", "slots", "pay", "deposit", "withdraw"]:
+            msg = f"⚠️ **{ctx.author.mention}** Invalid amount! Please enter a valid number.\n\n✅ **Usage:** `,,{cmd_name} <amount>`"
+        elif cmd_name in ["gif", "mock", "say", "poll", "embed"]:
+            msg = f"⚠️ **{ctx.author.mention}** Invalid input! Please check your arguments.\n\n✅ **Usage:** `,,{cmd_name} <arguments>`"
+        else:
+            msg = f"⚠️ **{ctx.author.mention}** You provided an invalid argument."
+        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -525,7 +549,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.BotMissingPermissions):
-        msg = f"{ctx.author.mention} I am missing the required permissions."
+        msg = f"❌ {ctx.author.mention} I am missing the required permissions."
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -534,7 +558,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.MemberNotFound):
-        msg = f"{ctx.author.mention} I couldn't find that member."
+        msg = f"❌ {ctx.author.mention} I couldn't find that member."
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -543,7 +567,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.CommandOnCooldown):
-        msg = f"{ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds."
+        msg = f"⏳ {ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds."
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -552,7 +576,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.RoleNotFound):
-        msg = f"{ctx.author.mention} I couldn't find that role."
+        msg = f"❌ {ctx.author.mention} I couldn't find that role."
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -561,7 +585,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.NotOwner):
-        msg = f"{ctx.author.mention} Only the bot owner can use this command."
+        msg = f"👑 {ctx.author.mention} Only the bot owner can use this command."
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -570,7 +594,7 @@ async def on_command_error(ctx, error):
         return await ctx.send(msg)
 
     if isinstance(error, commands.NSFWChannelRequired):
-        msg = f"{ctx.author.mention} This command can only be used in NSFW channels."
+        msg = f"🔞 {ctx.author.mention} This command can only be used in NSFW channels."
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(msg, ephemeral=True)
@@ -578,14 +602,13 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(msg)
 
-    msg = f"{ctx.author.mention} Something went wrong."
+    msg = f"❌ {ctx.author.mention} Something went wrong."
     if ctx.interaction:
         try:
             return await ctx.interaction.followup.send(msg, ephemeral=True)
         except Exception:
             return
     return await ctx.send(msg)
-
 # =========================================================
 # ALLOWED LINKS COMMANDS
 # =========================================================
