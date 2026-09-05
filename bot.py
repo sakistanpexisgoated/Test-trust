@@ -6855,12 +6855,40 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
+    # ---------- PERMISSION ERRORS (STAFF COMMANDS) ----------
     if isinstance(error, commands.MissingPermissions):
+        cmd_name = ctx.command.name if ctx.command else "unknown"
+        
         embed = discord.Embed(
             title="❌ Permission Denied",
-            description=f"{ctx.author.mention} You are missing the required permissions.",
             color=discord.Color.red()
         )
+        
+        # Custom permission error messages for each command
+        permission_messages = {
+            "ban": f"{ctx.author.mention} You don't have **Ban Members** permission.",
+            "unban": f"{ctx.author.mention} You don't have **Ban Members** permission.",
+            "kick": f"{ctx.author.mention} You don't have **Kick Members** permission.",
+            "mute": f"{ctx.author.mention} You don't have **Timeout Members** permission.",
+            "unmute": f"{ctx.author.mention} You don't have **Timeout Members** permission.",
+            "warn": f"{ctx.author.mention} You don't have **Warn Members** permission.",
+            "role": f"{ctx.author.mention} You don't have **Manage Roles** permission.",
+            "clear": f"{ctx.author.mention} You don't have **Manage Messages** permission.",
+            "purge": f"{ctx.author.mention} You don't have **Manage Messages** permission.",
+            "slowmode": f"{ctx.author.mention} You don't have **Manage Channels** permission.",
+            "poll": f"{ctx.author.mention} You don't have **Manage Messages** permission.",
+            "say": f"{ctx.author.mention} You don't have **Manage Messages** permission.",
+            "embed": f"{ctx.author.mention} You don't have **Manage Messages** permission.",
+            "allowed": f"{ctx.author.mention} You don't have **Administrator** permission.",
+            "setchannel": f"{ctx.author.mention} You don't have **Administrator** permission.",
+            "spawn": f"{ctx.author.mention} You don't have **Administrator** permission.",
+            "endhide": f"{ctx.author.mention} You don't have **Administrator** permission.",
+            "stealurl": f"{ctx.author.mention} You don't have **Administrator** permission.",
+            "masscreate": f"{ctx.author.mention} You don't have **Administrator** permission.",
+        }
+        
+        embed.description = permission_messages.get(cmd_name, f"{ctx.author.mention} You are missing the required permissions.")
+        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
@@ -6868,6 +6896,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- MISSING ARGUMENT ERRORS ----------
     if isinstance(error, commands.MissingRequiredArgument):
         cmd_name = ctx.command.name if ctx.command else "unknown"
         
@@ -6948,6 +6977,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- BAD ARGUMENT ERRORS ----------
     if isinstance(error, commands.BadArgument):
         cmd_name = ctx.command.name if ctx.command else "unknown"
         
@@ -6976,6 +7006,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- BOT MISSING PERMISSIONS ----------
     if isinstance(error, commands.BotMissingPermissions):
         embed = discord.Embed(
             title="❌ Bot Permission Error",
@@ -6989,6 +7020,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- MEMBER NOT FOUND ----------
     if isinstance(error, commands.MemberNotFound):
         embed = discord.Embed(
             title="❌ Member Not Found",
@@ -7002,6 +7034,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- COOLDOWN ----------
     if isinstance(error, commands.CommandOnCooldown):
         embed = discord.Embed(
             title="⏳ Cooldown",
@@ -7015,6 +7048,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- ROLE NOT FOUND ----------
     if isinstance(error, commands.RoleNotFound):
         embed = discord.Embed(
             title="❌ Role Not Found",
@@ -7028,6 +7062,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- NOT OWNER ----------
     if isinstance(error, commands.NotOwner):
         embed = discord.Embed(
             title="👑 Owner Only",
@@ -7041,6 +7076,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- NSFW ONLY ----------
     if isinstance(error, commands.NSFWChannelRequired):
         embed = discord.Embed(
             title="🔞 NSFW Only",
@@ -7054,6 +7090,7 @@ async def on_command_error(ctx, error):
                 return
         return await ctx.send(embed=embed)
 
+    # ---------- DEFAULT ERROR ----------
     embed = discord.Embed(
         title="❌ Error",
         description=f"{ctx.author.mention} Something went wrong.",
