@@ -49,36 +49,6 @@ async def whitelisted_predicate(interaction: discord.Interaction):
     return interaction.user.id in OWNER_IDS or is_whitelisted
 
 # =========================================================
-# PERMISSION CHECKS
-# =========================================================
-
-def is_bot_owner(user_id):
-    return user_id in OWNER_IDS
-
-async def slash_bot_owner_only(interaction: discord.Interaction):
-    return interaction.user.id in OWNER_IDS
-
-async def slash_staff_only(interaction: discord.Interaction):
-    if not interaction.guild:
-        return False
-    member = interaction.user
-    if member.guild_permissions.administrator:
-        return True
-    if member.guild_permissions.manage_messages:
-        return True
-    if member.guild_permissions.manage_roles:
-        return True
-    if member.guild_permissions.kick_members:
-        return True
-    if member.guild_permissions.ban_members:
-        return True
-    staff_roles = ["Staff", "Moderator", "Mod", "Admin", "Administrator", "Owner", "Management"]
-    for role in member.roles:
-        if role.name in staff_roles:
-            return True
-    return False
-
-# =========================================================
 # BOT SETUP
 # =========================================================
 
@@ -460,7 +430,6 @@ async def globally_block_blacklisted(ctx):
                 pass
         return False
     return True
-
 # =========================================================
 # ERROR HANDLER
 # =========================================================
@@ -473,49 +442,21 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
-    # ---------- PERMISSION ERRORS (STAFF COMMANDS) ----------
     if isinstance(error, commands.MissingPermissions):
-        cmd_name = ctx.command.name if ctx.command else "unknown"
-        
+        if ctx.command and ctx.command.name in ["mute", "unmute"]:
+            return
         embed = discord.Embed(
             title="❌ Permission Denied",
+            description=f"{ctx.author.mention} You are missing the required permissions.",
             color=discord.Color.red()
         )
-        
-        # Custom permission error messages for each command
-        if cmd_name == "ban":
-            embed.description = f"{ctx.author.mention} You don't have **Ban Members** permission."
-        elif cmd_name == "unban":
-            embed.description = f"{ctx.author.mention} You don't have **Ban Members** permission."
-        elif cmd_name == "kick":
-            embed.description = f"{ctx.author.mention} You don't have **Kick Members** permission."
-        elif cmd_name == "mute":
-            embed.description = f"{ctx.author.mention} You don't have **Timeout Members** permission."
-        elif cmd_name == "unmute":
-            embed.description = f"{ctx.author.mention} You don't have **Timeout Members** permission."
-        elif cmd_name == "warn":
-            embed.description = f"{ctx.author.mention} You don't have **Warn Members** permission."
-        elif cmd_name == "role":
-            embed.description = f"{ctx.author.mention} You don't have **Manage Roles** permission."
-        elif cmd_name in ["clear", "purge"]:
-            embed.description = f"{ctx.author.mention} You don't have **Manage Messages** permission."
-        elif cmd_name in ["poll", "say", "embed"]:
-            embed.description = f"{ctx.author.mention} You don't have **Manage Messages** permission."
-        elif cmd_name == "slowmode":
-            embed.description = f"{ctx.author.mention} You don't have **Manage Channels** permission."
-        elif cmd_name in ["allowed", "setchannel", "spawn", "endhide", "stealurl", "masscreate"]:
-            embed.description = f"{ctx.author.mention} You don't have **Administrator** permission."
-        else:
-            embed.description = f"{ctx.author.mention} You are missing the required permissions."
-        
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- MISSING ARGUMENT ERRORS ----------
     if isinstance(error, commands.MissingRequiredArgument):
         cmd_name = ctx.command.name if ctx.command else "unknown"
         
@@ -524,137 +465,197 @@ async def on_command_error(ctx, error):
             color=discord.Color.orange()
         )
         
+        # Command-specific error messages
         if cmd_name == "ban":
             embed.description = f"❌ {ctx.author.mention} Please mention a user to ban."
+            
         elif cmd_name == "unban":
             embed.description = f"❌ {ctx.author.mention} Please provide a user ID to unban."
+            
         elif cmd_name == "mute":
             embed.description = f"❌ {ctx.author.mention} Please mention a user to mute."
+            
         elif cmd_name == "kick":
             embed.description = f"❌ {ctx.author.mention} Please mention a user to kick."
+            
         elif cmd_name == "warn":
             embed.description = f"❌ {ctx.author.mention} Please mention a user to warn."
+            
         elif cmd_name == "role":
             embed.description = f"❌ {ctx.author.mention} Please mention a user and role name."
+            
         elif cmd_name == "pay":
             embed.description = f"❌ {ctx.author.mention} Please mention a user and amount."
+            
         elif cmd_name == "gamble":
             embed.description = f"❌ {ctx.author.mention} Please provide an amount to gamble."
+            
         elif cmd_name == "dice":
             embed.description = f"❌ {ctx.author.mention} Please provide an amount to bet."
+            
         elif cmd_name == "slots":
             embed.description = f"❌ {ctx.author.mention} Please provide an amount to bet."
+            
         elif cmd_name == "rob":
             embed.description = f"❌ {ctx.author.mention} Please mention a user to rob."
+            
         elif cmd_name == "deposit":
             embed.description = f"❌ {ctx.author.mention} Please provide an amount to deposit."
+            
         elif cmd_name == "withdraw":
             embed.description = f"❌ {ctx.author.mention} Please provide an amount to withdraw."
+            
         elif cmd_name == "marry":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to marry."
+            
         elif cmd_name == "kiss":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to kiss."
+            
         elif cmd_name == "slap":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to slap."
+            
         elif cmd_name == "spank":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to spank."
+            
         elif cmd_name == "pat":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to pat."
+            
         elif cmd_name == "tape":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to tape."
+            
         elif cmd_name == "hack":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to hack."
+            
         elif cmd_name == "poll":
             embed.description = f"❌ {ctx.author.mention} Please provide a question for the poll."
+            
         elif cmd_name == "say":
             embed.description = f"❌ {ctx.author.mention} Please provide a message to say."
+            
         elif cmd_name == "embed":
             embed.description = f"❌ {ctx.author.mention} Please provide title and description."
+            
         elif cmd_name == "clear":
             embed.description = f"❌ {ctx.author.mention} Please provide the number of messages to clear."
+            
         elif cmd_name == "purge":
             embed.description = f"❌ {ctx.author.mention} Please provide the number of messages to purge."
+            
         elif cmd_name == "slowmode":
             embed.description = f"❌ {ctx.author.mention} Please provide the seconds for slowmode."
+            
         elif cmd_name == "gif":
             embed.description = f"❌ {ctx.author.mention} Please provide a search term for the GIF."
+            
         elif cmd_name == "8ball":
             embed.description = f"❌ {ctx.author.mention} Please ask the 8ball a question."
+            
         elif cmd_name == "mock":
             embed.description = f"❌ {ctx.author.mention} Please provide text to mock."
+            
         elif cmd_name == "ghostping":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to ghost ping."
+            
         elif cmd_name == "fakenuke":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to fake nuke."
+            
         elif cmd_name == "masscreate":
             embed.description = f"❌ {ctx.author.mention} Please provide count and channel name."
+            
         elif cmd_name == "hide":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to hide from."
+            
         elif cmd_name == "seek":
             embed.description = f"❌ {ctx.author.mention} Please mention a channel to seek."
+            
         elif cmd_name == "stealurl":
             embed.description = f"❌ {ctx.author.mention} Please provide an emoji link or ID."
+            
         elif cmd_name == "setup":
             embed.description = f"❌ {ctx.author.mention} Please provide a style for the setup."
+            
         elif cmd_name == "blacklist":
             embed.description = f"❌ {ctx.author.mention} Please provide a user to blacklist."
+            
         elif cmd_name == "whitelist":
             embed.description = f"❌ {ctx.author.mention} Please mention a user to whitelist."
+            
         elif cmd_name == "unwhitelist":
             embed.description = f"❌ {ctx.author.mention} Please mention a user to unwhitelist."
+            
         elif cmd_name == "country":
             embed.description = f"❌ {ctx.author.mention} Please start the country game."
+            
         elif cmd_name == "brainrot_dice":
             embed.description = f"❌ {ctx.author.mention} Please provide an amount to bet."
+            
         elif cmd_name == "trollpanel":
             embed.description = f"❌ {ctx.author.mention} Please open the troll panel."
+            
         elif cmd_name == "afk":
             embed.description = f"❌ {ctx.author.mention} Please provide a reason for being AFK."
+            
         elif cmd_name == "avatar":
             embed.description = f"❌ {ctx.author.mention} Please provide a user to check avatar."
+            
         elif cmd_name == "cf":
             embed.description = f"❌ {ctx.author.mention} Please flip a coin."
+            
         elif cmd_name == "gayrate":
             embed.description = f"❌ {ctx.author.mention} Please provide a user to check gay rate."
+            
         elif cmd_name == "pp":
             embed.description = f"❌ {ctx.author.mention} Please provide a user to check pp size."
+            
         elif cmd_name == "iq":
             embed.description = f"❌ {ctx.author.mention} Please provide a user to check IQ."
+            
         elif cmd_name == "roast":
             embed.description = f"❌ {ctx.author.mention} Please mention someone to roast."
+            
         elif cmd_name == "snipe":
             embed.description = f"❌ {ctx.author.mention} Please provide how many messages to snipe."
+            
         elif cmd_name == "editsnipe":
             embed.description = f"❌ {ctx.author.mention} Please snipe the last edited message."
+            
         elif cmd_name == "divorce":
             embed.description = f"❌ {ctx.author.mention} Please divorce your spouse."
+            
         elif cmd_name == "work":
             embed.description = f"❌ {ctx.author.mention} Please start working."
+            
         elif cmd_name == "crime":
             embed.description = f"❌ {ctx.author.mention} Please commit a crime."
+            
         elif cmd_name == "daily":
             embed.description = f"❌ {ctx.author.mention} Please claim your daily reward."
+            
         elif cmd_name == "balance":
             embed.description = f"❌ {ctx.author.mention} Please check your balance."
+            
         elif cmd_name == "luck":
             embed.description = f"❌ {ctx.author.mention} Please check your luck."
+            
         elif cmd_name == "pfps":
             embed.description = f"❌ {ctx.author.mention} Please get a random PFP."
+            
         elif cmd_name == "memes":
             embed.description = f"❌ {ctx.author.mention} Please get a random meme."
+            
         elif cmd_name == "fraktur":
             embed.description = f"❌ {ctx.author.mention} Please provide text to convert."
+            
         else:
             embed.description = f"❌ {ctx.author.mention} You are missing an argument!"
         
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- BAD ARGUMENT ERRORS ----------
     if isinstance(error, commands.BadArgument):
         cmd_name = ctx.command.name if ctx.command else "unknown"
         
@@ -679,11 +680,10 @@ async def on_command_error(ctx, error):
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- BOT MISSING PERMISSIONS ----------
     if isinstance(error, commands.BotMissingPermissions):
         embed = discord.Embed(
             title="❌ Bot Permission Error",
@@ -693,11 +693,10 @@ async def on_command_error(ctx, error):
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- MEMBER NOT FOUND ----------
     if isinstance(error, commands.MemberNotFound):
         embed = discord.Embed(
             title="❌ Member Not Found",
@@ -707,11 +706,10 @@ async def on_command_error(ctx, error):
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- COOLDOWN ----------
     if isinstance(error, commands.CommandOnCooldown):
         embed = discord.Embed(
             title="⏳ Cooldown",
@@ -721,11 +719,10 @@ async def on_command_error(ctx, error):
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- ROLE NOT FOUND ----------
     if isinstance(error, commands.RoleNotFound):
         embed = discord.Embed(
             title="❌ Role Not Found",
@@ -735,11 +732,10 @@ async def on_command_error(ctx, error):
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- NOT OWNER ----------
     if isinstance(error, commands.NotOwner):
         embed = discord.Embed(
             title="👑 Owner Only",
@@ -749,11 +745,10 @@ async def on_command_error(ctx, error):
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- NSFW ONLY ----------
     if isinstance(error, commands.NSFWChannelRequired):
         embed = discord.Embed(
             title="🔞 NSFW Only",
@@ -763,11 +758,10 @@ async def on_command_error(ctx, error):
         if ctx.interaction:
             try:
                 return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-            except:
-                pass
+            except Exception:
+                return
         return await ctx.send(embed=embed)
 
-    # ---------- DEFAULT ERROR ----------
     embed = discord.Embed(
         title="❌ Error",
         description=f"{ctx.author.mention} Something went wrong.",
@@ -776,15 +770,15 @@ async def on_command_error(ctx, error):
     if ctx.interaction:
         try:
             return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        except:
-            pass
+        except Exception:
+            return
     return await ctx.send(embed=embed)
-
 # =========================================================
 # ALLOWED LINKS COMMANDS
 # =========================================================
 
 @bot.hybrid_command(name="allowed", aliases=["links"], description="Manage allowed links for the server")
+@commands.has_permissions(administrator=True)
 async def allowed(ctx, action: str = None, *, link: str = None):
     guild_id = ctx.guild.id
     
@@ -1338,6 +1332,7 @@ async def fakenuke(ctx, member: discord.Member = None):
     count="Number of channels to create (1-50)",
     name="Base name for the channels"
 )
+@app_commands.checks.has_permissions(administrator=True)
 async def masscreate(ctx, count: int, name: str):
     if count < 1 or count > 50:
         embed = discord.Embed(description="Please choose a count between 1 and 50.", color=discord.Color.red())
@@ -2125,6 +2120,7 @@ async def afk(ctx, *, reason: str = "AFK"):
 # BAN COMMAND
 # =========================================================
 @bot.hybrid_command(name="ban", description="Ban a member from the server")
+@commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
@@ -2157,11 +2153,20 @@ async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"
     else:
         await ctx.send(embed=embed)
 
+@ban.error
+async def ban_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Ban Members permission.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ {ctx.author.mention} You are missing Ban Members permission.")
+
 # =========================================================
 # UNBAN COMMAND
 # =========================================================
 
 @bot.hybrid_command(name="unban", description="Unban a user by ID")
+@commands.has_permissions(ban_members=True)
 async def unban(ctx, user_id: str):
     try:
         uid = int(user_id)
@@ -2191,11 +2196,44 @@ async def unban(ctx, user_id: str):
         else:
             await ctx.send(f"❌ Could not find or unban that user. Check the user ID.")
 
+@unban.error
+async def unban_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing UnBan Members permission.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ {ctx.author.mention} You are missing UnBan Members permission.")
+            
+@bot.hybrid_group(name="fake", description="Fake moderation commands")
+async def fake(ctx):
+    pass
+
+@fake.command(name="ban", description="Fake-ban a member without actually banning them")
+async def fake_ban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
+    if not isinstance(ctx.author, discord.Member) or not _is_server_mod(ctx.author):
+        embed = discord.Embed(
+            title="🛡️ Permission Denied",
+            description="Only **server administrators or moderators** can use this command.",
+            color=discord.Color.red()
+        )
+        return await ctx.send(embed=embed, ephemeral=True)
+
+    embed = discord.Embed(
+        description=f"Banned **{member.display_name}**",
+        color=discord.Color.red()
+    )
+    if reason != "No reason provided":
+        embed.add_field(name="Reason", value=reason, inline=False)
+    embed.set_footer(text=f"tottaly real trust by {ctx.author.display_name}")
+
+    await ctx.send(embed=embed)
+
 # =========================================================
 # KICK COMMAND
 # =========================================================
 
 @bot.hybrid_command(name="kick", description="Kick a member from the server")
+@commands.has_permissions(kick_members=True)
 async def kick(ctx, member: discord.Member, *, reason: str = "No reason provided"):
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
@@ -2228,11 +2266,20 @@ async def kick(ctx, member: discord.Member, *, reason: str = "No reason provided
     else:
         await ctx.send(embed=embed)
 
+@kick.error
+async def kick_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Kick Members permission.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ {ctx.author.mention} You are missing Kick Members permission.")
+
 # =========================================================
 # MUTE COMMAND - SILENT FAIL FOR NON-MODS
 # =========================================================
 
 @bot.hybrid_command(name="mute", description="Mute a member")
+@commands.has_permissions(manage_roles=True)
 async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str = "No reason provided"):
     is_mod = ctx.author.guild_permissions.manage_roles or ctx.author.id in OWNER_IDS
     
@@ -2289,6 +2336,7 @@ async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str
 # =========================================================
 
 @bot.hybrid_command(name="unmute", description="Remove a member's timeout")
+@commands.has_permissions(manage_roles=True)
 async def unmute(ctx, member: discord.Member):
     is_mod = ctx.author.guild_permissions.manage_roles or ctx.author.id in OWNER_IDS
     
@@ -2331,6 +2379,7 @@ async def unmute(ctx, member: discord.Member):
 # =========================================================
 
 @bot.hybrid_command(name="warn", description="Warn a member")
+@commands.has_permissions(manage_messages=True)
 async def warn(ctx, member: discord.Member, *, reason: str = "No reason provided"):
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
@@ -2367,6 +2416,14 @@ async def warn(ctx, member: discord.Member, *, reason: str = "No reason provided
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
+@warn.error
+async def warn_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Manage Messages permission.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ {ctx.author.mention} You are missing Manage Messages permission.")
             
 @bot.hybrid_command(name="avatar", description="Show a user's avatar")
 async def avatar(ctx, member: discord.Member = None):
@@ -2527,6 +2584,7 @@ async def editsnipe(ctx):
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="poll", description="Create a simple poll")
+@commands.has_permissions(manage_messages=True)
 async def poll(ctx, *, question: str):
     embed = discord.Embed(title="📊 Poll", description=question, color=discord.Color.blurple())
     embed.set_footer(text=f"Poll created by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
@@ -2545,6 +2603,7 @@ async def poll(ctx, *, question: str):
     await msg.add_reaction("👎")
 
 @bot.hybrid_command(name="say", description="Make the bot say something")
+@commands.has_permissions(manage_messages=True)
 async def say(ctx, *, message: str):
     if ctx.interaction:
         await ctx.interaction.response.send_message("Message sent!", ephemeral=True)
@@ -2558,6 +2617,7 @@ async def say(ctx, *, message: str):
         await ctx.send(message)
 
 @bot.hybrid_command(name="embed", description="Send a custom embed message")
+@commands.has_permissions(manage_messages=True)
 async def custom_embed(ctx, *, content: str):
     parts = content.split("|")
     title = parts[0].strip()
@@ -2614,6 +2674,7 @@ async def purge(ctx, amount: int):
     await _run_purge(ctx, amount)
 
 @bot.hybrid_command(name="slowmode", description="Set channel slowmode")
+@commands.has_permissions(manage_channels=True)
 async def slowmode(ctx, seconds: int):
     if seconds < 0:
         embed = discord.Embed(description="Seconds cannot be negative.", color=discord.Color.red())
@@ -4976,6 +5037,7 @@ def delete_card(card_id, user_id):
     return cursor.rowcount > 0
 
 @bot.hybrid_command(name="setchannel", description="Set the channel for football card spawns")
+@commands.has_permissions(administrator=True)
 async def setchannel(ctx, channel: discord.TextChannel = None):
     target = channel or ctx.channel
     FOOTBALL_CHANNEL[ctx.guild.id] = target.id
@@ -4989,6 +5051,7 @@ async def setchannel(ctx, channel: discord.TextChannel = None):
         await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="spawn", description="Spawn a random football player card in the channel")
+@commands.has_permissions(administrator=True)
 async def spawn(ctx):
     guild_id = ctx.guild.id
     channel_id = FOOTBALL_CHANNEL.get(guild_id)
@@ -5684,6 +5747,7 @@ async def adminrobamount(ctx, member: discord.Member, amount: int):
 # =========================================================
 
 @bot.hybrid_command(name="stealurl", aliases=["surl", "steal"], description="Steal an emoji using its Discord link, ID, or the emoji itself")
+@commands.has_permissions(administrator=True)
 async def stealurl(ctx, *, input_text: str):
     if not ctx.author.guild_permissions.administrator:
         embed = discord.Embed(description="❌ You need Administrator permissions!", color=discord.Color.red())
@@ -5863,6 +5927,7 @@ async def stealurl(ctx, *, input_text: str):
 # =========================================================
 
 @bot.hybrid_command(name="role", description="Add a role to a member")
+@commands.has_permissions(manage_roles=True)
 async def role(ctx, member: discord.Member, *, role_name: str):
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
@@ -5910,6 +5975,19 @@ async def role(ctx, member: discord.Member, *, role_name: str):
             await ctx.interaction.response.send_message(f"❌ Failed to add role: {e}", ephemeral=True)
         else:
             await ctx.send(f"❌ Failed to add role: {e}")
+
+@role.error
+async def role_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Manage Roles permission.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ {ctx.author.mention} You are missing Manage Roles permission.")
+    if isinstance(error, commands.MemberNotFound):
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
+        else:
+            await ctx.send(f"❌ Member not found.")
 
 # =========================================================
 # SPANK COMMAND
@@ -6032,6 +6110,7 @@ async def bendover(ctx, member: discord.Member = None):
 # =========================================================
 
 @bot.hybrid_command(name="linkshelp", aliases=["linkhelp", "lh"], description="Show help for link filtering commands")
+@commands.has_permissions(administrator=True)
 async def linkshelp(ctx):
     embed = discord.Embed(
         title="🔗 Link Filtering Commands",
@@ -6528,6 +6607,7 @@ async def hidestats(ctx, member: discord.Member = None):
         await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="endhide", description="Force end the current hide and seek game (admin only)")
+@commands.has_permissions(administrator=True)
 async def endhide(ctx):
     guild_id = ctx.guild.id
     
@@ -6726,12 +6806,265 @@ async def rules(ctx):
     print(f'✅ Logged in as {bot.user}')
     print(f'📡 Connected to {len(bot.guilds)} servers')
     print(f'👥 Serving {len(bot.users)} users')
+    print(f'📋 Loaded rules for {len(rules_cache)} servers')
     await bot.change_presence(
         activity=discord.Activity(
-            type=discord.ActivityType.Playing,
+            type=discord.ActivityType.listening,
             name=f"{len(bot.guilds)} servers | R!help"
         )
     )
+# =========================================================
+# PERMISSION SYSTEM & ERROR HANDLER - PASTE THIS ENTIRE BLOCK
+# =========================================================
+
+# ---------- PERMISSION CHECKS ----------
+
+def is_bot_owner(user_id):
+    return user_id in OWNER_IDS
+
+async def slash_bot_owner_only(interaction: discord.Interaction):
+    return interaction.user.id in OWNER_IDS
+
+async def slash_staff_only(interaction: discord.Interaction):
+    if not interaction.guild:
+        return False
+    member = interaction.user
+    if member.guild_permissions.administrator:
+        return True
+    if member.guild_permissions.manage_messages:
+        return True
+    if member.guild_permissions.manage_roles:
+        return True
+    if member.guild_permissions.kick_members:
+        return True
+    if member.guild_permissions.ban_members:
+        return True
+    staff_roles = ["Staff", "Moderator", "Mod", "Admin", "Administrator", "Owner", "Management"]
+    for role in member.roles:
+        if role.name in staff_roles:
+            return True
+    return False
+
+# ---------- ERROR HANDLER ----------
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandInvokeError):
+        error = error.original
+
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    if isinstance(error, commands.MissingPermissions):
+        embed = discord.Embed(
+            title="❌ Permission Denied",
+            description=f"{ctx.author.mention} You are missing the required permissions.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        cmd_name = ctx.command.name if ctx.command else "unknown"
+        
+        embed = discord.Embed(
+            title="⚠️ Wrong Usage",
+            color=discord.Color.orange()
+        )
+        
+        error_messages = {
+            "ban": f"❌ {ctx.author.mention} Please mention a user to ban.",
+            "unban": f"❌ {ctx.author.mention} Please provide a user ID to unban.",
+            "mute": f"❌ {ctx.author.mention} Please mention a user to mute.",
+            "kick": f"❌ {ctx.author.mention} Please mention a user to kick.",
+            "warn": f"❌ {ctx.author.mention} Please mention a user to warn.",
+            "role": f"❌ {ctx.author.mention} Please mention a user and role name.",
+            "pay": f"❌ {ctx.author.mention} Please mention a user and amount.",
+            "gamble": f"❌ {ctx.author.mention} Please provide an amount to gamble.",
+            "dice": f"❌ {ctx.author.mention} Please provide an amount to bet.",
+            "slots": f"❌ {ctx.author.mention} Please provide an amount to bet.",
+            "rob": f"❌ {ctx.author.mention} Please mention a user to rob.",
+            "deposit": f"❌ {ctx.author.mention} Please provide an amount to deposit.",
+            "withdraw": f"❌ {ctx.author.mention} Please provide an amount to withdraw.",
+            "marry": f"❌ {ctx.author.mention} Please mention someone to marry.",
+            "kiss": f"❌ {ctx.author.mention} Please mention someone to kiss.",
+            "slap": f"❌ {ctx.author.mention} Please mention someone to slap.",
+            "spank": f"❌ {ctx.author.mention} Please mention someone to spank.",
+            "pat": f"❌ {ctx.author.mention} Please mention someone to pat.",
+            "tape": f"❌ {ctx.author.mention} Please mention someone to tape.",
+            "hack": f"❌ {ctx.author.mention} Please mention someone to hack.",
+            "poll": f"❌ {ctx.author.mention} Please provide a question for the poll.",
+            "say": f"❌ {ctx.author.mention} Please provide a message to say.",
+            "embed": f"❌ {ctx.author.mention} Please provide title and description.",
+            "clear": f"❌ {ctx.author.mention} Please provide the number of messages to clear.",
+            "purge": f"❌ {ctx.author.mention} Please provide the number of messages to purge.",
+            "slowmode": f"❌ {ctx.author.mention} Please provide the seconds for slowmode.",
+            "gif": f"❌ {ctx.author.mention} Please provide a search term for the GIF.",
+            "8ball": f"❌ {ctx.author.mention} Please ask the 8ball a question.",
+            "mock": f"❌ {ctx.author.mention} Please provide text to mock.",
+            "ghostping": f"❌ {ctx.author.mention} Please mention someone to ghost ping.",
+            "fakenuke": f"❌ {ctx.author.mention} Please mention someone to fake nuke.",
+            "masscreate": f"❌ {ctx.author.mention} Please provide count and channel name.",
+            "hide": f"❌ {ctx.author.mention} Please mention someone to hide from.",
+            "seek": f"❌ {ctx.author.mention} Please mention a channel to seek.",
+            "stealurl": f"❌ {ctx.author.mention} Please provide an emoji link or ID.",
+            "setup": f"❌ {ctx.author.mention} Please provide a style for the setup.",
+            "blacklist": f"❌ {ctx.author.mention} Please provide a user to blacklist.",
+            "whitelist": f"❌ {ctx.author.mention} Please mention a user to whitelist.",
+            "unwhitelist": f"❌ {ctx.author.mention} Please mention a user to unwhitelist.",
+            "country": f"❌ {ctx.author.mention} Please start the country game.",
+            "brainrot_dice": f"❌ {ctx.author.mention} Please provide an amount to bet.",
+            "trollpanel": f"❌ {ctx.author.mention} Please open the troll panel.",
+            "afk": f"❌ {ctx.author.mention} Please provide a reason for being AFK.",
+            "avatar": f"❌ {ctx.author.mention} Please provide a user to check avatar.",
+            "cf": f"❌ {ctx.author.mention} Please flip a coin.",
+            "gayrate": f"❌ {ctx.author.mention} Please provide a user to check gay rate.",
+            "pp": f"❌ {ctx.author.mention} Please provide a user to check pp size.",
+            "iq": f"❌ {ctx.author.mention} Please provide a user to check IQ.",
+            "roast": f"❌ {ctx.author.mention} Please mention someone to roast.",
+            "snipe": f"❌ {ctx.author.mention} Please provide how many messages to snipe.",
+            "editsnipe": f"❌ {ctx.author.mention} Please snipe the last edited message.",
+            "divorce": f"❌ {ctx.author.mention} Please divorce your spouse.",
+            "work": f"❌ {ctx.author.mention} Please start working.",
+            "crime": f"❌ {ctx.author.mention} Please commit a crime.",
+            "daily": f"❌ {ctx.author.mention} Please claim your daily reward.",
+            "balance": f"❌ {ctx.author.mention} Please check your balance.",
+            "luck": f"❌ {ctx.author.mention} Please check your luck.",
+            "pfps": f"❌ {ctx.author.mention} Please get a random PFP.",
+            "memes": f"❌ {ctx.author.mention} Please get a random meme.",
+            "fraktur": f"❌ {ctx.author.mention} Please provide text to convert.",
+        }
+        
+        embed.description = error_messages.get(cmd_name, f"❌ {ctx.author.mention} You are missing an argument!")
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.BadArgument):
+        cmd_name = ctx.command.name if ctx.command else "unknown"
+        
+        embed = discord.Embed(
+            title="❌ Invalid Argument",
+            color=discord.Color.red()
+        )
+        
+        if cmd_name in ["ban", "kick", "mute", "unmute", "warn", "rob", "marry", "kiss", "slap", "spank", "pat", "tape", "hack", "hide", "pay", "whitelist", "unwhitelist"]:
+            embed.description = f"❌ {ctx.author.mention} Invalid member mentioned! Please mention a valid user."
+        elif cmd_name == "role":
+            embed.description = f"❌ {ctx.author.mention} Invalid member or role! Please check the member and role name."
+        elif cmd_name in ["gamble", "dice", "slots", "pay", "deposit", "withdraw"]:
+            embed.description = f"❌ {ctx.author.mention} Invalid amount! Please enter a valid number."
+        elif cmd_name in ["gif", "mock", "say", "poll", "embed"]:
+            embed.description = f"❌ {ctx.author.mention} Invalid input! Please check your arguments."
+        elif cmd_name == "seek":
+            embed.description = f"❌ {ctx.author.mention} Invalid channel! Please mention a valid text channel."
+        else:
+            embed.description = f"❌ {ctx.author.mention} You provided an invalid argument."
+        
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.BotMissingPermissions):
+        embed = discord.Embed(
+            title="❌ Bot Permission Error",
+            description=f"{ctx.author.mention} I am missing the required permissions.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.MemberNotFound):
+        embed = discord.Embed(
+            title="❌ Member Not Found",
+            description=f"{ctx.author.mention} I couldn't find that member.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.CommandOnCooldown):
+        embed = discord.Embed(
+            title="⏳ Cooldown",
+            description=f"{ctx.author.mention} Please wait `{error.retry_after:.1f}` seconds.",
+            color=discord.Color.orange()
+        )
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.RoleNotFound):
+        embed = discord.Embed(
+            title="❌ Role Not Found",
+            description=f"{ctx.author.mention} I couldn't find that role.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.NotOwner):
+        embed = discord.Embed(
+            title="👑 Owner Only",
+            description=f"{ctx.author.mention} Only the bot owner can use this command.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    if isinstance(error, commands.NSFWChannelRequired):
+        embed = discord.Embed(
+            title="🔞 NSFW Only",
+            description=f"{ctx.author.mention} This command can only be used in NSFW channels.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                return
+        return await ctx.send(embed=embed)
+
+    embed = discord.Embed(
+        title="❌ Error",
+        description=f"{ctx.author.mention} Something went wrong.",
+        color=discord.Color.red()
+    )
+    if ctx.interaction:
+        try:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        except Exception:
+            return
+    return await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
