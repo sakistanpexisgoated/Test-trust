@@ -2152,15 +2152,6 @@ async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
-
-@ban.error
-async def ban_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Ban Members permission.", ephemeral=True)
-        else:
-            await ctx.send(f"❌ {ctx.author.mention} You are missing Ban Members permission.")
-
 # =========================================================
 # UNBAN COMMAND
 # =========================================================
