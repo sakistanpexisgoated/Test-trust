@@ -447,7 +447,7 @@ async def on_command_error(ctx, error):
             return
         embed = discord.Embed(
             title="❌ Permission Denied",
-            description=f"{ctx.author.mention} You are missing the required permissions.",
+            description=f"{ctx.author.mention} You dont have moderator permissions.",
             color=discord.Color.red()
         )
         if ctx.interaction:
