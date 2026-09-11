@@ -1325,7 +1325,7 @@ async def fakenuke(ctx, member: discord.Member = None):
     target = member or ctx.author
     embed = discord.Embed(
         title="🚨 **WARNING: SERVER NUKE IN PROGRESS** 🚨",
-        description=f"Thank you {target.mention} for nuking this server the channels will be deleted soon huzzs.",
+        description=f"Thank you {target.mention} for nuking this server the channels will be deleted soon.",
         color=discord.Color.red()
     )
     embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbTZibHhwcTd0c2k1a3dta3JrOHY4ZjVsdWZsZjJlMnIzNW96ajVsaiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3oKIPiqfUtLCnIKxRS/giphy.gif")
@@ -1340,58 +1340,6 @@ async def fakenuke(ctx, member: discord.Member = None):
             except Exception:
                 pass
         await ctx.channel.send(embed=embed)
-
-# =========================================================
-# EXPERIMENTAL MASS CREATE CHANNELS COMMAND
-# =========================================================
-
-@bot.hybrid_command(name="masscreate", description="Creates multiple channels for experimental purposes.")
-@app_commands.describe(
-    count="Number of channels to create (1-50)",
-    name="Base name for the channels"
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def masscreate(ctx, count: int, name: str):
-    if count < 1 or count > 50:
-        embed = discord.Embed(description="Please choose a count between 1 and 50.", color=discord.Color.red())
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed, delete_after=5)
-
-    if ctx.interaction:
-        await ctx.interaction.response.defer(ephemeral=True)
-    else:
-        if ctx.message:
-            try:
-                await ctx.message.delete()
-            except Exception:
-                pass
-
-    guild = ctx.guild
-    success_count = 0
-
-    try:
-        for i in range(1, count + 1):
-            channel_name = f"{name}-{i}"
-            await guild.create_text_channel(name=channel_name)
-            success_count += 1
-            await asyncio.sleep(0.3)
-
-        success_msg = f"Successfully created **{success_count}** channels with the base name **{name}**!"
-        embed = discord.Embed(description=f"{success_msg}", color=discord.Color.green())
-        
-        if ctx.interaction:
-            await ctx.interaction.edit_original_response(content=f"{success_msg}")
-        else:
-            await ctx.send(embed=embed, delete_after=10)
-    except Exception as e:
-        print(f"Error during mass channel creation: {e}")
-        error_msg = f"Completed with errors. Created **{success_count}** channels before encountering an issue."
-        if ctx.interaction:
-            await ctx.interaction.edit_original_response(content=f"{error_msg}")
-        else:
-            await ctx.send(embed=discord.Embed(description=f"{error_msg}", color=discord.Color.red()))
-
 # =========================================================
 # ECONOMY UI & COMMANDS
 # =========================================================
