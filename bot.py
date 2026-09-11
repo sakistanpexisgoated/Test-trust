@@ -6071,6 +6071,8 @@ BENDOVER_GIFS = [
 
 @bot.hybrid_command(name="bendover", description="Ask someone to bend over!")
 async def bendover(ctx, member: discord.Member = None):
+    if not await check_nsfw(ctx):
+        return
     if member is None:
         embed = discord.Embed(
             description="❌ You need to specify someone to bend over🤤!",
