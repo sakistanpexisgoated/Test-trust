@@ -201,6 +201,25 @@ def format_duration(seconds: int) -> str:
     else:
         hours = seconds // 3600
         return f"{hours}h"
+        
+async def check_nsfw(ctx):
+    if not ctx.channel.is_nsfw():
+        embed = discord.Embed(
+            description=f"{ctx.author.mention} This command can be only used in nsfw channels.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            try:
+                await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            except Exception:
+                try:
+                    await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                except Exception:
+                    pass
+        else:
+            await ctx.send(embed=embed, delete_after=5)
+        return False
+    return True
 
 @bot.event
 async def on_message_delete(message):
