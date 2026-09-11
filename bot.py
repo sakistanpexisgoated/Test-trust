@@ -6012,6 +6012,8 @@ SPANK_GIFS = [
 
 @bot.hybrid_command(name="spank", description="Spank someone!")
 async def spank(ctx, member: discord.Member = None):
+    if not await check_nsfw(ctx):
+        return
     if member is None:
         embed = discord.Embed(
             description="❌ You need to specify someone to spank!",
