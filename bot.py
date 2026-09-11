@@ -358,8 +358,7 @@ async def help(ctx):
     embed.add_field(name="🎮 Games", value="`brainrot_dice`, `guess`, `country`, `debate`", inline=False)
     embed.add_field(name="⚽ Football", value="`setchannel`, `spawn`, `collect`, `pack`, `sell`, `collection`, `trade`", inline=False)
     embed.add_field(name="🛡️ Moderation", value="`ban`, `unban`, `kick`, `mute`, `unmute`, `warn`, `clear`, `purge`, `slowmode`, `poll`, `say`, `embed`, `snipe`, `editsnipe`, `avatar`, `afk`, `steal`", inline=False)
-    embed.add_field(name="👑 Admin", value="`sync`, `goon`, `nuke`, `masscreate`, `setup`, `backup`, `blacklist`, `trollpanel`, `whitelist`, `ghostping`, `fakenuke`", inline=False)
-    embed.add_field(name="💰 Admin Pay", value="`adminpay`, `adminset`, `adminsetbank`, `adminrob`, `adminrobamount`", inline=False)
+    embed.add_field(name="👑 Admin", value="`goon`, `setup`, `backup`, `ghostping`, `fakenuke`", inline=False)
     embed.add_field(name="🔗 Link Filter", value="`allowed add`, `allowed remove`, `allowed list`, `allowed enable`, `allowed disable`, `allowed time`", inline=False)
     embed.set_footer(text=f"Requested by {ctx.author.display_name}")
     
