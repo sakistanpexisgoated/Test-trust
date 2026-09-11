@@ -6658,6 +6658,8 @@ RAPE_GIFS = [
 
 @bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
 async def rape(ctx, member: discord.Member = None):
+    if not await check_nsfw(ctx):
+        return
     if member is None:
         embed = discord.Embed(
             description="❌ You need to specify someone to rape!\nUsage: `R!rape @member`",
