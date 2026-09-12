@@ -2498,12 +2498,19 @@ async def divorce(ctx):
     )
     await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="snipe", description="View deleted messages from the channel")
+@bot.hybrid_command(name="snipe", aliases=["s"], description="View deleted messages from a channel")
 async def snipe(ctx, amount: int = 1):
     channel_id = ctx.channel.id
     if channel_id not in sniped_messages or not sniped_messages[channel_id]:
-        embed = discord.Embed(description="⚠️ There are no deleted messages to snipe in this channel.", color=discord.Color.red())
-        return await ctx.send(embed=embed)
+        embed = discord.Embed(
+            description="⚠️ There are no deleted messages to snipe in this channel.",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+        return
     
     messages = sniped_messages[channel_id]
     count = max(1, min(amount, len(messages)))
@@ -2511,26 +2518,27 @@ async def snipe(ctx, amount: int = 1):
     target_msgs.reverse()
 
     embed = discord.Embed(
-        title=f"🎯 Sniped Message(s)",
-        description=f"Showing the last **{count}** deleted message(s) in this channel.",
+        title="🧨 Sniped Messages",
         color=discord.Color.from_rgb(47, 49, 54)
     )
     
     for idx, snipe_data in enumerate(target_msgs, 1):
         content = snipe_data["content"] or "*No text content*"
         if snipe_data["attachments"]:
-            content += f"\n🔗 **Attachment:** [View File]({snipe_data['attachments'][0]})"
+            content += f"\n🔗 [Attachment]({snipe_data['attachments'][0]})"
         
         author = snipe_data["author"]
         embed.add_field(
-            name=f"💬 Message #{idx} • {author}",
+            name=f"**{author.display_name}**",
             value=f"> {content}",
             inline=False
         )
 
-    embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
-    await ctx.send(embed=embed)
-
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+        
 @bot.hybrid_command(name="editsnipe", description="View the last edited message")
 async def editsnipe(ctx):
     channel_id = ctx.channel.id
