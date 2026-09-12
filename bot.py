@@ -2071,17 +2071,24 @@ async def require_server_mod(ctx):
             await ctx.send(embed=embed)
         return False
     return True
-
 # =========================================================
 # HELP, MODERATION & UTILITY COMMANDS
 # =========================================================
-
 @bot.hybrid_command(name="afk", description="Set your AFK status")
 async def afk(ctx, *, reason: str = "AFK"):
     afk_users[ctx.author.id] = {"reason": reason, "time": time.time(), "mentions": []}
-    embed = discord.Embed(description=f"👋 {ctx.author.mention} is now AFK: {reason}", color=discord.Color.blurple())
-    await ctx.send(embed=embed)
-
+    
+    embed = discord.Embed(
+        title="AFK Set!",
+        description=f"You are now afk in this server. Reason: **{reason}**",
+        color=discord.Color.from_rgb(30, 31, 34)
+    )
+    embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+    
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
 # =========================================================
 # BAN COMMAND
 # =========================================================
