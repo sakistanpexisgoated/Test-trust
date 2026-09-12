@@ -2498,7 +2498,7 @@ async def divorce(ctx):
     )
     await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="snipe", aliases=["s"], description="View deleted messages from a channel")
+@bot.hybrid_command(name="snipe", aliases=["s"], description="View deleted messages from the channel")
 async def snipe(ctx, amount: int = 1):
     channel_id = ctx.channel.id
     if channel_id not in sniped_messages or not sniped_messages[channel_id]:
@@ -2517,27 +2517,54 @@ async def snipe(ctx, amount: int = 1):
     target_msgs = messages[-count:]
     target_msgs.reverse()
 
+    # Header embed
     embed = discord.Embed(
         title="🧨 Sniped Messages",
         color=discord.Color.from_rgb(47, 49, 54)
     )
     
-    for idx, snipe_data in enumerate(target_msgs, 1):
-        content = snipe_data["content"] or "*No text content*"
-        if snipe_data["attachments"]:
-            content += f"\n🔗 [Attachment]({snipe_data['attachments'][0]})"
-        
-        author = snipe_data["author"]
-        embed.add_field(
-            name=f"**{author.display_name}**",
-            value=f"> {content}",
-            inline=False
-        )
-
+    # For each sniped message, send a separate embed with user avatar
     if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
+        await ctx.interaction.response.defer()
+        first = True
+        for snipe_data in target_msgs:
+            content = snipe_data["content"] or "*No text content*"
+            if snipe_data["attachments"]:
+                content += f"\n🔗 [Attachment]({snipe_data['attachments'][0]})"
+            
+            author = snipe_data["author"]
+            
+            msg_embed = discord.Embed(
+                description=f"> {content}",
+                color=discord.Color.from_rgb(47, 49, 54)
+            )
+            msg_embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
+            
+            if first:
+                msg_embed.title = "🧨 Sniped Messages"
+                first = False
+            
+            await ctx.interaction.followup.send(embed=msg_embed)
     else:
-        await ctx.send(embed=embed)
+        first = True
+        for snipe_data in target_msgs:
+            content = snipe_data["content"] or "*No text content*"
+            if snipe_data["attachments"]:
+                content += f"\n🔗 [Attachment]({snipe_data['attachments'][0]})"
+            
+            author = snipe_data["author"]
+            
+            msg_embed = discord.Embed(
+                description=f"> {content}",
+                color=discord.Color.from_rgb(47, 49, 54)
+            )
+            msg_embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
+            
+            if first:
+                msg_embed.title = "🧨 Sniped Messages"
+                first = False
+            
+            await ctx.send(embed=msg_embed)
         
 @bot.hybrid_command(name="editsnipe", description="View the last edited message")
 async def editsnipe(ctx):
