@@ -1482,7 +1482,7 @@ async def balance(ctx, member: discord.Member = None):
     net = wallet + bank
     rank = get_global_rank(target.id)
     
-    embed = discord.Embed(color=discord.Color.from_rgb(30, 31, 34))
+    embed = discord.Embed(color=discord.Color.from_rgb(88, 101, 242))
     embed.set_author(name=target.display_name, icon_url=target.display_avatar.url)
     embed.title = "Balance"
     embed.add_field(name="Wallet", value=f"🪙 {wallet:,}", inline=True)
