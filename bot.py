@@ -288,7 +288,7 @@ async def on_message(message):
 
         embed = discord.Embed(
             description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
-            color=discord.Color.from_rgb(30, 31, 34)
+            color=discord.Color.Red()
         )
 
         if data["mentions"]:
