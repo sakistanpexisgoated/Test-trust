@@ -5694,24 +5694,24 @@ async def stealurl(ctx, *, input_text: str):
 # ROLE COMMAND
 # =========================================================
 
-@bot.hybrid_command(name="role", description="Add a role to a member")
+@bot.hybrid_command(name="role", description="Add roles to a member")
 @commands.has_permissions(manage_roles=True)
 async def role(ctx, member: discord.Member, *, role_name: str):
     if ctx.guild.owner_id == member.id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot add roles to the server owner.", ephemeral=True)
-        return await ctx.send(f"❌ {ctx.author.mention} you cannot add roles to the server owner.")
+            return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot modify roles of the server owner.", ephemeral=True)
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot modify roles of the server owner.")
     
     if member.guild_permissions.kick_members or member.guild_permissions.ban_members or member.guild_permissions.manage_roles:
         if ctx.author.id != ctx.guild.owner_id:
             if ctx.interaction:
-                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot add roles to a staff member.", ephemeral=True)
-            return await ctx.send(f"❌ {ctx.author.mention} you cannot add roles to a staff member.")
+                return await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} you cannot modify roles of a staff member.", ephemeral=True)
+            return await ctx.send(f"❌ {ctx.author.mention} you cannot modify roles of a staff member.")
     
     if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.")
+            return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me.", ephemeral=True)
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me.")
     
     # --- SMART ROLE FINDER ---
     role = None
@@ -5723,11 +5723,11 @@ async def role(ctx, member: discord.Member, *, role_name: str):
         role_id = int(mention_match.group(1))
         role = ctx.guild.get_role(role_id)
     
-    # Method 2: Exact name match (case-sensitive)
+    # Method 2: Exact name match
     if not role:
         role = discord.utils.get(ctx.guild.roles, name=search)
     
-    # Method 3: Case-insensitive exact match
+    # Method 3: Case-insensitive exact
     if not role:
         role = discord.utils.find(lambda r: r.name.lower() == search.lower(), ctx.guild.roles)
     
@@ -5735,7 +5735,7 @@ async def role(ctx, member: discord.Member, *, role_name: str):
     if not role:
         role = discord.utils.find(lambda r: search.lower() in r.name.lower(), ctx.guild.roles)
     
-    # Method 5: Strip @ prefix if user typed @RoleName
+    # Method 5: Strip @ prefix
     if not role and search.startswith("@"):
         stripped = search[1:].strip()
         role = discord.utils.find(lambda r: r.name.lower() == stripped.lower(), ctx.guild.roles)
@@ -5753,16 +5753,7 @@ async def role(ctx, member: discord.Member, *, role_name: str):
     
     if ctx.guild.me and role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
         embed = discord.Embed(
-            description=f"❌ I cannot add the role **{role.name}** because it's higher or equal to my highest role.",
-            color=discord.Color.red()
-        )
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    
-    if role in member.roles:
-        embed = discord.Embed(
-            description=f"❌ {member.mention} already has the role **{role.name}**.",
+            description=f"❌ I cannot modify the role **{role.name}** because it's higher or equal to my highest role.",
             color=discord.Color.red()
         )
         if ctx.interaction:
@@ -5770,23 +5761,40 @@ async def role(ctx, member: discord.Member, *, role_name: str):
         return await ctx.send(embed=embed)
     
     try:
-        await member.add_roles(role, reason=f"Added by {ctx.author}")
-        
-        embed = discord.Embed(
-            title="🎭 Role Added",
-            description=f"Added **{role.mention}** to {member.mention}",
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Added by {ctx.author.display_name}")
-        
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed)
-        else:
-            await ctx.send(embed=embed)
+        if role in member.roles:
+            # --- REMOVE ROLE ---
+            await member.remove_roles(role, reason=f"Removed by {ctx.author}")
             
+            embed = discord.Embed(
+                title="✨ Role Removed",
+                description=f"Removed **{role.name}** from {member.mention}",
+                color=discord.Color.red()
+            )
+            embed.set_footer(text=f"Removed by {ctx.author.display_name}")
+            
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(embed=embed)
+            else:
+                await ctx.send(embed=embed)
+        else:
+            # --- ADD ROLE ---
+            await member.add_roles(role, reason=f"Added by {ctx.author}")
+            
+            embed = discord.Embed(
+                title="🎭 Role Added",
+                description=f"Gave **{role.name}** to {member.mention}",
+                color=discord.Color.green()
+            )
+            embed.set_footer(text=f"Added by {ctx.author.display_name}")
+            
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(embed=embed)
+            else:
+                await ctx.send(embed=embed)
+                
     except Exception as e:
         embed = discord.Embed(
-            description=f"❌ Failed to add role: {e}",
+            description=f"❌ Failed to modify role: {e}",
             color=discord.Color.red()
         )
         if ctx.interaction:
