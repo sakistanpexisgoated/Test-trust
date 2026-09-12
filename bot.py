@@ -5690,7 +5690,6 @@ async def stealurl(ctx, *, input_text: str):
             await ctx.interaction.followup.send(embed=embed)
         else:
             await ctx.send(embed=embed)
-
 # =========================================================
 # ROLE COMMAND
 # =========================================================
@@ -5714,50 +5713,86 @@ async def role(ctx, member: discord.Member, *, role_name: str):
             return await ctx.interaction.response.send_message(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.", ephemeral=True)
         return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot add roles to them.")
     
-    role = discord.utils.get(ctx.guild.roles, name=role_name)
+    # --- SMART ROLE FINDER ---
+    role = None
+    search = role_name.strip()
+    
+    # Method 1: Role mention <@&123456789>
+    mention_match = re.match(r'^<@&(\d+)>$', search)
+    if mention_match:
+        role_id = int(mention_match.group(1))
+        role = ctx.guild.get_role(role_id)
+    
+    # Method 2: Exact name match (case-sensitive)
+    if not role:
+        role = discord.utils.get(ctx.guild.roles, name=search)
+    
+    # Method 3: Case-insensitive exact match
+    if not role:
+        role = discord.utils.find(lambda r: r.name.lower() == search.lower(), ctx.guild.roles)
+    
+    # Method 4: Partial / fuzzy match
+    if not role:
+        role = discord.utils.find(lambda r: search.lower() in r.name.lower(), ctx.guild.roles)
+    
+    # Method 5: Strip @ prefix if user typed @RoleName
+    if not role and search.startswith("@"):
+        stripped = search[1:].strip()
+        role = discord.utils.find(lambda r: r.name.lower() == stripped.lower(), ctx.guild.roles)
+        if not role:
+            role = discord.utils.find(lambda r: stripped.lower() in r.name.lower(), ctx.guild.roles)
     
     if not role:
+        embed = discord.Embed(
+            description=f"❌ Role `{role_name}` not found.\n\n**Tip:** You can use the role name, mention it with `@`, or use part of the name.",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ Role `{role_name}` not found.", ephemeral=True)
-        return await ctx.send(f"❌ Role `{role_name}` not found.")
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
     
     if ctx.guild.me and role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        embed = discord.Embed(
+            description=f"❌ I cannot add the role **{role.name}** because it's higher or equal to my highest role.",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ I cannot add the role `{role_name}` because it's higher or equal to my highest role.", ephemeral=True)
-        return await ctx.send(f"❌ I cannot add the role `{role_name}` because it's higher or equal to my highest role.")
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
     
     if role in member.roles:
+        embed = discord.Embed(
+            description=f"❌ {member.mention} already has the role **{role.name}**.",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(f"❌ {member.mention} already has the role `{role_name}`.", ephemeral=True)
-        return await ctx.send(f"❌ {member.mention} already has the role `{role_name}`.")
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
     
     try:
         await member.add_roles(role, reason=f"Added by {ctx.author}")
         
+        embed = discord.Embed(
+            title="✅ Role Added",
+            description=f"Gave **{role.mention}** to {member.mention}",
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Added by {ctx.author.display_name}")
+        
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"✅ Added **{role_name}** to {member.mention}")
+            await ctx.interaction.response.send_message(embed=embed)
         else:
-            await ctx.send(f"✅ Added **{role_name}** to {member.mention}")
+            await ctx.send(embed=embed)
             
     except Exception as e:
+        embed = discord.Embed(
+            description=f"❌ Failed to add role: {e}",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ Failed to add role: {e}", ephemeral=True)
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         else:
-            await ctx.send(f"❌ Failed to add role: {e}")
-
-@role.error
-async def role_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ {ctx.author.mention} You are missing Manage Roles permission.", ephemeral=True)
-        else:
-            await ctx.send(f"❌ {ctx.author.mention} You are missing Manage Roles permission.")
-    if isinstance(error, commands.MemberNotFound):
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(f"❌ Member not found.", ephemeral=True)
-        else:
-            await ctx.send(f"❌ Member not found.")
-
+            await ctx.send(embed=embed)
 # =========================================================
 # SPANK COMMAND
 # =========================================================
