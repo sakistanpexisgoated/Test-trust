@@ -292,7 +292,7 @@ async def on_message(message):
 
         embed = discord.Embed(
             description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
-            color=discord.Color.red()
+            color=discord.Color.gold()
         )
         embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
 
