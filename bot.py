@@ -4669,7 +4669,7 @@ async def start_country_setup(channel, player_id):
     
     await channel.send("Select difficulty below:", view=view)
 
-@bot.hybrid_command(name="Triva", description="Start a Flag Triva")
+@bot.hybrid_command(name="triva", description="Start a Flag Triva")
 async def country(ctx):
     await start_country_setup(ctx.channel, ctx.author.id)
 
