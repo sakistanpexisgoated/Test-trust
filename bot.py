@@ -5118,10 +5118,10 @@ async def pfps(ctx):
     pfp_url = random.choice(PFPS)
     
     embed = discord.Embed(
-        title="🖼️ Random PFP",
-        description=f"Here's a random profile picture for you!",
-        color=discord.Color.from_rgb(30, 31, 34)
-    )
+    title="👀 Random PFP",
+    description=f"Here's a random profile picture for you!",
+    color=discord.Color.from_rgb(220, 20, 60)
+)
     embed.set_image(url=pfp_url)
     embed.set_footer(text=f"Requested by {ctx.author.display_name}")
     
