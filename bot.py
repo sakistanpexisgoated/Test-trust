@@ -2635,7 +2635,7 @@ async def _run_purge(ctx, amount: int):
 
     embed = discord.Embed(
         title="Messages Purged",
-        description=f"Successfully deleted **{removed}** message(s) from this channel.",
+        description=f"✨ Successfully deleted **{removed}** message(s) from this channel.",
         color=discord.Color.green()
     )
     embed.set_footer(text=f"Purged by {ctx.author.display_name}")
@@ -2645,7 +2645,7 @@ async def _run_purge(ctx, amount: int):
 async def clear(ctx, amount: int):
     await _run_purge(ctx, amount)
 
-@bot.hybrid_command(name="purge", description="Mass-delete messages (Admin/Moderator only)")
+@bot.hybrid_command(name="purge", description="Mass delete messages (Admin/Moderator only)")
 async def purge(ctx, amount: int):
     await _run_purge(ctx, amount)
 
