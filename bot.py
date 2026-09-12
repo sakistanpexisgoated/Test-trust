@@ -5773,8 +5773,8 @@ async def role(ctx, member: discord.Member, *, role_name: str):
         await member.add_roles(role, reason=f"Added by {ctx.author}")
         
         embed = discord.Embed(
-            title="✅ Role Added",
-            description=f"Gave **{role.mention}** to {member.mention}",
+            title="🎭 Role Added",
+            description=f"Added **{role.mention}** to {member.mention}",
             color=discord.Color.green()
         )
         embed.set_footer(text=f"Added by {ctx.author.display_name}")
