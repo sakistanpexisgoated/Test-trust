@@ -5165,11 +5165,11 @@ def convert_to_fraktur(text):
             result.append(char)
     return ''.join(result)
 
-@bot.hybrid_command(name="fraktur", description="Convert text to Fraktur style (like 𝔫𝔦𝔤𝔤𝔞)")
+@bot.hybrid_command(name="fraktur", description="Convert a text to Fraktur style (like ℌ𝔢𝔩𝔩𝔬)")
 async def fraktur(ctx, *, text: str):
     if not text:
         embed = discord.Embed(
-            description="❌ Please provide some text to convert!",
+            description="⚙️ Please provide a text to convert!",
             color=discord.Color.red()
         )
         if ctx.interaction:
