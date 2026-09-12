@@ -2088,7 +2088,7 @@ async def afk(ctx, *, reason: str = "AFK"):
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed)
     else:
-        await ctx.send(embed=embed)
+        await ctx.reply(embed=embed, mention_author=False)
 # =========================================================
 # BAN COMMAND
 # =========================================================
