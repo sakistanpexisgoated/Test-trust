@@ -275,25 +275,30 @@ async def on_message(message):
                 )
                 await message.channel.send(embed=embed)
 
-    if message.author.id in afk_users:
+        if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
         
         if duration_sec < 60:
-            dur_str = f"{duration_sec} seconds"
+            dur_str = f"{duration_sec} second{'s' if duration_sec != 1 else ''}"
         elif duration_sec < 3600:
-            dur_str = f"{duration_sec // 60} minutes"
+            minutes = duration_sec // 60
+            seconds = duration_sec % 60
+            dur_str = f"{minutes} minute{'s' if minutes != 1 else ''} and {seconds} second{'s' if seconds != 1 else ''}"
         else:
-            dur_str = f"{duration_sec // 3600} hours"
+            hours = duration_sec // 3600
+            minutes = (duration_sec % 3600) // 60
+            dur_str = f"{hours} hour{'s' if hours != 1 else ''} and {minutes} minute{'s' if minutes != 1 else ''}"
 
         embed = discord.Embed(
             description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
-            color=discord.Color.Red()
+            color=discord.Color.red()
         )
+        embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
 
         if data["mentions"]:
             mentions_text = []
-            for m in data["mentions"]:
+            for m in data["mentions"][:10]:
                 time_ago = int(time.time() - m["time"])
                 if time_ago < 60:
                     time_str = f"{time_ago} seconds ago"
@@ -310,10 +315,8 @@ async def on_message(message):
                 inline=False
             )
 
-        await message.channel.send(embed=embed)
-
-    if message.guild and link_check_enabled.get(message.guild.id, False):
-        url_pattern = r'https?://[^\s]+|www\.[^\s]+'
+        await message.reply(embed=embed, mention_author=False)
+        
         links = re.findall(url_pattern, message.content)
         
         if message.attachments:
