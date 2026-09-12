@@ -2191,7 +2191,7 @@ async def fake_ban(ctx, member: discord.Member, *, reason: str = "No reason prov
     )
     if reason != "No reason provided":
         embed.add_field(name="Reason", value=reason, inline=False)
-    embed.set_footer(text=f"tottaly real trust by {ctx.author.display_name}")
+    embed.set_footer(text=f"totally real trust by {ctx.author.display_name}")
 
     await ctx.send(embed=embed)
 
