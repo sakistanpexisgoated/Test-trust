@@ -291,7 +291,7 @@ async def on_message(message):
             dur_str = f"{hours} hour{'s' if hours != 1 else ''} and {minutes} minute{'s' if minutes != 1 else ''}"
 
         embed = discord.Embed(
-            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
+            description=f"👋 Welcome back, {message.author.mention}! I removed your AFK. You were AFK for **{dur_str}.**",
             color=discord.Color.gold()
         )
         embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
