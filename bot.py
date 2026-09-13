@@ -1627,11 +1627,9 @@ async def daily(ctx):
     update_wallet(user_id, reward)
     cursor.execute("UPDATE users SET daily_claim = ? WHERE user_id = ?", (current_time, user_id))
     db.commit()
-
-    custom_emoji = "<:emoji:1548793793577361539>"
-
+    
     embed = discord.Embed(
-        description=f"{custom_emoji} Successfully claimed daily reward of **${reward:,}**!",
+        description=f"{custom_emoji} 💸 Successfully claimed daily reward of **${reward:,}**!",
         color=discord.Color.green()
     )
     await ctx.send(embed=embed)
