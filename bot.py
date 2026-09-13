@@ -1617,16 +1617,24 @@ async def daily(ctx):
         remaining = int(cooldown - (current_time - row[0]))
         hours = remaining // 3600
         minutes = (remaining % 3600) // 60
-        embed = discord.Embed(description=f"⏳ Already claimed daily reward. Try again in **{hours}h {minutes}m**.", color=discord.Color.orange())
+        embed = discord.Embed(
+            description=f"⏳ Already claimed daily reward. Try again in **{hours}h {minutes}m**.",
+            color=discord.Color.orange()
+        )
         return await ctx.send(embed=embed)
 
     reward = 500
     update_wallet(user_id, reward)
     cursor.execute("UPDATE users SET daily_claim = ? WHERE user_id = ?", (current_time, user_id))
     db.commit()
-    embed = discord.Embed(description=f"Successfully claimed daily reward of **${reward:,}**!", color=discord.Color.green())
-    await ctx.send(embed=embed)
 
+    custom_emoji = "<:emoji:1548793793577361539>"
+
+    embed = discord.Embed(
+        description=f"{custom_emoji} Successfully claimed daily reward of **${reward:,}**!",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
 # =========================================================
 # WORK COMMAND MEDIA
 # =========================================================
