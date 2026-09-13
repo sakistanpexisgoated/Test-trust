@@ -3600,7 +3600,7 @@ class GiveawayEntryView(discord.ui.View):
             return await interaction.response.send_message("Bots can't join giveaways.", ephemeral=True)
 
         try:
-            await interaction.response.send_message("🎉 You have successfully joined the giveaway good luck", ephemeral=True)
+            await interaction.response.send_message("🎉 You have successfully entered the giveaway good luck", ephemeral=True)
         except Exception:
             try:
                 await interaction.response.defer(ephemeral=True)
