@@ -6911,7 +6911,7 @@ class NukeModal(discord.ui.Modal, title="☢️ NUKE CONFIRMATION"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id not in {1286560808528117820, 1486079948778246256}:
+        if interaction.user.id not in OWNER_IDS:
             embed = discord.Embed(description="Only the bot owners can use this command.", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
