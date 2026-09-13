@@ -3600,7 +3600,7 @@ class GiveawayEntryView(discord.ui.View):
             return await interaction.response.send_message("Bots can't join giveaways.", ephemeral=True)
 
         try:
-            await interaction.response.send_message("✅ You've been entered into the giveaway! Good luck!", ephemeral=True)
+            await interaction.response.send_message("🎉 You have successfully joined the giveaway good luck", ephemeral=True)
         except Exception:
             try:
                 await interaction.response.defer(ephemeral=True)
@@ -3761,7 +3761,7 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
 
         result_embed = discord.Embed(
             title="🎉 Giveaway Ended — Congratulations!",
-            description=f"{winner_mentions} won the giveaway of **{prize}**!",
+            description=f"{winner_mentions} 🎁 won the giveaway of **{prize}**!",
             color=discord.Color.green()
         )
         result_embed.add_field(name="Host", value=f"<@{host_id}>", inline=True)
@@ -3770,7 +3770,7 @@ async def _handle_giveaway_end(message_id: int, channel_id: int, guild_id: int, 
         for uid in winners:
             try:
                 user = await bot.fetch_user(uid)
-                dm_text = f"congrats {user.mention} u won the giveaway **{prize}** in **{channel.guild.name}** pls check the server or ping the host <@{host_id}> in the server to claim ur giveaway!"
+                dm_text = f"🎉 Congrats {user.mention} u won the giveaway **{prize}** in **{channel.guild.name}** pls check the server or ping the host <@{host_id}> in the server to claim ur giveaway!"
                 await user.send(dm_text)
             except Exception:
                 pass
