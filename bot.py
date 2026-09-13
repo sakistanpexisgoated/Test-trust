@@ -1313,7 +1313,7 @@ async def mock(ctx, member: discord.Member = None, *, text: str = None):
 
     if not ctx.channel.permissions_for(ctx.guild.me).manage_webhooks:
         embed = discord.Embed(
-            description="❌ I need **Manage Webhooks** permission to do this!",
+            description="☄️ I need **Manage Webhooks** permission to do this!",
             color=discord.Color.red()
         )
         if ctx.interaction:
