@@ -1300,56 +1300,82 @@ async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str
 
     asyncio.create_task(do_send())
     
-@bot.hybrid_command(name="mock", description="Mock text in sPoNgEbOb case")
+@bot.hybrid_command(name="mock", description="Mock a member")
 async def mock(ctx, member: discord.Member = None, *, text: str = None):
-    # If a member is mentioned, use it. Otherwise, use the full text.
-    if member is None:
-        text = ctx.message.content.split(maxsplit=1)[1] if not ctx.interaction and ctx.message and len(ctx.message.content.split(maxsplit=1)) > 1 else (text or "")
-    else:
-        # If member is mentioned but no text was given, fall back to the full args
-        if not text:
-            raw = ctx.message.content if not ctx.interaction and ctx.message else ""
-            # Strip the prefix and the mention
-            parts = raw.split(maxsplit=2)
-            text = parts[2] if len(parts) > 2 else ""
-
-    if not text:
+    if member is None or not text:
         embed = discord.Embed(
-            description="❌ Please provide text to mock!",
+            description="❌ Usage: `,,mock @member <text>`",
             color=discord.Color.red()
         )
         if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await ctx.send(embed=embed)
-        return
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
 
+    if not ctx.channel.permissions_for(ctx.guild.me).manage_webhooks:
+        embed = discord.Embed(
+            description="❌ I need **Manage Webhooks** permission to do this!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    # Build the mocked text
     mocked_text = "".join(
         c.upper() if i % 2 == 0 else c.lower()
         for i, c in enumerate(text)
     )
 
-    # If a member was mentioned, prepend their name so it looks personal
-    if member is not None:
-        display = f"{member.display_name} — {mocked_text}"
-    else:
-        display = mocked_text
-
-    embed = discord.Embed(
-        title="🚿 Mocked Text",
-        description=f"**{display}**",
-        color=discord.Color.gold()
-    )
-
+    # Acknowledge the interaction (slash) or delete the user's message (prefix)
     if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed)
+        await ctx.interaction.response.defer(ephemeral=True)
     else:
         if ctx.message:
             try:
                 await ctx.message.delete()
             except Exception:
                 pass
-        await ctx.send(embed=embed)
+
+    # Create a temporary webhook
+    try:
+        webhook = await ctx.channel.create_webhook(name="Rynx Mock")
+
+        await webhook.send(
+            content=mocked_text,
+            username=member.display_name,
+            avatar_url=member.display_avatar.url
+        )
+
+        # Delete the webhook afterward
+        try:
+            await webhook.delete()
+        except Exception:
+            pass
+
+        if ctx.interaction:
+            try:
+                await ctx.interaction.followup.send("✅ Mocked!", ephemeral=True)
+            except Exception:
+                pass
+
+    except discord.Forbidden:
+        embed = discord.Embed(
+            description="❌ I don't have permission to create webhooks here!",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+    except Exception as e:
+        embed = discord.Embed(
+            description=f"❌ Error: {str(e)[:100]}",
+            color=discord.Color.red()
+        )
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="fakenuke", description="Trigger a fake server nuke alert message for a member")
 async def fakenuke(ctx, member: discord.Member = None):
