@@ -259,7 +259,6 @@ async def on_message(message):
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
     
-     @bot.event
 async def on_message(message):
     if message.author.bot:
         return
