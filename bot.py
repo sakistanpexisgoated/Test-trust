@@ -259,18 +259,7 @@ async def on_message(message):
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
     
-async def on_message(message):
-    if message.author.bot:
-        return
-    
-    is_standalone_bot_mention = (
-        bot.user in message.mentions
-        and not message.mention_everyone
-        and message.reference is None
-        and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
-    )
-    
-   if message.mentions:
+    if message.mentions:
         for member in message.mentions:
             if member.id in afk_users:
                 afk_users[member.id]["mentions"].append({
@@ -285,7 +274,7 @@ async def on_message(message):
                     color=discord.Color.from_rgb(30, 31, 34)
                 )
                 await message.channel.send(embed=embed)
-
+                
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
@@ -307,6 +296,27 @@ async def on_message(message):
         )
         embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
 
+        if data["mentions"]:
+            mentions_text = []
+            for m in data["mentions"][:10]:
+                time_ago = int(time.time() - m["time"])
+                if time_ago < 60:
+                    time_str = f"{time_ago} seconds ago"
+                elif time_ago < 3600:
+                    time_str = f"{time_ago // 60} minutes ago"
+                else:
+                    time_str = f"{time_ago // 3600} hours ago"
+                
+                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
+            
+            embed.add_field(
+                name=f"You received {len(data['mentions'])} mention(s)",
+                value="\n\n".join(mentions_text),
+                inline=False
+            )
+
+        await message.reply(embed=embed, mention_author=False)
+        
         if data["mentions"]:
             mentions_text = []
             for m in data["mentions"][:10]:
