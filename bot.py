@@ -259,37 +259,27 @@ async def on_message(message):
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
     
-       if message.mentions:
-        for member in message.mentions:
-            if member.id in afk_users:
-                afk_users[member.id]["mentions"].append({
+     @bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    
+    is_standalone_bot_mention = (
+        bot.user in message.mentions
+        and not message.mention_everyone
+        and message.reference is None
+        and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
+    )
+    
+    if message.mentions:                       
+        for member in message.mentions:        
+            if member.id in afk_users:         
+                afk_users[member.id]["mentions"].append({  
                     "author_name": message.author.display_name,
                     "content": message.content,
                     "jump_url": message.jump_url,
                     "time": time.time()
                 })
-                data = afk_users[member.id]
-
-                # Format how long they've been AFK
-                duration_sec = int(time.time() - data["time"])
-                if duration_sec < 60:
-                    time_str = f"{duration_sec} second{'s' if duration_sec != 1 else ''} ago"
-                elif duration_sec < 3600:
-                    minutes = duration_sec // 60
-                    seconds = duration_sec % 60
-                    time_str = f"{minutes} minute{'s' if minutes != 1 else ''} ago"
-                else:
-                    hours = duration_sec // 3600
-                    minutes = (duration_sec % 3600) // 60
-                    time_str = f"{hours} hour{'s' if hours != 1 else ''} ago"
-
-                embed = discord.Embed(
-                    description=f"💤 **{member.display_name}** is currently AFK — **{data['reason']}**\n-# ({time_str})",
-                    color=discord.Color.from_rgb(30, 31, 34)
-                )
-                embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-
-                await message.channel.send(embed=embed)
                 
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
