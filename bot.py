@@ -275,7 +275,7 @@ async def on_message(message):
                 )
                 await message.channel.send(embed=embed)
                 
-         if message.author.id in afk_users:
+    if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
         
@@ -291,8 +291,8 @@ async def on_message(message):
             dur_str = f"{hours} hour{'s' if hours != 1 else ''} and {minutes} minute{'s' if minutes != 1 else ''}"
 
         embed = discord.Embed(
-            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
-            color=discord.Color.red()
+            description=f"👋 Welcome back, {message.author.mention}! I removed your AFK. You were AFK for **{dur_str}.**",
+            color=discord.Color.gold()
         )
         embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
 
@@ -313,39 +313,10 @@ async def on_message(message):
                 name=f"You received {len(data['mentions'])} mention(s)",
                 value="\n\n".join(mentions_text),
                 inline=False
+            )
 
         await message.reply(embed=embed, mention_author=False)
-            )
-        
-        if data["mentions"]:
-            mentions_text = []
-            for m in data["mentions"][:10]:
-                time_ago = int(time.time() - m["time"])
-                if time_ago < 60:
-                    time_str = f"{time_ago} seconds ago"
-                elif time_ago < 3600:
-                    time_str = f"{time_ago // 60} minutes ago"
-                else:
-                    time_str = f"{time_ago // 3600} hours ago"
-                
-                mentions_text.append(f"**{m['author_name']}**, {time_str}\n[Click to view message]({m['jump_url']})")
             
-            embed.add_field(
-                name=f"You received {len(data['mentions'])} mention(s)",
-                value="\n\n".join(mentions_text),
-                inline=False
-            )
-
-        await message.reply(embed=embed, mention_author=False)
-        
-        links = re.findall(url_pattern, message.content)
-        
-        if message.attachments:
-            is_media = all(att.content_type and att.content_type.startswith(('image/', 'video/')) for att in message.attachments)
-            if is_media and not links:
-                await bot.process_commands(message)
-                return
-        
         if links:
             cursor.execute("SELECT link_domain FROM allowed_links WHERE guild_id = ?", (message.guild.id,))
             allowed = [row[0] for row in cursor.fetchall()]
