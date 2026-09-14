@@ -6515,7 +6515,7 @@ async def endhide(ctx):
 # =========================================================
 
 RAPE_GIFS = [
-    "https://cdn.discordapp.com/attachments/1525052130266841090/1541227778098204733/ezgif-6db7731ff9ed9aa8.gif"
+    "https://cdn.discordapp.com/attachments/1062920364079984710/1313736716934316063/4B136022-E20D-4147-8176-83236A3B38C1.gif?ex=6aa97e69&is=6aa82ce9&hm=8614f5008b701ff74d5c59659c9003193b20565247ccdffaa794f6d5c6757c96"
 ]
 
 @bot.hybrid_command(name="rape", description="rape someone with a cute GIF!")
