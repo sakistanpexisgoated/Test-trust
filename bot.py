@@ -3883,7 +3883,7 @@ async def goon(ctx, member: discord.Member):
         description=response_text,
         color=discord.Color.purple()
     )
-    embed.set_image(url="https://klipy.com/gifs/speed-gooning")
+    embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdDhoeGo5M245OWI3N3AyZTdlOTYycm9ncDNkNTJkb3JicXd5NGpyayZlcD12MV9naWZzX3NlYXJjaCZjdD1n/ILdOSQtOweWeIq5gzn/giphy.gif")
 
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed)
