@@ -274,8 +274,7 @@ async def on_message(message):
                     color=discord.Color.from_rgb(30, 31, 34)
                 )
                 await message.channel.send(embed=embed)
-                
-    if message.author.id in afk_users:
+         if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
         
@@ -291,8 +290,8 @@ async def on_message(message):
             dur_str = f"{hours} hour{'s' if hours != 1 else ''} and {minutes} minute{'s' if minutes != 1 else ''}"
 
         embed = discord.Embed(
-            description=f"👋 Welcome back, {message.author.mention}! I removed your AFK. You were AFK for **{dur_str}.**",
-            color=discord.Color.gold()
+            description=f"Welcome back, {message.author.mention}! I removed your AFK. You were AFK for {dur_str}.",
+            color=discord.Color.red()
         )
         embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
 
@@ -313,9 +312,9 @@ async def on_message(message):
                 name=f"You received {len(data['mentions'])} mention(s)",
                 value="\n\n".join(mentions_text),
                 inline=False
-            )
 
         await message.reply(embed=embed, mention_author=False)
+            )
         
         if data["mentions"]:
             mentions_text = []
