@@ -271,16 +271,22 @@ async def on_message(message):
         and message.content.strip() in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
     )
     
-    if message.mentions:                       
-        for member in message.mentions:        
-            if member.id in afk_users:         
-                afk_users[member.id]["mentions"].append({  
+   if message.mentions:
+        for member in message.mentions:
+            if member.id in afk_users:
+                afk_users[member.id]["mentions"].append({
                     "author_name": message.author.display_name,
                     "content": message.content,
                     "jump_url": message.jump_url,
                     "time": time.time()
                 })
-                
+                data = afk_users[member.id]
+                embed = discord.Embed(
+                    description=f"💤 **{member.display_name}** is AFK: {data['reason']} (<t:{int(data['time'])}:R>)",
+                    color=discord.Color.from_rgb(30, 31, 34)
+                )
+                await message.channel.send(embed=embed)
+
     if message.author.id in afk_users:
         data = afk_users.pop(message.author.id)
         duration_sec = int(time.time() - data["time"])
