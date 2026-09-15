@@ -3883,7 +3883,7 @@ async def goon(ctx, member: discord.Member):
         description=response_text,
         color=discord.Color.purple()
     )
-    embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdDhoeGo5M245OWI3N3AyZTdlOTYycm9ncDNkNTJkb3JicXd5NGpyayZlcD12MV9naWZzX3NlYXJjaCZjdD1n/ILdOSQtOweWeIq5gzn/giphy.gif")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1478277367029039115/1549139595638341712/togif.f686f4ae.gif?ex=6aaa44ed&is=6aa8f36d&hm=744c9b882dbac52cfbbacf98f015b05506ddf138c398aa694500388e25846f4d")
 
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed)
