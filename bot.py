@@ -6943,6 +6943,56 @@ async def on_command_error(ctx, error):
         except Exception:
             return
     return await ctx.send(embed=embed)
+    # =========================================================
+# CHANNEL LOCK / UNLOCK COMMANDS
+# =========================================================
+
+@bot.hybrid_command(name="lock", description="Locks the current channel to prevent members from sending messages.")
+@app_commands.describe(channel="The channel to lock (defaults to current channel)")
+async def lock(ctx: commands.Context, channel: discord.TextChannel = None):
+    # Check permissions
+    if not await require_server_mod(ctx):
+        return
+
+    channel = channel or ctx.channel
+    overwrite = channel.overwrites_for(ctx.guild.default_role)
+
+    if overwrite.send_messages is False:
+        return await ctx.send(f"🔒 {channel.mention} is already locked.")
+
+    overwrite.send_messages = False
+    await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=f"Channel locked by {ctx.author}")
+
+    embed = discord.Embed(
+        title="🔒 Channel Locked",
+        description=f"{channel.mention} has been locked by {ctx.author.mention}.",
+        color=discord.Color.red()
+    )
+    await ctx.send(embed=embed)
+
+
+@bot.hybrid_command(name="unlock", description="Unlocks the current channel to allow members to send messages.")
+@app_commands.describe(channel="The channel to unlock (defaults to current channel)")
+async def unlock(ctx: commands.Context, channel: discord.TextChannel = None):
+    # Check permissions
+    if not await require_server_mod(ctx):
+        return
+
+    channel = channel or ctx.channel
+    overwrite = channel.overwrites_for(ctx.guild.default_role)
+
+    if overwrite.send_messages is True or overwrite.send_messages is None:
+        return await ctx.send(f"🔓 {channel.mention} is already unlocked.")
+
+    overwrite.send_messages = None  # Resets to default role settings
+    await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=f"Channel unlocked by {ctx.author}")
+
+    embed = discord.Embed(
+        title="🔓 Channel Unlocked",
+        description=f"{channel.mention} has been unlocked by {ctx.author.mention}.",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
