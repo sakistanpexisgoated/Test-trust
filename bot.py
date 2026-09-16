@@ -6943,7 +6943,7 @@ async def on_command_error(ctx, error):
         except Exception:
             return
     return await ctx.send(embed=embed)
-    # =========================================================
+# =========================================================
 # CHANNEL LOCK / UNLOCK COMMANDS
 # =========================================================
 
