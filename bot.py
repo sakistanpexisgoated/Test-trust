@@ -82,3 +82,31 @@ async def whitelisted_predicate(interaction: discord.Interaction):
 # =========================================================
 # BOT SETUP
 # =========================================================
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents,
+    activity=discord.Activity(
+        type=discord.ActivityType.listening,
+        name="R!help"
+    ),
+    status=discord.Status.online,
+)
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    await bot.change_presence(
+        activity=discord.Activity(
+            type=discord.ActivityType.listening,
+            name="R!help"
+        )
+    )
+
+
+if __name__ == "__main__":
+    bot.run(TOKEN)
