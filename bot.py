@@ -4062,28 +4062,27 @@ SETUP_ROLES = [
 
 SETUP_STRUCTURE = {
     "Staff Only": [
-        ("Staff-Rules", "📖", "text"),
-        ("Staff-Announcements", "📢", "text"),
+        ("Staff-Rules", "📚", "text"),
+        ("Staff-Announcements", "📣", "text"),
         ("Staff-Chat", "💬", "text"),
         ("Staff-Promotions", "🎉", "text"),
-        ("Staff-Demotions", "📉", "text"),
+        ("Staff-Demotions", "⚠️", "text"),
         ("Applications", "📄", "text"),
-        ("Staff-Vc", "🎙️", "voice"),
+        ("STAFF VC", "🎙️", "voice"),
     ],
     "Arrivals": [
-        ("Roles-Info", "🎭", "text"),
+        ("Invites-Track", "🛤️", "text"),
         ("Welcome", "👋", "text"),
-        ("Goodbye", "🪽", "text"),
+        ("Goodbye", "😔", "text"),
     ],
     "Important": [
         ("Verify", "✅", "text"),
-        ("Rules", "📖", "text"),
-        ("Announcements", "📢", "text"),
+        ("Rules", "📚", "text"),
+        ("Announcements", "📣", "text"),
         ("Owners-Vouches", "📸", "text"),
         ("Owners-Trading", "👑", "text"),
         ("Applications", "📄", "text"),
-        ("Server-Updates", "🔄", "text"),
-        ("Spreader-Videos", "📺", "text"),
+        ("Server-Updates", "✨", "text"),
         ("Staff-Feedbacks", "🏅", "text"),
         ("Sab-Leaks", "👀", "text"),
         ("Partnerships", "⭐", "text"),
@@ -4144,7 +4143,7 @@ SETUP_STRUCTURE = {
 
 DESIGNS = {
     "double_bracket_dot": {
-        "label": "〚✅〛・syncs",
+        "label": "〚✅〛・",
         "description": "〚🔒〛・staff-only  •  〚💬〛・general",
         "cat_fmt": lambda e, n: f"〚{e}〛・{n}",
         "ch_fmt":  lambda e, n: f"〚{e}〛・{n}",
