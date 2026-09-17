@@ -7878,6 +7878,178 @@ def _resolve_lang(text: str):
             return code
 
     return None
+
+
+@bot.hybrid_command(name="translate", aliases=["tr"], description="Translate text to another language")
+@app_commands.describe(
+    language="Target language (e.g. spanish, japanese, fr, english)",
+    text="The text to translate (leave empty to translate a replied message)",
+)
+async def translate(ctx, language: str, *, text: str = None):
+    # If no text provided, try to grab it from a replied-to message
+    if not text:
+        if not ctx.interaction and ctx.message and ctx.message.reference:
+            try:
+                ref = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                text = ref.content
+            except Exception:
+                text = None
+
+    if not text:
+        embed = discord.Embed(
+            description=(
+                "❌ Please provide text to translate.\n"
+                "**Examples:**\n"
+                "`R!translate spanish hello world`\n"
+                "Reply to a message with `R!translate japanese`"
+            ),
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    if len(text) > 1500:
+        embed = discord.Embed(
+            description="❌ Text too long (max 1500 characters).",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    target_code = _resolve_lang(language)
+    if not target_code:
+        embed = discord.Embed(
+            description=(
+                f"❌ Unknown language `{language}`.\n"
+                "Try `,,translate <lang> <text>` — most language names work:\n"
+                "`english`, `spanish`, `french`, `japanese`, `chinese`, `arabic`, `hindi`, etc.\n"
+                "Or use a code: `en`, `es`, `ja`, `zh-CN`."
+            ),
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    if ctx.interaction:
+        await ctx.interaction.response.defer()
+
+    # Google Translate free endpoint
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {
+        "client": "gtx",
+        "sl": "auto",
+        "tl": target_code,
+        "dt": "t",
+        "q": text,
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                params=params,
+                timeout=10,
+                headers={"User-Agent": "Mozilla/5.0"},
+            ) as resp:
+                if resp.status != 200:
+                    embed = discord.Embed(
+                        description=f"❌ Translate failed (status {resp.status}).",
+                        color=discord.Color.red(),
+                    )
+                    if ctx.interaction:
+                        return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                    return await ctx.send(embed=embed)
+                data = await resp.json()
+    except asyncio.TimeoutError:
+        embed = discord.Embed(description="⏰ Translate timed out, try again.", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+    except Exception as e:
+        embed = discord.Embed(
+            description=f"❌ Error: `{str(e)[:150]}`",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    # Google's response is a nested array; join the translated segments
+    try:
+        translated = "".join(seg[0] for seg in data[0] if seg and seg[0])
+        detected_code = data[2] if len(data) > 2 else "auto"
+    except Exception:
+        translated = None
+        detected_code = "auto"
+
+    if not translated:
+        embed = discord.Embed(description="❌ Couldn't translate that text.", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    detected_name = TRANSLATE_LANGS.get(detected_code, detected_code.upper() if detected_code else "Auto")
+    target_name = TRANSLATE_LANGS.get(target_code, target_code.upper())
+
+    # Trim if it got too long
+    if len(translated) > 1024:
+        translated = translated[:1020] + "..."
+
+    embed = discord.Embed(
+        title="🌐 Translation",
+        color=discord.Color.blurple(),
+    )
+    embed.add_field(name="📝 Original", value=text[:1024], inline=False)
+    embed.add_field(name="✅ Translated", value=translated, inline=False)
+    embed.set_footer(
+        text=f"{detected_name} → {target_name} • Requested by {ctx.author.display_name}",
+        icon_url=ctx.author.display_avatar.url,
+    )
+
+    if ctx.interaction:
+        await ctx.interaction.followup.send(embed=embed)
+    else:
+        if ctx.message:
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        await ctx.send(embed=embed)
+
+
+@bot.hybrid_command(name="languages", aliases=["langs"], description="List supported translation languages")
+async def languages(ctx):
+    # Build a compact list of common languages
+    common = [
+        "English (`en`)", "Spanish (`es`)", "French (`fr`)", "German (`de`)",
+        "Italian (`it`)", "Portuguese (`pt`)", "Russian (`ru`)", "Japanese (`ja`)",
+        "Korean (`ko`)", "Chinese (`zh-CN`)", "Arabic (`ar`)", "Hindi (`hi`)",
+        "Dutch (`nl`)", "Polish (`pl`)", "Turkish (`tr`)", "Greek (`el`)",
+        "Hebrew (`he`)", "Swedish (`sv`)", "Norwegian (`no`)", "Danish (`da`)",
+        "Finnish (`fi`)", "Ukrainian (`uk`)", "Vietnamese (`vi`)", "Thai (`th`)",
+        "Indonesian (`id`)", "Filipino (`tl`)", "Bengali (`bn`)", "Urdu (`ur`)",
+        "Persian (`fa`)", "Tamil (`ta`)", "Telugu (`te`)", "Romanian (`ro`)",
+    ]
+
+    embed = discord.Embed(
+        title="🌐 Supported Languages",
+        description=(
+            "**Common languages:**\n" + " • ".join(common)
+            + "\n\n**All languages:** The bot supports **every Google Translate language** "
+              "(~135 languages). Just type the language name — `spanish`, `japanese`, `french`, etc. — "
+              "or use a code like `en`, `es`, `ja`."
+        ),
+        color=discord.Color.blurple(),
+    )
+    embed.set_footer(text=f"{len(TRANSLATE_LANGS)} languages supported • Example: ,,translate japanese hello")
+
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
