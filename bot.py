@@ -286,10 +286,16 @@ def _load_font(size, bold=False):
     return ImageFont.load_default()
 
 
-def _text_center(draw, cx, y, text, font, fill):
+def _text_center(draw, cx, y, text, font, fill, shadow=True):
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     x = cx - tw // 2
+    # Drop shadow for readability
+    if shadow:
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0))
     draw.text((x, y), text, font=font, fill=fill)
     return tw
 
@@ -304,8 +310,9 @@ async def build_welcome_card(member, member_count, server_name):
 
     draw = ImageDraw.Draw(img)
 
-    avatar_size = int(H * 0.62)
-    avatar_cx = int(W * 0.125)
+    # Smaller avatar: 0.45 instead of 0.62
+    avatar_size = int(H * 0.45)
+    avatar_cx = int(W * 0.14)
     avatar_cy = H // 2
     avatar_x = avatar_cx - avatar_size // 2
     avatar_y = avatar_cy - avatar_size // 2
@@ -325,6 +332,7 @@ async def build_welcome_card(member, member_count, server_name):
     glow_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow_layer)
 
+    # Glow ring
     for r_step, alpha in [(8, 20), (5, 45), (2, 90)]:
         radius = avatar_size // 2 + r_step
         glow_draw.ellipse(
@@ -350,25 +358,29 @@ async def build_welcome_card(member, member_count, server_name):
 
     draw = ImageDraw.Draw(img)
 
-    text_cx = (avatar_x + avatar_size + W) // 2
+    # Text on the right side — clear and bigger
+    text_cx = (avatar_x + avatar_size + W) // 2 + 30
 
-    font_welcome = _load_font(int(H * 0.155), bold=True)
-    font_to = _load_font(int(H * 0.105), bold=False)
-    font_server = _load_font(int(H * 0.145), bold=True)
+    # Bigger fonts for clarity
+    font_welcome = _load_font(int(H * 0.13), bold=True)
+    font_to = _load_font(int(H * 0.09), bold=False)
+    font_server = _load_font(int(H * 0.13), bold=True)
 
-    line1_y = int(H * 0.24)
-    line2_y = int(H * 0.46)
-    line3_y = int(H * 0.65)
+    line1_y = int(H * 0.28)
+    line2_y = int(H * 0.47)
+    line3_y = int(H * 0.63)
 
+    # Line 1: Welcome USER
     _text_center(draw, text_cx, line1_y, f"Welcome {member.display_name}", font_welcome, "white")
 
+    # Line 2: "to" with dashes
     to_text = "to"
     bbox = draw.textbbox((0, 0), to_text, font=font_to)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
 
     dash_len = int(W * 0.09)
-    dash_y = line2_y + th // 2 + 8
+    dash_y = line2_y + th // 2 + 4
     gap = 22
 
     draw.line(
@@ -383,6 +395,7 @@ async def build_welcome_card(member, member_count, server_name):
     )
     _text_center(draw, text_cx, line2_y, to_text, font_to, "white")
 
+    # Line 3: Server name
     _text_center(draw, text_cx, line3_y, server_name, font_server, "white")
 
     out = _io.BytesIO()
