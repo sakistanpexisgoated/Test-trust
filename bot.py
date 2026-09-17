@@ -9220,7 +9220,7 @@ async def ticket_panel(ctx, channel: discord.TextChannel = None):
         )
     else:
         await ctx.send(f"✅ Panel posted in {target.mention}.", delete_after=5)
-        @ticket_group.command(name="add", description="Add a user to the current ticket")
+@ticket_group.command(name="add", description="Add a user to the current ticket")
 @app_commands.describe(member="User to add")
 async def ticket_add(ctx, member: discord.Member):
     if not isinstance(ctx.author, discord.Member) or not is_staff_member(ctx.author):
@@ -9251,6 +9251,7 @@ async def ticket_add(ctx, member: discord.Member):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+
 
 @ticket_group.command(name="remove", description="Remove a user from the current ticket")
 @app_commands.describe(member="User to remove")
@@ -9296,7 +9297,6 @@ async def ticket_close(ctx, *, reason: str = "No reason provided"):
             return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
 
-    # Only staff or the opener can close
     if not is_staff_member(ctx.author) and ctx.author.id != ticket["user_id"]:
         embed = discord.Embed(description="❌ Only staff or the ticket opener can close this.", color=discord.Color.red())
         if ctx.interaction:
