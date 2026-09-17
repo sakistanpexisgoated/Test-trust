@@ -10043,7 +10043,7 @@ class WYRView(discord.ui.View):
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
 
-@bot.hybrid_command(name="wouldyourather", aliases=["wyr"], description="Would you rather...?")
+@bot.command(name="wouldyourather", aliases=["wyr"])
 async def wouldyourather(ctx):
     option_a, option_b = random.choice(WYR_QUESTIONS)
     view = WYRView(ctx.author.id, option_a, option_b)
