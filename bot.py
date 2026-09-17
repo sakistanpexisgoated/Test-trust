@@ -192,6 +192,317 @@ CREATE TABLE IF NOT EXISTS tickets (
 db.commit()
 
 cursor.execute("""
+CREATE TABLE IF NOT EXISTS welcome_config (
+    guild_id INTEGER PRIMARY KEY,
+    welcome_channel_id INTEGER,
+    goodbye_channel_id INTEGER,
+    dm_welcome INTEGER DEFAULT 0,
+    welcome_message TEXT DEFAULT 'Welcome {user} to **{server}**! You are the {count}th member!',
+    goodbye_message TEXT DEFAULT '{user} has left {server}.',
+    welcome_embed INTEGER DEFAULT 1,
+    welcome_color INTEGER DEFAULT 5793266
+)
+""")
+
+db.commit()
+
+
+def get_welcome_config(guild_id):
+    cursor.execute(
+        "SELECT welcome_channel_id, goodbye_channel_id, dm_welcome, welcome_message, goodbye_message, welcome_embed, welcome_color FROM welcome_config WHERE guild_id = ?",
+        (guild_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "welcome_channel_id": row[0],
+        "goodbye_channel_id": row[1],
+        "dm_welcome": bool(row[2]),
+        "welcome_message": row[3],
+        "goodbye_message": row[4],
+        "welcome_embed": bool(row[5]),
+        "welcome_color": row[6],
+    }
+
+
+def set_welcome_config(guild_id, **kwargs):
+    existing = get_welcome_config(guild_id) or {}
+    merged = {**existing, **kwargs}
+    cursor.execute(
+        """
+        INSERT INTO welcome_config
+        (guild_id, welcome_channel_id, goodbye_channel_id, dm_welcome, welcome_message, goodbye_message, welcome_embed, welcome_color)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            welcome_channel_id = excluded.welcome_channel_id,
+            goodbye_channel_id = excluded.goodbye_channel_id,
+            dm_welcome = excluded.dm_welcome,
+            welcome_message = excluded.welcome_message,
+            goodbye_message = excluded.goodbye_message,
+            welcome_embed = excluded.welcome_embed,
+            welcome_color = excluded.welcome_color
+        """,
+        (
+            guild_id,
+            merged.get("welcome_channel_id"),
+            merged.get("goodbye_channel_id"),
+            1 if merged.get("dm_welcome") else 0,
+            merged.get("welcome_message"),
+            merged.get("goodbye_message"),
+            1 if merged.get("welcome_embed", True) else 0,
+            merged.get("welcome_color", 5793266),
+        ),
+    )
+    db.commit()
+
+
+def _load_font(size: int):
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "arialbd.ttf",
+        "arial.ttf",
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def _text_with_outline(draw, xy, text, font, fill, outline="black", outline_width=3):
+    x, y = xy
+    for dx in range(-outline_width, outline_width + 1):
+        for dy in range(-outline_width, outline_width + 1):
+            if dx != 0 or dy != 0:
+                draw.text((x + dx, y + dy), text, font=font, fill=outline)
+    draw.text((x, y), text, font=font, fill=fill)
+
+
+async def build_welcome_card(member, member_count, server_name):
+    W, H = 1000, 320
+    img = Image.new("RGB", (W, H), (40, 80, 150))
+    draw = ImageDraw.Draw(img)
+
+    for i in range(H):
+        r = int(35 + (i / H) * 20)
+        g = int(70 + (i / H) * 30)
+        b = int(140 + (i / H) * 30)
+        draw.line([(0, i), (W, i)], fill=(r, g, b))
+
+    avatar_size = 200
+    avatar_x, avatar_y = 50, (H - avatar_size) // 2
+
+    avatar_bytes = await member.display_avatar.replace(size=256, format="png").read()
+    avatar_img = Image.open(_io.BytesIO(avatar_bytes)).convert("RGBA")
+    avatar_img = avatar_img.resize((avatar_size, avatar_size), Image.LANCZOS)
+
+    mask = Image.new("L", (avatar_size, avatar_size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
+
+    border = 6
+    ring_size = avatar_size + border * 2
+    ring = Image.new("RGBA", (ring_size, ring_size), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).ellipse((0, 0, ring_size, ring_size), fill=(255, 255, 255, 255))
+    ring.paste(avatar_img, (border, border), avatar_img)
+
+    img.paste(ring, (avatar_x - border, avatar_y - border), ring)
+
+    text_x = avatar_x + avatar_size + 60
+    line1_font = _load_font(38)
+    line2_font = _load_font(26)
+    line3_font = _load_font(26)
+
+    line1 = f"Welcome {member.display_name}"
+    line2 = f"to {server_name}"
+    line3 = f"you are the {member_count}th member!"
+
+    lh = 45
+    start_y = (H - lh * 3) // 2
+
+    _text_with_outline(draw, (text_x, start_y), line1, line1_font, "white")
+    _text_with_outline(draw, (text_x, start_y + lh), line2, line2_font, "white")
+    _text_with_outline(draw, (text_x, start_y + lh * 2), line3, line3_font, "white")
+
+    out = _io.BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
+@bot.event
+async def on_member_join(member):
+    guild = member.guild
+    cfg = get_welcome_config(guild.id)
+    if not cfg or not cfg["welcome_channel_id"]:
+        return
+
+    channel = guild.get_channel(cfg["welcome_channel_id"])
+    if not channel:
+        return
+
+    count = guild.member_count or len(guild.members)
+
+    try:
+        card = await build_welcome_card(member, count, guild.name)
+        file = discord.File(card, filename="welcome.png")
+        await channel.send(content=member.mention, file=file)
+    except Exception as e:
+        print(f"[welcome] failed to send card: {e}")
+        try:
+            await channel.send(f"Welcome {member.mention} to **{guild.name}**! You are the {count}th member!")
+        except Exception:
+            pass
+
+    if cfg["dm_welcome"]:
+        try:
+            dm_embed = discord.Embed(
+                title=f"👋 Welcome to {guild.name}!",
+                description=f"You are member **#{count}**!",
+                color=discord.Color(cfg["welcome_color"]),
+            )
+            if guild.icon:
+                dm_embed.set_thumbnail(url=guild.icon.url)
+            await member.send(embed=dm_embed)
+        except Exception:
+            pass
+
+
+@bot.event
+async def on_member_remove(member):
+    guild = member.guild
+    cfg = get_welcome_config(guild.id)
+    if not cfg or not cfg["goodbye_channel_id"]:
+        return
+
+    channel = guild.get_channel(cfg["goodbye_channel_id"])
+    if not channel:
+        return
+
+    count = guild.member_count or len(guild.members)
+    text = cfg["goodbye_message"].replace("{user}", member.mention).replace("{server}", guild.name).replace("{count}", str(count))
+
+    try:
+        embed = discord.Embed(description=text, color=discord.Color.red())
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=f"{guild.name} • Now {count} members")
+        await channel.send(embed=embed)
+    except Exception as e:
+        print(f"[goodbye] failed: {e}")
+
+
+@bot.hybrid_group(name="welcome", description="Welcome message settings", invoke_without_command=True)
+async def welcome_group(ctx):
+    if ctx.invoked_subcommand is None:
+        embed = discord.Embed(
+            title="👋 Welcome System",
+            description=(
+                "**Setup:**\n"
+                "`/welcome channel #channel`\n"
+                "`/welcome goodbye #channel`\n"
+                "`/welcome dm on/off`\n"
+                "`/welcome color #hex`\n"
+                "`/welcome test`\n"
+                "`/welcome reset`"
+            ),
+            color=discord.Color.blurple(),
+        )
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+
+
+@welcome_group.command(name="channel", description="Set the welcome channel")
+@commands.has_permissions(administrator=True)
+async def welcome_channel(ctx, channel: discord.TextChannel):
+    set_welcome_config(ctx.guild.id, welcome_channel_id=channel.id)
+    embed = discord.Embed(description=f"✅ Welcome channel set to {channel.mention}", color=discord.Color.green())
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+
+@welcome_group.command(name="goodbye", description="Set the goodbye channel")
+@commands.has_permissions(administrator=True)
+async def welcome_goodbye(ctx, channel: discord.TextChannel):
+    set_welcome_config(ctx.guild.id, goodbye_channel_id=channel.id)
+    embed = discord.Embed(description=f"✅ Goodbye channel set to {channel.mention}", color=discord.Color.green())
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+
+@welcome_group.command(name="dm", description="Toggle DM welcome messages")
+@app_commands.choices(state=[app_commands.Choice(name="on", value="on"), app_commands.Choice(name="off", value="off")])
+@commands.has_permissions(administrator=True)
+async def welcome_dm(ctx, state: str):
+    enable = state == "on"
+    set_welcome_config(ctx.guild.id, dm_welcome=enable)
+    embed = discord.Embed(description=f"✅ DM welcome **{'enabled' if enable else 'disabled'}**.", color=discord.Color.green())
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+
+@welcome_group.command(name="color", description="Set embed color")
+@commands.has_permissions(administrator=True)
+async def welcome_color(ctx, hex_code: str):
+    hex_clean = hex_code.strip().lstrip("#")
+    try:
+        color_int = int(hex_clean, 16)
+    except ValueError:
+        embed = discord.Embed(description="❌ Invalid hex. Use `#5865F2`.", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+    set_welcome_config(ctx.guild.id, welcome_color=color_int)
+    embed = discord.Embed(description=f"✅ Color set to `#{hex_clean.upper()}`.", color=discord.Color(color_int))
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+
+@welcome_group.command(name="test", description="Preview the welcome card")
+@commands.has_permissions(administrator=True)
+async def welcome_test(ctx):
+    if ctx.interaction:
+        await ctx.interaction.response.defer(ephemeral=True)
+    count = ctx.guild.member_count or 0
+    try:
+        card = await build_welcome_card(ctx.author, count, ctx.guild.name)
+        file = discord.File(card, filename="welcome.png")
+        if ctx.interaction:
+            await ctx.interaction.followup.send("✅ Preview:", file=file, ephemeral=True)
+        else:
+            await ctx.send("✅ Preview:", file=file)
+    except Exception as e:
+        embed = discord.Embed(description=f"❌ Failed: `{e}`", color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.send(embed=embed)
+
+
+@welcome_group.command(name="reset", description="Reset all welcome settings")
+@commands.has_permissions(administrator=True)
+async def welcome_reset(ctx):
+    cursor.execute("DELETE FROM welcome_config WHERE guild_id = ?", (ctx.guild.id,))
+    db.commit()
+    embed = discord.Embed(description="✅ Reset.", color=discord.Color.green())
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+
+cursor.execute("""
 CREATE TABLE IF NOT EXISTS allowed_links (
     guild_id INTEGER,
     link_domain TEXT,
