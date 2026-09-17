@@ -7620,6 +7620,155 @@ async def weather(ctx, *, city: str):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# USERINFO COMMAND
+# =========================================================
+
+@bot.hybrid_command(name="userinfo", aliases=["whois", "ui"], description="Show detailed information about a user")
+@app_commands.describe(member="The user to look up (defaults to yourself)")
+async def userinfo(ctx, member: discord.Member = None):
+    target = member or ctx.author
+
+    # If this is a guild member, get richer info
+    is_member = isinstance(target, discord.Member) and ctx.guild is not None
+
+    # ---- Build roles string ----
+    roles_str = "None"
+    top_role_str = "None"
+    if is_member and target.roles:
+        # Exclude @everyone
+        role_list = [r.mention for r in reversed(target.roles) if r.name != "@everyone"]
+        if role_list:
+            roles_str = ", ".join(role_list[:15])
+            if len(role_list) > 15:
+                roles_str += f" +{len(role_list) - 15} more"
+        top_role_str = target.top_role.mention if target.top_role else "None"
+
+    # ---- Status ----
+    status_map = {
+        discord.Status.online: "🟢 Online",
+        discord.Status.idle: "🟡 Idle",
+        discord.Status.dnd: "🔴 Do Not Disturb",
+        discord.Status.offline: "⚫ Offline",
+    }
+    status_str = status_map.get(target.status, "⚫ Unknown") if is_member else "❔ Unknown"
+
+    # ---- Badges ----
+    badge_map = {
+        "staff": "👨‍💼 Discord Staff",
+        "partner": "🤝 Partner",
+        "hypesquad": "🎉 HypeSquad Events",
+        "bug_hunter": "🐛 Bug Hunter",
+        "hypesquad_bravery": "🦁 Bravery",
+        "hypesquad_brilliance": "🦄 Brilliance",
+        "hypesquad_balance": "⚖️ Balance",
+        "early_supporter": "⏰ Early Supporter",
+        "verified_bot_developer": "🤖 Verified Bot Dev",
+        "active_developer": "🛠️ Active Developer",
+        "premium_early_supporter": "🚀 Premium Early Supporter",
+        "certified_moderator": "🛡️ Certified Moderator",
+    }
+    badges = []
+    for flag_name, label in badge_map.items():
+        if getattr(target.public_flags, flag_name, False):
+            badges.append(label)
+    if target.bot:
+        badges.append("🤖 Bot")
+    badges_str = " • ".join(badges) if badges else "None"
+
+    # ---- Embed ----
+    embed = discord.Embed(
+        title=f"👤 {target.display_name}",
+        color=target.color if is_member and target.color.value else discord.Color.blurple(),
+        timestamp=datetime.utcnow(),
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+
+    embed.add_field(
+        name="📛 Username",
+        value=f"`{target.name}`",
+        inline=True,
+    )
+    embed.add_field(
+        name="🆔 User ID",
+        value=f"`{target.id}`",
+        inline=True,
+    )
+    embed.add_field(
+        name="🤖 Bot?",
+        value="Yes" if target.bot else "No",
+        inline=True,
+    )
+
+    if is_member:
+        embed.add_field(
+            name="📅 Account Created",
+            value=f"<t:{int(target.created_at.timestamp())}:F>\n(<t:{int(target.created_at.timestamp())}:R>)",
+            inline=True,
+        )
+        embed.add_field(
+            name="📥 Joined Server",
+            value=(
+                f"<t:{int(target.joined_at.timestamp())}:F>\n(<t:{int(target.joined_at.timestamp())}:R>)"
+                if target.joined_at else "Unknown"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="💤 Status",
+            value=status_str,
+            inline=True,
+        )
+
+        if target.nick:
+            embed.add_field(
+                name="🏷️ Nickname",
+                value=f"`{target.nick}`",
+                inline=True,
+            )
+
+        # Boosting
+        if target.premium_since:
+            embed.add_field(
+                name="🚀 Boosting Since",
+                value=f"<t:{int(target.premium_since.timestamp())}:R>",
+                inline=True,
+            )
+
+        # Top role
+        embed.add_field(
+            name="👑 Top Role",
+            value=top_role_str,
+            inline=True,
+        )
+
+        embed.add_field(
+            name="🎭 Roles",
+            value=roles_str if len(roles_str) < 1024 else roles_str[:1020] + "...",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="📅 Account Created",
+            value=f"<t:{int(target.created_at.timestamp())}:F>\n(<t:{int(target.created_at.timestamp())}:R>)",
+            inline=False,
+        )
+
+    embed.add_field(
+        name="🏅 Badges",
+        value=badges_str,
+        inline=False,
+    )
+
+    embed.set_footer(
+        text=f"Requested by {ctx.author.display_name}",
+        icon_url=ctx.author.display_avatar.url,
+    )
+
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
