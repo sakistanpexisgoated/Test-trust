@@ -3037,13 +3037,11 @@ SETUP_STRUCTURE = {
         ("Applications", "📄", "text"),
         ("Staff-Vc", "🎙️", "voice"),
     ],
-
     "〈👋〉・Arrivals": [
         ("Roles-Info", "🎭", "text"),
         ("Welcome", "👋", "text"),
         ("Goodbye", "🪽", "text"),
     ],
-
     "〈⚠️〉・Important": [
         ("Verify", "✅", "text"),
         ("Rules", "📖", "text"),
@@ -3062,19 +3060,16 @@ SETUP_STRUCTURE = {
         ("Hall-Of-Fame", "🥇", "text"),
         ("Help-Ticket", "🎟️", "text"),
     ],
-
     "〈🎁〉・Giveaways": [
         ("Giveaways", "🎁", "text"),
         ("Giveaway-Vouches", "🏅", "text"),
         ("Events", "🎉", "text"),
     ],
-
     "〈🤝〉・Middleman": [
         ("Middleman", "🤝", "text"),
         ("Middleman-Vouches", "⭐", "text"),
         ("Middleman-Ticket", "🎟️", "text"),
     ],
-
     "〈💬〉・General": [
         ("General-Chat", "💬", "text"),
         ("Media", "📸", "text"),
@@ -3084,7 +3079,6 @@ SETUP_STRUCTURE = {
         ("Boosters-Chat", "🚀", "text"),
         ("Suggestions", "🛠️", "text"),
     ],
-
     "〈💰〉・Trading": [
         ("Trading-Fourm", "💸", "text"),
         ("Trading", "💰", "text"),
@@ -3095,14 +3089,12 @@ SETUP_STRUCTURE = {
         ("Win-Or-Loss", "⚖️", "text"),
         ("Vouches", "✅", "text"),
     ],
-
     "〈🎬〉・Content Creators": [
         ("Creators-Rules", "📖", "text"),
         ("Creators-Announcements", "📢", "text"),
         ("Creators-Chat", "💬", "text"),
         ("Creators-Ideas", "🛠️", "text"),
     ],
-
     "〈🔊〉・Voice Chats": [
         ("Create-Vc", "🔑", "voice"),
         ("Owners-Vc", "👑", "voice"),
@@ -3114,21 +3106,9 @@ SETUP_STRUCTURE = {
 }
 
 SETUP_STYLES = {
-    "┃": {
-        "label": "Heavy Bar ┃",
-        "description": "Example:  📖┃Rules",
-        "emoji": "┃",
-    },
-    "・": {
-        "label": "Dot ・",
-        "description": "Example:  📖・Rules",
-        "emoji": "・",
-    },
-    "-・-": {
-        "label": "Dash-Dot-Dash -・-",
-        "description": "Example:  📖-・-Rules",
-        "emoji": "➖",
-    },
+    "┃": {"label": "Heavy Bar ┃", "description": "Example:  📖┃Rules", "emoji": "┃"},
+    "・": {"label": "Dot ・", "description": "Example:  📖・Rules", "emoji": "・"},
+    "-・-": {"label": "Dash-Dot-Dash -・-", "description": "Example:  📖-・-Rules", "emoji": "➖"},
 }
 
 
@@ -3137,9 +3117,9 @@ def format_setup_channel(emoji, base_name, separator):
 
 
 class SetupStyleView(discord.ui.View):
-    def __init__(self, ctx, timeout=120):
+    def __init__(self, user_id, timeout=180):
         super().__init__(timeout=timeout)
-        self.ctx = ctx
+        self.user_id = user_id
 
         options = []
         for sep, data in SETUP_STYLES.items():
@@ -3162,7 +3142,7 @@ class SetupStyleView(discord.ui.View):
         self.add_item(select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.ctx.author.id:
+        if interaction.user.id != self.user_id:
             await interaction.response.send_message(
                 "❌ This setup menu isn't for you. Run `/setup` yourself.",
                 ephemeral=True,
@@ -3173,58 +3153,53 @@ class SetupStyleView(discord.ui.View):
     async def select_callback(self, interaction: discord.Interaction):
         style = interaction.data["values"][0]
 
+        # Defer FIRST so Discord doesn't time out
+        await interaction.response.defer()
+
         for child in self.children:
             child.disabled = True
 
-        embed = discord.Embed(
-            title="🏗️ Setup Started",
-            description=(
-                f"Building the server using style `{style}`...\n"
-                f"This may take a moment."
-            ),
-            color=discord.Color.blurple(),
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
 
-        await run_server_setup(interaction, self.ctx, style)
+        await run_server_setup(interaction, style)
 
     async def on_timeout(self):
         for child in self.children:
             child.disabled = True
 
 
-async def run_server_setup(interaction: discord.Interaction, ctx, style: str):
-    guild = ctx.guild
+async def run_server_setup(interaction: discord.Interaction, style: str):
+    guild = interaction.guild
+    author = interaction.user
 
     created_roles = 0
     created_channels = 0
     existing_channels = 0
-    roles = {}
 
     async def setup_error(message):
         try:
             return await interaction.followup.send(message, ephemeral=True)
         except Exception:
-            return await ctx.send(message)
+            return
 
+    # --- ROLES ---
     for role_name, color in SETUP_ROLES:
         role = discord.utils.get(guild.roles, name=role_name)
-
         if role is None:
             try:
-                role = await guild.create_role(
+                await guild.create_role(
                     name=role_name,
                     color=color,
-                    reason=f"/setup used by {ctx.author}",
+                    reason=f"/setup used by {author}",
                 )
                 created_roles += 1
             except discord.Forbidden:
                 return await setup_error("⚠️ I need **Manage Roles** permission to create the roles.")
 
-        roles[role_name] = role
-
-    categories = {}
-
+    # --- CATEGORIES + CHANNELS ---
     for category_name, channel_list in SETUP_STRUCTURE.items():
         category = discord.utils.get(guild.categories, name=category_name)
 
@@ -3232,12 +3207,10 @@ async def run_server_setup(interaction: discord.Interaction, ctx, style: str):
             try:
                 category = await guild.create_category(
                     category_name,
-                    reason=f"/setup used by {ctx.author}",
+                    reason=f"/setup used by {author}",
                 )
             except discord.Forbidden:
                 return await setup_error("I need **Manage Channels** permission.")
-
-        categories[category_name] = category
 
         for base_name, emoji, channel_type in channel_list:
             channel_name = format_setup_channel(emoji, base_name, style)
@@ -3249,13 +3222,13 @@ async def run_server_setup(interaction: discord.Interaction, ctx, style: str):
                         await guild.create_voice_channel(
                             name=channel_name,
                             category=category,
-                            reason=f"/setup used by {ctx.author}",
+                            reason=f"/setup used by {author}",
                         )
                     else:
                         await guild.create_text_channel(
                             name=channel_name,
                             category=category,
-                            reason=f"/setup used by {ctx.author}",
+                            reason=f"/setup used by {author}",
                         )
                     created_channels += 1
                 except discord.Forbidden:
@@ -3276,7 +3249,7 @@ async def run_server_setup(interaction: discord.Interaction, ctx, style: str):
     try:
         await interaction.followup.send(embed=success_embed, ephemeral=True)
     except Exception:
-        await ctx.send(embed=success_embed)
+        pass
 
 
 @bot.hybrid_command(name="setup", description="Create the server layout and choose a channel naming style")
@@ -3314,7 +3287,7 @@ async def setup(ctx):
     )
     embed.set_footer(text="Select a style from the dropdown to begin")
 
-    view = SetupStyleView(ctx)
+    view = SetupStyleView(ctx.author.id)
 
     if ctx.interaction:
         await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
