@@ -7190,7 +7190,7 @@ async def edit(ctx, *, prompt: str):
             return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
 
-    # Send to Gemini
+        # Send to Gemini
     try:
         response = await asyncio.to_thread(
             gemini_client.models.generate_content,
@@ -7201,10 +7201,26 @@ async def edit(ctx, *, prompt: str):
             ],
         )
     except Exception as e:
-        embed = discord.Embed(
-            description=f"❌ AI edit failed: `{str(e)[:200]}`",
-            color=discord.Color.red(),
-        )
+        err_str = str(e)
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+            embed = discord.Embed(
+                title="⏳ Daily AI Limit Reached",
+                description=(
+                    "The bot has used up its free Gemini image edits for today.\n"
+                    "**Try again tomorrow** (resets ~midnight Pacific), "
+                    "or ask the bot owner to upgrade the API plan."
+                ),
+                color=discord.Color.orange(),
+            )
+        else:
+            embed = discord.Embed(
+                description=f"❌ AI edit failed: `{err_str[:200]}`",
+                color=discord.Color.red(),
+            )
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+        
         if ctx.interaction:
             return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
