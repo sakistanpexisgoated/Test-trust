@@ -318,8 +318,7 @@ async def build_welcome_card(member, member_count, server_name):
 
     line1 = f"Welcome {member.display_name}"
     line2 = f"to {server_name}"
-    line3 = f"you are the {member_count}th member!"
-
+   
     lh = 45
     start_y = (H - lh * 3) // 2
 
