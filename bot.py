@@ -2299,6 +2299,7 @@ async def kick(ctx, member: discord.Member, *, reason: str = "No reason provided
         return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot kick them.")
 
     await member.kick(reason=reason)
+    log_mod_action(ctx.author.id, member.id, ctx.guild.id, "kick", reason)
     
     embed = discord.Embed(
         title="⭐️ Successfully Kicked",
@@ -2357,6 +2358,7 @@ async def mute(ctx, member: discord.Member, duration: str = "1h", *, reason: str
     
     try:
         await member.timeout(timedelta(seconds=seconds), reason=reason)
+        log_mod_action(ctx.author.id, member.id, ctx.guild.id, "mute", reason)
         
         embed = discord.Embed(
             title="✨ Successfully Muted",
@@ -2402,6 +2404,7 @@ async def unmute(ctx, member: discord.Member):
     
     try:
         await member.timeout(None, reason=f"Unmuted by {ctx.author}")
+        log_mod_action(ctx.author.id, member.id, ctx.guild.id, "unmute", "Removed timeout")
         
         embed = discord.Embed(
             title="☄️ Successfully Unmuted",
@@ -2449,6 +2452,7 @@ async def warn(ctx, member: discord.Member, *, reason: str = "No reason provided
     
     cursor.execute("INSERT INTO warnings (user_id, moderator_id, reason) VALUES (?, ?, ?)", (member.id, ctx.author.id, reason))
     db.commit()
+    log_mod_action(ctx.author.id, member.id, ctx.guild.id, "warn", reason)
     
     embed = discord.Embed(
         title="⚠️ Successfully Warned",
