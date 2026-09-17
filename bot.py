@@ -353,7 +353,7 @@ async def on_member_join(member):
     except Exception as e:
         print(f"[welcome] failed to send card: {e}")
         try:
-            await channel.send(f"Welcome {member.mention} to **{guild.name}**! You are the {count}th member!")
+            await channel.send(f"Welcome {member.mention} to **{guild.name}**!")
         except Exception:
             pass
 
