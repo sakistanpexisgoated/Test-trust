@@ -1196,11 +1196,14 @@ class GhostPingControlView(discord.ui.View):
 )
 @app_commands.describe(member="The member to ghost-ping", times="How many times (1-100)", message="Optional message after the mention")
 async def ghostping(ctx, member: discord.Member, times: int = 1, *, message: str = ""):
-    if not is_troll_whitelisted(ctx.author.id):
-        embed = discord.Embed(description="You are not whitelisted to use this troll command.", color=discord.Color.red())
+    if ctx.author.id not in OWNER_IDS:
+        embed = discord.Embed(
+            description="🔒 You're not allowed to use this command.",
+            color=discord.Color.red()
+        )
         if ctx.interaction:
             return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
+        return await ctx.send(embed=embed, delete_after=5)
 
     try:
         times = int(times)
