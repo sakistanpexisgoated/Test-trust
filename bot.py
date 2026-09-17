@@ -8051,6 +8051,200 @@ async def languages(ctx):
     else:
         await ctx.send(embed=embed)
 # =========================================================
+# SERVERINFO COMMAND
+# =========================================================
+
+@bot.hybrid_command(name="serverinfo", aliases=["si", "server"], description="Show detailed information about this server")
+async def serverinfo(ctx):
+    guild = ctx.guild
+    if guild is None:
+        embed = discord.Embed(
+            description="❌ This command can only be used inside a server.",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    # ---- Counts ----
+    total_members = guild.member_count or len(guild.members)
+    humans = sum(1 for m in guild.members if not m.bot)
+    bots = sum(1 for m in guild.members if m.bot)
+
+    text_channels = len(guild.text_channels)
+    voice_channels = len(guild.voice_channels)
+    categories = len(guild.categories)
+    stage_channels = len(guild.stage_channels) if hasattr(guild, "stage_channels") else 0
+    forum_channels = len(guild.forums) if hasattr(guild, "forums") else 0
+    total_channels = text_channels + voice_channels + stage_channels + forum_channels
+
+    total_roles = len(guild.roles) - 1  # exclude @everyone
+    total_emojis = len(guild.emojis)
+    animated_emojis = sum(1 for e in guild.emojis if e.animated)
+    static_emojis = total_emojis - animated_emojis
+    total_stickers = len(guild.stickers) if hasattr(guild, "stickers") else 0
+
+    # ---- Boosts ----
+    boost_count = guild.premium_subscription_count or 0
+    boost_tier = guild.premium_tier
+
+    tier_map = {0: "No Tier", 1: "Tier 1", 2: "Tier 2", 3: "Tier 3"}
+    boost_str = f"**{tier_map.get(boost_tier, 'Unknown')}** ({boost_count} boost{'s' if boost_count != 1 else ''})"
+
+    # ---- Verification ----
+    verification_map = {
+        discord.VerificationLevel.none: "None",
+        discord.VerificationLevel.low: "Low",
+        discord.VerificationLevel.medium: "Medium",
+        discord.VerificationLevel.high: "High",
+        discord.VerificationLevel.highest: "Highest",
+    }
+    verification_str = verification_map.get(guild.verification_level, "Unknown")
+
+    # ---- Content filter ----
+    filter_map = {
+        discord.ContentFilter.disabled: "Disabled",
+        discord.ContentFilter.no_role: "No Role",
+        discord.ContentFilter.all_members: "All Members",
+    }
+    filter_str = filter_map.get(guild.explicit_content_filter, "Unknown")
+
+    # ---- Notifications ----
+    notif_map = {
+        discord.NotificationLevel.all_messages: "All Messages",
+        discord.NotificationLevel.only_mentions: "Only @mentions",
+    }
+    notif_str = notif_map.get(guild.default_notifications, "Unknown")
+
+    # ---- Features ----
+    feature_map = {
+        "COMMUNITY": "🏘️ Community",
+        "VERIFIED": "✅ Verified",
+        "PARTNERED": "🤝 Partnered",
+        "DISCOVERABLE": "🔍 Discoverable",
+        "ANIMATED_ICON": "🎨 Animated Icon",
+        "BANNER": "🖼️ Banner",
+        "VANITY_URL": "🔗 Vanity URL",
+        "NEWS": "📰 News Channels",
+        "WELCOME_SCREEN_ENABLED": "👋 Welcome Screen",
+        "MEMBER_VERIFICATION_GATE_ENABLED": "🚪 Membership Screening",
+        "PREVIEW_ENABLED": "👀 Preview Enabled",
+        "ROLE_ICONS": "🎭 Role Icons",
+        "SOUNDBOARD": "🔊 Soundboard",
+        "THREADS_ENABLED": "🧵 Threads",
+    }
+    features = []
+    for f in guild.features:
+        label = feature_map.get(f)
+        if label:
+            features.append(label)
+    features_str = " • ".join(features) if features else "None"
+
+    # ---- Embed ----
+    embed = discord.Embed(
+        title=f"🏠 {guild.name}",
+        color=discord.Color.blurple(),
+        timestamp=datetime.utcnow(),
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    if guild.banner:
+        embed.set_image(url=guild.banner.url)
+
+    embed.add_field(
+        name="🆔 Server ID",
+        value=f"`{guild.id}`",
+        inline=True,
+    )
+    embed.add_field(
+        name="👑 Owner",
+        value=guild.owner.mention if guild.owner else "Unknown",
+        inline=True,
+    )
+    embed.add_field(
+        name="📅 Created",
+        value=f"<t:{int(guild.created_at.timestamp())}:F>\n(<t:{int(guild.created_at.timestamp())}:R>)",
+        inline=True,
+    )
+
+    embed.add_field(
+        name=f"👥 Members ({total_members:,})",
+        value=f"🧑 Humans: **{humans:,}**\n🤖 Bots: **{bots:,}**",
+        inline=True,
+    )
+    embed.add_field(
+        name=f"💬 Channels ({total_channels})",
+        value=(
+            f"📝 Text: **{text_channels}**\n"
+            f"🔊 Voice: **{voice_channels}**\n"
+            f"📁 Categories: **{categories}**"
+        ),
+        inline=True,
+    )
+    embed.add_field(
+        name="🎭 Roles",
+        value=f"**{total_roles}**",
+        inline=True,
+    )
+
+    embed.add_field(
+        name="🚀 Boosts",
+        value=boost_str,
+        inline=True,
+    )
+    embed.add_field(
+        name="🔒 Verification",
+        value=verification_str,
+        inline=True,
+    )
+    embed.add_field(
+        name="🛡️ Content Filter",
+        value=filter_str,
+        inline=True,
+    )
+
+    emoji_value = f"**{total_emojis}**"
+    if total_emojis > 0:
+        emoji_value += f" (🎨 {animated_emojis} • 🖼️ {static_emojis})"
+    if total_stickers > 0:
+        emoji_value += f"\n🎯 Stickers: **{total_stickers}**"
+
+    embed.add_field(
+        name="😀 Emojis",
+        value=emoji_value,
+        inline=True,
+    )
+    embed.add_field(
+        name="🔔 Notifications",
+        value=notif_str,
+        inline=True,
+    )
+
+    # AFK
+    if guild.afk_channel:
+        afk_timeout_min = guild.afk_timeout // 60
+        embed.add_field(
+            name="💤 AFK",
+            value=f"{guild.afk_channel.mention} ({afk_timeout_min} min)",
+            inline=True,
+        )
+
+    embed.add_field(
+        name="✨ Features",
+        value=features_str if len(features_str) < 1024 else features_str[:1020] + "...",
+        inline=False,
+    )
+
+    embed.set_footer(
+        text=f"Requested by {ctx.author.display_name}",
+        icon_url=ctx.author.display_avatar.url,
+    )
+
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
