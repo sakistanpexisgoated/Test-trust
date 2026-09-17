@@ -192,6 +192,14 @@ CREATE TABLE IF NOT EXISTS tickets (
 
 db.commit()
 
+# =========================================================
+# WELCOME SYSTEM — DB + CARD + EVENTS + COMMANDS
+# =========================================================
+
+import os as _os
+
+WELCOME_BG_PATH = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "welcome_bg.png")
+
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS welcome_config (
     guild_id INTEGER PRIMARY KEY,
@@ -258,13 +266,18 @@ def set_welcome_config(guild_id, **kwargs):
     db.commit()
 
 
-def _load_font(size: int):
-    candidates = [
+def _load_font(size, bold=False):
+    candidates_bold = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "arialbd.ttf",
+    ]
+    candidates_reg = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "arial.ttf",
     ]
+    candidates = candidates_bold if bold else candidates_reg
     for path in candidates:
         try:
             return ImageFont.truetype(path, size)
@@ -273,61 +286,107 @@ def _load_font(size: int):
     return ImageFont.load_default()
 
 
-def _text_with_outline(draw, xy, text, font, fill, outline="black", outline_width=3):
-    x, y = xy
-    for dx in range(-outline_width, outline_width + 1):
-        for dy in range(-outline_width, outline_width + 1):
-            if dx != 0 or dy != 0:
-                draw.text((x + dx, y + dy), text, font=font, fill=outline)
+def _text_center(draw, cx, y, text, font, fill):
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    x = cx - tw // 2
     draw.text((x, y), text, font=font, fill=fill)
+    return tw
 
 
 async def build_welcome_card(member, member_count, server_name):
-    W, H = 1000, 320
-    img = Image.new("RGB", (W, H), (40, 80, 150))
+    if _os.path.isfile(WELCOME_BG_PATH):
+        img = Image.open(WELCOME_BG_PATH).convert("RGBA")
+        W, H = img.size
+    else:
+        W, H = 1024, 288
+        img = Image.new("RGBA", (W, H), (8, 8, 10, 255))
+
     draw = ImageDraw.Draw(img)
 
-    for i in range(H):
-        r = int(35 + (i / H) * 20)
-        g = int(70 + (i / H) * 30)
-        b = int(140 + (i / H) * 30)
-        draw.line([(0, i), (W, i)], fill=(r, g, b))
+    avatar_size = int(H * 0.62)
+    avatar_cx = int(W * 0.125)
+    avatar_cy = H // 2
+    avatar_x = avatar_cx - avatar_size // 2
+    avatar_y = avatar_cy - avatar_size // 2
 
-    avatar_size = 200
-    avatar_x, avatar_y = 50, (H - avatar_size) // 2
-
-    avatar_bytes = await member.display_avatar.replace(size=256, format="png").read()
+    avatar_bytes = await member.display_avatar.replace(size=512, format="png").read()
     avatar_img = Image.open(_io.BytesIO(avatar_bytes)).convert("RGBA")
-    avatar_img = avatar_img.resize((avatar_size, avatar_size), Image.LANCZOS)
+
+    aw, ah = avatar_img.size
+    side = min(aw, ah)
+    avatar_img = avatar_img.crop(
+        ((aw - side) // 2, (ah - side) // 2, (aw + side) // 2, (ah + side) // 2)
+    ).resize((avatar_size, avatar_size), Image.LANCZOS)
 
     mask = Image.new("L", (avatar_size, avatar_size), 0)
     ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
 
-    border = 6
-    ring_size = avatar_size + border * 2
-    ring = Image.new("RGBA", (ring_size, ring_size), (0, 0, 0, 0))
-    ImageDraw.Draw(ring).ellipse((0, 0, ring_size, ring_size), fill=(255, 255, 255, 255))
-    ring.paste(avatar_img, (border, border), avatar_img)
+    glow_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_layer)
 
-    img.paste(ring, (avatar_x - border, avatar_y - border), ring)
+    for r_step, alpha in [(8, 20), (5, 45), (2, 90)]:
+        radius = avatar_size // 2 + r_step
+        glow_draw.ellipse(
+            (avatar_cx - radius, avatar_cy - radius, avatar_cx + radius, avatar_cy + radius),
+            outline=(255, 255, 255, alpha),
+            width=3,
+        )
 
-    text_x = avatar_x + avatar_size + 60
-    line1_font = _load_font(38)
-    line2_font = _load_font(26)
-    line3_font = _load_font(26)
+    ring_w = 4
+    radius = avatar_size // 2 + 1
+    glow_draw.ellipse(
+        (avatar_cx - radius - ring_w, avatar_cy - radius - ring_w,
+         avatar_cx + radius + ring_w, avatar_cy + radius + ring_w),
+        outline=(255, 255, 255, 255),
+        width=ring_w,
+    )
 
-    line1 = f"Welcome {member.display_name}"
-    line2 = f"to {server_name}"
-   
-    lh = 45
-    start_y = (H - lh * 3) // 2
+    img = Image.alpha_composite(img, glow_layer)
 
-    _text_with_outline(draw, (text_x, start_y), line1, line1_font, "white")
-    _text_with_outline(draw, (text_x, start_y + lh), line2, line2_font, "white")
-    _text_with_outline(draw, (text_x, start_y + lh * 2), line3, line3_font, "white")
+    avatar_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    avatar_layer.paste(avatar_img, (avatar_x, avatar_y), mask)
+    img = Image.alpha_composite(img, avatar_layer)
+
+    draw = ImageDraw.Draw(img)
+
+    text_cx = (avatar_x + avatar_size + W) // 2
+
+    font_welcome = _load_font(int(H * 0.155), bold=True)
+    font_to = _load_font(int(H * 0.105), bold=False)
+    font_server = _load_font(int(H * 0.145), bold=True)
+
+    line1_y = int(H * 0.24)
+    line2_y = int(H * 0.46)
+    line3_y = int(H * 0.65)
+
+    _text_center(draw, text_cx, line1_y, f"Welcome {member.display_name}", font_welcome, "white")
+
+    to_text = "to"
+    bbox = draw.textbbox((0, 0), to_text, font=font_to)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+
+    dash_len = int(W * 0.09)
+    dash_y = line2_y + th // 2 + 8
+    gap = 22
+
+    draw.line(
+        [(text_cx - tw // 2 - gap - dash_len, dash_y),
+         (text_cx - tw // 2 - gap, dash_y)],
+        fill="white", width=3
+    )
+    draw.line(
+        [(text_cx + tw // 2 + gap, dash_y),
+         (text_cx + tw // 2 + gap + dash_len, dash_y)],
+        fill="white", width=3
+    )
+    _text_center(draw, text_cx, line2_y, to_text, font_to, "white")
+
+    _text_center(draw, text_cx, line3_y, server_name, font_server, "white")
 
     out = _io.BytesIO()
-    img.save(out, format="PNG")
+    img.convert("RGB").save(out, format="PNG")
     out.seek(0)
     return out
 
@@ -343,6 +402,11 @@ async def on_member_join(member):
     if not channel:
         return
 
+    try:
+        member = await guild.fetch_member(member.id)
+    except Exception:
+        pass
+
     count = guild.member_count or len(guild.members)
 
     try:
@@ -353,19 +417,6 @@ async def on_member_join(member):
         print(f"[welcome] failed to send card: {e}")
         try:
             await channel.send(f"Welcome {member.mention} to **{guild.name}**!")
-        except Exception:
-            pass
-
-    if cfg["dm_welcome"]:
-        try:
-            dm_embed = discord.Embed(
-                title=f"👋 Welcome to {guild.name}!",
-                description=f"You are member **#{count}**!",
-                color=discord.Color(cfg["welcome_color"]),
-            )
-            if guild.icon:
-                dm_embed.set_thumbnail(url=guild.icon.url)
-            await member.send(embed=dm_embed)
         except Exception:
             pass
 
@@ -501,30 +552,6 @@ async def welcome_reset(ctx):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS allowed_links (
-    guild_id INTEGER,
-    link_domain TEXT,
-    PRIMARY KEY (guild_id, link_domain)
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS link_punishment (
-    guild_id INTEGER PRIMARY KEY,
-    mute_duration INTEGER DEFAULT 300
-)
-""")
-
-for _owner_id in OWNER_IDS:
-    cursor.execute(
-        "INSERT OR IGNORE INTO troll_whitelist (user_id, added_by) VALUES (?, ?)",
-        (_owner_id, _owner_id)
-    )
-
-db.commit()
-
 # =========================================================
 # TICKET SYSTEM
 # =========================================================
