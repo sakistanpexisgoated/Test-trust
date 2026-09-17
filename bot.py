@@ -6,7 +6,7 @@ import random
 import sqlite3
 import unicodedata
 import asyncio
-import io
+import io as _io
 import aiohttp
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
