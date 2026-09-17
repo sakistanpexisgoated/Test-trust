@@ -3106,9 +3106,9 @@ SETUP_STRUCTURE = {
 }
 
 SETUP_STYLES = {
-    "┃": {"label": "Heavy Bar ┃", "description": "Example:  📖┃Rules", "emoji": "┃"},
-    "・": {"label": "Dot ・", "description": "Example:  📖・Rules", "emoji": "・"},
-    "-・-": {"label": "Dash-Dot-Dash -・-", "description": "Example:  📖-・-Rules", "emoji": "➖"},
+    "┃": {"label": "Heavy Bar  (┃)", "description": "📖┃Rules  •  💬┃General"},
+    "・": {"label": "Dot  (・)", "description": "📖・Rules  •  💬・General"},
+    "-・-": {"label": "Dash-Dot  (-・-)", "description": "📖-・-Rules  •  💬-・-General"},
 }
 
 
@@ -3127,7 +3127,6 @@ class SetupStyleView(discord.ui.View):
                 discord.SelectOption(
                     label=data["label"],
                     description=data["description"],
-                    emoji=data["emoji"],
                     value=sep,
                 )
             )
@@ -3254,45 +3253,62 @@ async def run_server_setup(interaction: discord.Interaction, style: str):
 
 @bot.hybrid_command(name="setup", description="Create the server layout and choose a channel naming style")
 async def setup(ctx):
-    guild = ctx.guild
-    if guild is None:
-        return await ctx.send("This command can only be used inside a server.")
+    try:
+        guild = ctx.guild
+        if guild is None:
+            return await ctx.send("This command can only be used inside a server.")
 
-    # ONLY the server owner can run this
-    if ctx.author.id != guild.owner_id:
+        # ONLY the server owner can run this
+        if ctx.author.id != guild.owner_id:
+            embed = discord.Embed(
+                description="👑 Only the **server owner** can use `/setup`.",
+                color=discord.Color.red(),
+            )
+            if ctx.interaction:
+                return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+
+        preview_lines = []
+        for sep, data in SETUP_STYLES.items():
+            preview_lines.append(
+                f"**{data['label']}**\n"
+                f"`{format_setup_channel('📖', 'Rules', sep)}`  •  "
+                f"`{format_setup_channel('💬', 'General', sep)}`"
+            )
+
         embed = discord.Embed(
-            description="👑 Only the **server owner** can use `/setup`.",
-            color=discord.Color.red(),
+            title="🏗️ Server Setup — Choose a Style",
+            description=(
+                "Select the channel naming style you want below.\n"
+                "The bot will build out all categories, channels, and roles automatically.\n\n"
+                + "\n\n".join(preview_lines)
+            ),
+            color=discord.Color.blurple(),
         )
+        embed.set_footer(text="Select a style from the dropdown to begin")
+
+        view = SetupStyleView(ctx.author.id)
+
         if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
+            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            await ctx.send(embed=embed, view=view)
 
-    preview_lines = []
-    for sep, data in SETUP_STYLES.items():
-        preview_lines.append(
-            f"**{data['label']}**\n"
-            f"`{format_setup_channel('📖', 'Rules', sep)}`  •  "
-            f"`{format_setup_channel('💬', 'General', sep)}`"
-        )
-
-    embed = discord.Embed(
-        title="🏗️ Server Setup — Choose a Style",
-        description=(
-            "Select the channel naming style you want below.\n"
-            "The bot will build out all categories, channels, and roles automatically.\n\n"
-            + "\n\n".join(preview_lines)
-        ),
-        color=discord.Color.blurple(),
-    )
-    embed.set_footer(text="Select a style from the dropdown to begin")
-
-    view = SetupStyleView(ctx.author.id)
-
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-    else:
-        await ctx.send(embed=embed, view=view)
+    except Exception as e:
+        # Print the real error to console so you can see it in Railway logs
+        import traceback
+        traceback.print_exc()
+        err = discord.Embed(description=f"❌ Setup error: `{e}`", color=discord.Color.red())
+        try:
+            if ctx.interaction:
+                if not ctx.interaction.response.is_done():
+                    await ctx.interaction.response.send_message(embed=err, ephemeral=True)
+                else:
+                    await ctx.interaction.followup.send(embed=err, ephemeral=True)
+            else:
+                await ctx.send(embed=err)
+        except Exception:
+            pass
 # =========================================================
 # GUESS A NUMBER COMMAND & UI
 # =========================================================
