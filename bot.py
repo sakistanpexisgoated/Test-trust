@@ -3015,10 +3015,8 @@ async def serverunblacklist(ctx, guild_id: str):
     await ctx.send(embed=embed)
 
 # =========================================================
-# SERVER SETUP - WITH STYLE SELECT UI
+# SERVER SETUP
 # =========================================================
-
-SETUP_USER_ID = 1475693209949569024
 
 SETUP_ROLES = [
     ("Owner", discord.Color.red()),
@@ -3115,7 +3113,6 @@ SETUP_STRUCTURE = {
     ],
 }
 
-# The 3 supported style separators + previews
 SETUP_STYLES = {
     "┃": {
         "label": "Heavy Bar ┃",
@@ -3176,7 +3173,6 @@ class SetupStyleView(discord.ui.View):
     async def select_callback(self, interaction: discord.Interaction):
         style = interaction.data["values"][0]
 
-        # Disable the select so it can't be reused
         for child in self.children:
             child.disabled = True
 
@@ -3184,7 +3180,7 @@ class SetupStyleView(discord.ui.View):
             title="🏗️ Setup Started",
             description=(
                 f"Building the server using style `{style}`...\n"
-                f"This may take a moment — I'll ping you when it's done."
+                f"This may take a moment."
             ),
             color=discord.Color.blurple(),
         )
@@ -3268,7 +3264,7 @@ async def run_server_setup(interaction: discord.Interaction, ctx, style: str):
                 existing_channels += 1
 
     success_embed = discord.Embed(
-        title="✅ Server Setup Completed",
+        title="✅ Setup Complete",
         description=(
             f"Created **{created_roles}** roles and **{created_channels}** new channels "
             f"({existing_channels} already existed).\n\n"
@@ -3284,25 +3280,28 @@ async def run_server_setup(interaction: discord.Interaction, ctx, style: str):
 
 
 @bot.hybrid_command(name="setup", description="Create the server layout and choose a channel naming style")
-@app_commands.check(owner_only_predicate)
 async def setup(ctx):
-    if ctx.author.id != SETUP_USER_ID:
+    guild = ctx.guild
+    if guild is None:
+        return await ctx.send("This command can only be used inside a server.")
+
+    # ONLY the server owner can run this
+    if ctx.author.id != guild.owner_id:
         embed = discord.Embed(
-            description="❌ You are not allowed to use `/setup`.",
+            description="👑 Only the **server owner** can use `/setup`.",
             color=discord.Color.red(),
         )
         if ctx.interaction:
             return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
         return await ctx.send(embed=embed)
 
-    guild = ctx.guild
-    if guild is None:
-        return await ctx.send("💬 This command can only be used inside a server.")
-
-    # Build the preview embed showing the 3 styles
     preview_lines = []
     for sep, data in SETUP_STYLES.items():
-        preview_lines.append(f"**{data['label']}**\n`{format_setup_channel('📖', 'Rules', sep)}`  •  `{format_setup_channel('💬', 'General', sep)}`")
+        preview_lines.append(
+            f"**{data['label']}**\n"
+            f"`{format_setup_channel('📖', 'Rules', sep)}`  •  "
+            f"`{format_setup_channel('💬', 'General', sep)}`"
+        )
 
     embed = discord.Embed(
         title="🏗️ Server Setup — Choose a Style",
