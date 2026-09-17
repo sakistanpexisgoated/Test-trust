@@ -2194,6 +2194,7 @@ async def ban(ctx, member: discord.Member, *, reason: str = "No reason provided"
         return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot ban them.")
 
     await member.ban(reason=reason)
+    log_mod_action(ctx.author.id, member.id, ctx.guild.id, "ban", reason)
     
     embed = discord.Embed(
         title="👋 Successfully Banned",
