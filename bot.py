@@ -7112,15 +7112,96 @@ async def unlock(ctx: commands.Context, channel: discord.TextChannel = None):
     )
     await ctx.send(embed=embed)
 # =========================================================
-# LEADERBOARD COMMAND
+# LEADERBOARD COMMAND (top 1-100)
 # =========================================================
 
+LEADERBOARD_MAX = 100
+PAGE_SIZE = 25
+
+
+LEADERBOARD_REWARD_ROLES = {
+    "net": [
+        (1, "🏆 Top 1"),
+        (2, "🥈 Top 2"),
+        (3, "🥉 Top 3"),
+    ],
+    "wallet": [
+        (1, "💰 Richest Wallet"),
+    ],
+    "bank": [
+        (1, "🏦 Biggest Bank"),
+    ],
+    "luck": [
+        (1, "🍀 Luckiest"),
+    ],
+}
+
+
+async def grant_leaderboard_roles(guild: discord.Guild):
+    """Grant reward roles for each leaderboard category. Requires Manage Roles."""
+    if guild is None:
+        return
+    if not guild.me.guild_permissions.manage_roles:
+        return
+
+    for mode, rewards in LEADERBOARD_REWARD_ROLES.items():
+        order = {
+            "net": "wallet + bank",
+            "wallet": "wallet",
+            "bank": "bank",
+            "luck": "luck",
+        }[mode]
+
+        cursor.execute(f"SELECT user_id FROM users ORDER BY {order} DESC LIMIT 3")
+        rows = cursor.fetchall()
+
+        for rank, (required_rank, role_name) in enumerate(rewards, start=1):
+            if rank > len(rows):
+                break
+            winner_id = rows[rank - 1][0]
+
+            role = discord.utils.get(guild.roles, name=role_name)
+            if role is None:
+                try:
+                    role = await guild.create_role(
+                        name=role_name,
+                        color=discord.Color.gold(),
+                        mentionable=False,
+                        reason="Leaderboard reward role",
+                    )
+                except Exception:
+                    continue
+
+            try:
+                member = guild.get_member(winner_id) or await guild.fetch_member(winner_id)
+            except Exception:
+                member = None
+
+            if member is None:
+                continue
+
+            for m in guild.members:
+                if role in m.roles and m.id != winner_id:
+                    try:
+                        await m.remove_roles(role, reason="Leaderboard role refresh")
+                    except Exception:
+                        pass
+
+            if role not in member.roles:
+                try:
+                    await member.add_roles(role, reason="Leaderboard reward")
+                except Exception:
+                    pass
+
+
 class LeaderboardView(discord.ui.View):
-    def __init__(self, user_id: int, timeout=120):
+    def __init__(self, user_id: int, guild: discord.Guild = None, timeout=180):
         super().__init__(timeout=timeout)
         self.user_id = user_id
+        self.guild = guild
         self.page = 0
-        self.mode = "net"  # net | wallet | bank | luck
+        self.mode = "net"
+        self.last_updated = datetime.utcnow()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
@@ -7131,38 +7212,61 @@ class LeaderboardView(discord.ui.View):
             return False
         return True
 
-    def fetch_page(self, offset: int, limit: int = 10):
-        """Return list of (user_id, wallet, bank, luck) ordered by current mode."""
-        order = {
+    def _order_clause(self):
+        return {
             "net": "wallet + bank",
             "wallet": "wallet",
             "bank": "bank",
             "luck": "luck",
         }[self.mode]
 
+    def fetch_page(self, offset: int, limit: int = PAGE_SIZE):
         cursor.execute(
-            f"SELECT user_id, wallet, bank, luck FROM users ORDER BY {order} DESC LIMIT ? OFFSET ?",
+            f"SELECT user_id, wallet, bank, luck FROM users ORDER BY {self._order_clause()} DESC LIMIT ? OFFSET ?",
             (limit, offset),
         )
         return cursor.fetchall()
 
     def get_caller_rank(self):
-        order = {
-            "net": "wallet + bank",
-            "wallet": "wallet",
-            "bank": "bank",
-            "luck": "luck",
-        }[self.mode]
-
-        cursor.execute(f"SELECT user_id FROM users ORDER BY {order} DESC")
+        cursor.execute(
+            f"SELECT user_id FROM users ORDER BY {self._order_clause()} DESC LIMIT ?",
+            (LEADERBOARD_MAX,),
+        )
         for idx, row in enumerate(cursor.fetchall(), start=1):
             if row[0] == self.user_id:
                 return idx
         return None
 
+    def get_total_users(self):
+        cursor.execute("SELECT COUNT(*) FROM users")
+        return cursor.fetchone()[0]
+
+    def total_pages(self):
+        total = self.get_total_users()
+        effective = min(total, LEADERBOARD_MAX)
+        if effective == 0:
+            return 1
+        return max(1, (effective + PAGE_SIZE - 1) // PAGE_SIZE)
+
+    def _progress_bar(self, value: int, max_value: int, length: int = 10) -> str:
+        if max_value <= 0:
+            return "░" * length
+        filled = int((value / max_value) * length)
+        filled = max(0, min(length, filled))
+        return "█" * filled + "░" * (length - filled)
+
     def build_embed(self):
-        offset = self.page * 10
-        rows = self.fetch_page(offset)
+        offset = self.page * PAGE_SIZE
+        remaining = LEADERBOARD_MAX - offset
+        if remaining <= 0:
+            self.page = 0
+            offset = 0
+            remaining = LEADERBOARD_MAX
+        fetch_limit = min(PAGE_SIZE, remaining)
+
+        rows = self.fetch_page(offset, fetch_limit)
+        total_users = self.get_total_users()
+        pages = self.total_pages()
 
         title_map = {
             "net": "🏆 Net Worth Leaderboard",
@@ -7174,63 +7278,103 @@ class LeaderboardView(discord.ui.View):
         embed = discord.Embed(
             title=title_map[self.mode],
             color=discord.Color.gold(),
+            timestamp=self.last_updated,
         )
 
         if not rows:
             embed.description = "📋 No users found yet."
             return embed
 
-        lines = []
+        def value_of(row):
+            _, w, b, l = row
+            if self.mode == "net":
+                return w + b
+            if self.mode == "wallet":
+                return w
+            if self.mode == "bank":
+                return b
+            return l
+
+        max_value = max(value_of(r) for r in rows) or 1
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+        body_lines = []
         for i, (user_id, wallet, bank, luck) in enumerate(rows, start=offset + 1):
             user = bot.get_user(user_id)
             name = user.display_name if user else f"User {user_id}"
 
             if self.mode == "net":
                 value = wallet + bank
-                value_str = f"🪙 {value:,}"
+                val_str = f"🪙 {value:,}"
             elif self.mode == "wallet":
-                value_str = f"🪙 {wallet:,}"
+                value = wallet
+                val_str = f"🪙 {value:,}"
             elif self.mode == "bank":
-                value_str = f"🪙 {bank:,}"
+                value = bank
+                val_str = f"🪙 {value:,}"
             else:
-                value_str = f"{luck}%"
+                value = luck
+                val_str = f"🍀 {value}%"
 
-            medal = ""
-            if i == 1:
-                medal = "🥇 "
-            elif i == 2:
-                medal = "🥈 "
-            elif i == 3:
-                medal = "🥉 "
+            medal = medals.get(i, "")
+            prefix = f"{medal} " if medal else ""
+            bar = self._progress_bar(value, max_value, length=10)
+            body_lines.append(f"{prefix}**#{i}** {name}\n{bar}  {val_str}")
 
-            lines.append(f"{medal}**#{i}** {name} — {value_str}")
+        chunk = []
+        chunk_size = 0
+        field_index = 1
 
-        embed.description = "\n".join(lines)
+        def flush_chunk():
+            nonlocal chunk, chunk_size, field_index
+            if not chunk:
+                return
+            embed.add_field(
+                name="📊 Ranks" if field_index == 1 else "📊 Ranks (cont.)",
+                value="\n\n".join(chunk),
+                inline=False,
+            )
+            chunk = []
+            chunk_size = 0
+            field_index += 1
+
+        for line in body_lines:
+            if chunk_size + len(line) + 2 > 1000:
+                flush_chunk()
+            chunk.append(line)
+            chunk_size += len(line) + 2
+
+        flush_chunk()
 
         caller_rank = self.get_caller_rank()
+        footer_parts = [f"Page {self.page + 1}/{pages}"]
         if caller_rank:
-            embed.set_footer(text=f"Your rank: #{caller_rank} • Page {self.page + 1}")
-        else:
-            embed.set_footer(text=f"Page {self.page + 1}")
-
+            footer_parts.append(f"Your rank: #{caller_rank}")
+        footer_parts.append(f"Showing top {LEADERBOARD_MAX} of {total_users}")
+        embed.set_footer(text=" • ".join(footer_parts))
         return embed
 
-    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, row=0)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
             self.page -= 1
+            self.last_updated = datetime.utcnow()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
-    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, row=0)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.page += 1
-        # If empty, roll back
-        if not self.fetch_page(self.page * 10):
-            self.page -= 1
+        if self.page + 1 < self.total_pages():
+            self.page += 1
+            self.last_updated = datetime.utcnow()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
     @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.primary, row=0)
     async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.last_updated = datetime.utcnow()
+        try:
+            await grant_leaderboard_roles(self.guild)
+        except Exception:
+            pass
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
     @discord.ui.select(
@@ -7246,15 +7390,19 @@ class LeaderboardView(discord.ui.View):
     async def mode_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         self.mode = select.values[0]
         self.page = 0
+        self.last_updated = datetime.utcnow()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
 
-@bot.hybrid_command(name="leaderboard", aliases=["lb", "top"], description="View the richest users in the bot")
+@bot.hybrid_command(
+    name="leaderboard",
+    aliases=["lb", "top"],
+    description="View the top 100 richest users in the bots Economy",
+)
 async def leaderboard(ctx):
-    # Make sure the user has a row so they show up
     get_user_econ(ctx.author.id)
 
-    view = LeaderboardView(ctx.author.id)
+    view = LeaderboardView(ctx.author.id, guild=ctx.guild)
     embed = view.build_embed()
 
     if ctx.interaction:
