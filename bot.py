@@ -8509,6 +8509,152 @@ async def modstats(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed, view=view)
 # =========================================================
+# LYRICS COMMAND (lyrics.ovh — free, no API key)
+# =========================================================
+
+@bot.hybrid_command(name="lyrics", aliases=["lyric"], description="Get the lyrics of a song")
+@app_commands.describe(query="Song name — use 'artist - title' for best results")
+async def lyrics(ctx, *, query: str):
+    if ctx.interaction:
+        await ctx.interaction.response.defer()
+
+    # Accept "artist - title" or "title artist"
+    if " - " in query:
+        artist, title = query.split(" - ", 1)
+        artist = artist.strip()
+        title = title.strip()
+    else:
+        # Try to guess: last word is artist? No — just try whole thing as title
+        # First attempt: split by "-" without spaces
+        if "-" in query:
+            parts = query.split("-", 1)
+            artist = parts[0].strip()
+            title = parts[1].strip()
+        else:
+            artist = ""
+            title = query.strip()
+
+    # If no artist, use lyrics.ovh's suggest endpoint via search
+    if not artist:
+        # Try search API to find the artist
+        search_url = f"https://api.lyrics.ovh/suggest/{aiohttp.helpers.quote(title)}" if hasattr(aiohttp, "helpers") else None
+
+        # Simpler: try the direct endpoint by assuming 'title' is 'artist - title' style
+        # Fall back to search
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://api.lyrics.ovh/suggest/{title}",
+                    timeout=10,
+                ) as resp:
+                    if resp.status == 200:
+                        sugg = await resp.json()
+                        data = sugg.get("data", [])
+                        if data:
+                            first = data[0]
+                            artist = first.get("artist", {}).get("name", "")
+                            title = first.get("title", title)
+        except Exception:
+            pass
+
+    if not artist:
+        embed = discord.Embed(
+            description=(
+                "❌ Couldn't figure out the artist.\n"
+                "Try: `,,lyrics Artist - Title` (e.g. `,,lyrics Taylor Swift - Blank Space`)"
+            ),
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    # Fetch lyrics from lyrics.ovh
+    url = f"https://api.lyrics.ovh/v1/{artist}/{title}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=15) as resp:
+                if resp.status != 200:
+                    embed = discord.Embed(
+                        description=f"❌ No lyrics found for **{artist} - {title}**.",
+                        color=discord.Color.red(),
+                    )
+                    if ctx.interaction:
+                        return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+                    return await ctx.send(embed=embed)
+                data = await resp.json()
+    except asyncio.TimeoutError:
+        embed = discord.Embed(description="⏰ Lyrics fetch timed out, try again.", color=discord.Color.red())
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+    except Exception as e:
+        embed = discord.Embed(
+            description=f"❌ Error: `{str(e)[:150]}`",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    raw_lyrics = data.get("lyrics", "").strip()
+    if not raw_lyrics:
+        embed = discord.Embed(
+            description=f"❌ No lyrics found for **{artist} - {title}**.",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    # Clean up the lyrics text (remove the leading "Paroles de la chanson ... par ..." line if present)
+    lines = raw_lyrics.split("\n")
+    if lines and "paroles" in lines[0].lower():
+        lines = lines[1:]
+    clean_lyrics = "\n".join(lines).strip()
+
+    # Cap at ~3900 chars to fit embed limit (4096)
+    max_len = 3900
+    truncated = False
+    if len(clean_lyrics) > max_len:
+        clean_lyrics = clean_lyrics[:max_len].rsplit("\n", 1)[0] + "\n\n*…lyrics truncated…*"
+        truncated = True
+
+    embed = discord.Embed(
+        title=f"🎵 {title}",
+        description=f"**Artist:** {artist}\n\n{clean_lyrics}",
+        color=discord.Color.from_rgb(29, 185, 84),
+    )
+    embed.set_footer(
+        text=f"Requested by {ctx.author.display_name} • Powered by lyrics.ovh",
+        icon_url=ctx.author.display_avatar.url,
+    )
+
+    # If lyrics are super long, attach as a file too
+    file = None
+    if truncated:
+        full_text = f"{title} — {artist}\n\n{raw_lyrics}"
+        file = discord.File(
+            _io.BytesIO(full_text.encode("utf-8")),
+            filename=f"{artist} - {title} lyrics.txt",
+        )
+        embed.add_field(
+            name="📎 Full lyrics",
+            value="Full lyrics attached as a file (they were too long to fit in the embed).",
+            inline=False,
+        )
+
+    if ctx.interaction:
+        if file:
+            await ctx.interaction.followup.send(embed=embed, file=file)
+        else:
+            await ctx.interaction.followup.send(embed=embed)
+    else:
+        if file:
+            await ctx.send(embed=embed, file=file)
+        else:
+            await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
