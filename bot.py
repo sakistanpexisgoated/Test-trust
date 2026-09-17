@@ -8,6 +8,7 @@ import unicodedata
 import asyncio
 import io
 import aiohttp
+from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
 from typing import List
 
