@@ -7112,6 +7112,156 @@ async def unlock(ctx: commands.Context, channel: discord.TextChannel = None):
     )
     await ctx.send(embed=embed)
 # =========================================================
+# LEADERBOARD COMMAND
+# =========================================================
+
+class LeaderboardView(discord.ui.View):
+    def __init__(self, user_id: int, timeout=120):
+        super().__init__(timeout=timeout)
+        self.user_id = user_id
+        self.page = 0
+        self.mode = "net"  # net | wallet | bank | luck
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "❌ This leaderboard isn't for you. Run `/leaderboard` yourself.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    def fetch_page(self, offset: int, limit: int = 10):
+        """Return list of (user_id, wallet, bank, luck) ordered by current mode."""
+        order = {
+            "net": "wallet + bank",
+            "wallet": "wallet",
+            "bank": "bank",
+            "luck": "luck",
+        }[self.mode]
+
+        cursor.execute(
+            f"SELECT user_id, wallet, bank, luck FROM users ORDER BY {order} DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        return cursor.fetchall()
+
+    def get_caller_rank(self):
+        order = {
+            "net": "wallet + bank",
+            "wallet": "wallet",
+            "bank": "bank",
+            "luck": "luck",
+        }[self.mode]
+
+        cursor.execute(f"SELECT user_id FROM users ORDER BY {order} DESC")
+        for idx, row in enumerate(cursor.fetchall(), start=1):
+            if row[0] == self.user_id:
+                return idx
+        return None
+
+    def build_embed(self):
+        offset = self.page * 10
+        rows = self.fetch_page(offset)
+
+        title_map = {
+            "net": "🏆 Net Worth Leaderboard",
+            "wallet": "💰 Wallet Leaderboard",
+            "bank": "🏦 Bank Leaderboard",
+            "luck": "🍀 Luck Leaderboard",
+        }
+
+        embed = discord.Embed(
+            title=title_map[self.mode],
+            color=discord.Color.gold(),
+        )
+
+        if not rows:
+            embed.description = "📋 No users found yet."
+            return embed
+
+        lines = []
+        for i, (user_id, wallet, bank, luck) in enumerate(rows, start=offset + 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User {user_id}"
+
+            if self.mode == "net":
+                value = wallet + bank
+                value_str = f"🪙 {value:,}"
+            elif self.mode == "wallet":
+                value_str = f"🪙 {wallet:,}"
+            elif self.mode == "bank":
+                value_str = f"🪙 {bank:,}"
+            else:
+                value_str = f"{luck}%"
+
+            medal = ""
+            if i == 1:
+                medal = "🥇 "
+            elif i == 2:
+                medal = "🥈 "
+            elif i == 3:
+                medal = "🥉 "
+
+            lines.append(f"{medal}**#{i}** {name} — {value_str}")
+
+        embed.description = "\n".join(lines)
+
+        caller_rank = self.get_caller_rank()
+        if caller_rank:
+            embed.set_footer(text=f"Your rank: #{caller_rank} • Page {self.page + 1}")
+        else:
+            embed.set_footer(text=f"Page {self.page + 1}")
+
+        return embed
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary, row=0)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary, row=0)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page += 1
+        # If empty, roll back
+        if not self.fetch_page(self.page * 10):
+            self.page -= 1
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.primary, row=0)
+    async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.select(
+        placeholder="Switch leaderboard...",
+        options=[
+            discord.SelectOption(label="Net Worth", value="net", emoji="🏆"),
+            discord.SelectOption(label="Wallet", value="wallet", emoji="💰"),
+            discord.SelectOption(label="Bank", value="bank", emoji="🏦"),
+            discord.SelectOption(label="Luck", value="luck", emoji="🍀"),
+        ],
+        row=1,
+    )
+    async def mode_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.mode = select.values[0]
+        self.page = 0
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+
+@bot.hybrid_command(name="leaderboard", aliases=["lb", "top"], description="View the richest users in the bot")
+async def leaderboard(ctx):
+    # Make sure the user has a row so they show up
+    get_user_econ(ctx.author.id)
+
+    view = LeaderboardView(ctx.author.id)
+    embed = view.build_embed()
+
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, view=view)
+    else:
+        await ctx.send(embed=embed, view=view)
+# =========================================================
 # RUN BOT
 # =========================================================
 
