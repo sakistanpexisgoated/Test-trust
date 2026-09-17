@@ -3015,7 +3015,7 @@ async def serverunblacklist(ctx, guild_id: str):
     await ctx.send(embed=embed)
 
 # =========================================================
-# SERVER SETUP
+# SERVER SETUP - WITH STYLE SELECT UI
 # =========================================================
 
 SETUP_USER_ID = 1475693209949569024
@@ -3087,14 +3087,6 @@ SETUP_STRUCTURE = {
         ("Suggestions", "🛠️", "text"),
     ],
 
-    "〈💣〉・Reverse Beanie": [
-        ("Beanie-Rules", "📖", "text"),
-        ("Beanie-Announcements", "📢", "text"),
-        ("Beanie-Chat", "💬", "text"),
-        ("Beanie-Scripts", "📁", "text"),
-        ("Usernames", "🔍", "text"),
-    ],
-
     "〈💰〉・Trading": [
         ("Trading-Fourm", "💸", "text"),
         ("Trading", "💰", "text"),
@@ -3123,37 +3115,101 @@ SETUP_STRUCTURE = {
     ],
 }
 
+# The 3 supported style separators + previews
+SETUP_STYLES = {
+    "┃": {
+        "label": "Heavy Bar ┃",
+        "description": "Example:  📖┃Rules",
+        "emoji": "┃",
+    },
+    "・": {
+        "label": "Dot ・",
+        "description": "Example:  📖・Rules",
+        "emoji": "・",
+    },
+    "-・-": {
+        "label": "Dash-Dot-Dash -・-",
+        "description": "Example:  📖-・-Rules",
+        "emoji": "➖",
+    },
+}
+
+
 def format_setup_channel(emoji, base_name, separator):
     return f"{emoji}{separator}{base_name}"
 
-@bot.hybrid_command(name="setup", description="Create the server layout and choose a channel naming style")
-@app_commands.check(owner_only_predicate)
-async def setup(ctx, style: str = "┃"):
-    valid_styles = {"┃", "・", "-・-"}
-    style = style.strip()
-    if style not in valid_styles:
-        return await ctx.send("Invalid style. Use `┃`, `・`, or `-・-`.")
 
-    interaction = ctx.interaction
-    if interaction is not None:
-        await interaction.response.defer(ephemeral=True)
+class SetupStyleView(discord.ui.View):
+    def __init__(self, ctx, timeout=120):
+        super().__init__(timeout=timeout)
+        self.ctx = ctx
 
-    if ctx.author.id != SETUP_USER_ID:
-        return await ctx.send("😂 You are not allowed to use `,,setup`.", ephemeral=interaction is not None)
+        options = []
+        for sep, data in SETUP_STYLES.items():
+            options.append(
+                discord.SelectOption(
+                    label=data["label"],
+                    description=data["description"],
+                    emoji=data["emoji"],
+                    value=sep,
+                )
+            )
 
+        select = discord.ui.Select(
+            placeholder="Choose a channel naming style...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+        select.callback = self.select_callback
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message(
+                "❌ This setup menu isn't for you. Run `/setup` yourself.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def select_callback(self, interaction: discord.Interaction):
+        style = interaction.data["values"][0]
+
+        # Disable the select so it can't be reused
+        for child in self.children:
+            child.disabled = True
+
+        embed = discord.Embed(
+            title="🏗️ Setup Started",
+            description=(
+                f"Building the server using style `{style}`...\n"
+                f"This may take a moment — I'll ping you when it's done."
+            ),
+            color=discord.Color.blurple(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        await run_server_setup(interaction, self.ctx, style)
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+
+
+async def run_server_setup(interaction: discord.Interaction, ctx, style: str):
     guild = ctx.guild
-    if guild is None:
-        return await ctx.send("This command can only be used inside a server.", ephemeral=interaction is not None)
-
-    async def setup_error(message):
-        if interaction is not None:
-            return await interaction.followup.send(message, ephemeral=True)
-        return await ctx.send(message)
 
     created_roles = 0
     created_channels = 0
     existing_channels = 0
     roles = {}
+
+    async def setup_error(message):
+        try:
+            return await interaction.followup.send(message, ephemeral=True)
+        except Exception:
+            return await ctx.send(message)
 
     for role_name, color in SETUP_ROLES:
         role = discord.utils.get(guild.roles, name=role_name)
@@ -3163,7 +3219,7 @@ async def setup(ctx, style: str = "┃"):
                 role = await guild.create_role(
                     name=role_name,
                     color=color,
-                    reason=f"/setup used by {ctx.author}"
+                    reason=f"/setup used by {ctx.author}",
                 )
                 created_roles += 1
             except discord.Forbidden:
@@ -3174,16 +3230,13 @@ async def setup(ctx, style: str = "┃"):
     categories = {}
 
     for category_name, channel_list in SETUP_STRUCTURE.items():
-        category = discord.utils.get(
-            guild.categories,
-            name=category_name
-        )
+        category = discord.utils.get(guild.categories, name=category_name)
 
         if category is None:
             try:
                 category = await guild.create_category(
                     category_name,
-                    reason=f"/setup used by {ctx.author}"
+                    reason=f"/setup used by {ctx.author}",
                 )
             except discord.Forbidden:
                 return await setup_error("I need **Manage Channels** permission.")
@@ -3197,21 +3250,77 @@ async def setup(ctx, style: str = "┃"):
             if existing is None:
                 try:
                     if channel_type == "voice":
-                        await guild.create_voice_channel(name=channel_name, category=category, reason=f"/setup used by {ctx.author}")
+                        await guild.create_voice_channel(
+                            name=channel_name,
+                            category=category,
+                            reason=f"/setup used by {ctx.author}",
+                        )
                     else:
-                        await guild.create_text_channel(name=channel_name, category=category, reason=f"/setup used by {ctx.author}")
+                        await guild.create_text_channel(
+                            name=channel_name,
+                            category=category,
+                            reason=f"/setup used by {ctx.author}",
+                        )
                     created_channels += 1
                 except discord.Forbidden:
                     return await setup_error("I need **Manage Channels** permission.")
             else:
                 existing_channels += 1
 
-    success_text = f"Server setup complete! Created **{created_roles}** roles and **{created_channels}** new channels ({existing_channels} already existed)."
-    if interaction is not None:
-        await interaction.followup.send(success_text, ephemeral=True)
-    else:
-        await ctx.send(success_text)
+    success_embed = discord.Embed(
+        title="✅ Server Setup Completed",
+        description=(
+            f"Created **{created_roles}** roles and **{created_channels}** new channels "
+            f"({existing_channels} already existed).\n\n"
+            f"**Style used:** `{style}`"
+        ),
+        color=discord.Color.green(),
+    )
 
+    try:
+        await interaction.followup.send(embed=success_embed, ephemeral=True)
+    except Exception:
+        await ctx.send(embed=success_embed)
+
+
+@bot.hybrid_command(name="setup", description="Create the server layout and choose a channel naming style")
+@app_commands.check(owner_only_predicate)
+async def setup(ctx):
+    if ctx.author.id != SETUP_USER_ID:
+        embed = discord.Embed(
+            description="❌ You are not allowed to use `/setup`.",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    guild = ctx.guild
+    if guild is None:
+        return await ctx.send("💬 This command can only be used inside a server.")
+
+    # Build the preview embed showing the 3 styles
+    preview_lines = []
+    for sep, data in SETUP_STYLES.items():
+        preview_lines.append(f"**{data['label']}**\n`{format_setup_channel('📖', 'Rules', sep)}`  •  `{format_setup_channel('💬', 'General', sep)}`")
+
+    embed = discord.Embed(
+        title="🏗️ Server Setup — Choose a Style",
+        description=(
+            "Select the channel naming style you want below.\n"
+            "The bot will build out all categories, channels, and roles automatically.\n\n"
+            + "\n\n".join(preview_lines)
+        ),
+        color=discord.Color.blurple(),
+    )
+    embed.set_footer(text="Select a style from the dropdown to begin")
+
+    view = SetupStyleView(ctx)
+
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    else:
+        await ctx.send(embed=embed, view=view)
 # =========================================================
 # GUESS A NUMBER COMMAND & UI
 # =========================================================
