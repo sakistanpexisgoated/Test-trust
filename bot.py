@@ -84,6 +84,31 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 
 cursor.execute("""
+CREATE TABLE IF NOT EXISTS mod_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    moderator_id INTEGER NOT NULL,
+    target_id INTEGER,
+    guild_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    reason TEXT,
+    timestamp REAL NOT NULL
+)
+""")
+db.commit()
+
+
+def log_mod_action(moderator_id: int, target_id: int, guild_id: int, action: str, reason: str = "No reason provided"):
+    """Record a moderation action to the DB."""
+    try:
+        cursor.execute(
+            "INSERT INTO mod_actions (moderator_id, target_id, guild_id, action, reason, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+            (moderator_id, target_id, guild_id, action, reason, time.time()),
+        )
+        db.commit()
+    except Exception:
+        pass
+
+cursor.execute("""
 CREATE TABLE IF NOT EXISTS warnings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
@@ -8244,6 +8269,240 @@ async def serverinfo(ctx):
         await ctx.interaction.response.send_message(embed=embed)
     else:
         await ctx.send(embed=embed)
+# =========================================================
+# MODSTATS COMMAND
+# =========================================================
+
+MODSTATS_ACTIONS = ["ban", "kick", "mute", "unmute", "warn", "timeout", "clear", "purge", "slowmode", "lock", "unlock"]
+
+
+def _is_staff_member(member: discord.Member) -> bool:
+    """Return True if member is a mod/admin/staff."""
+    if member.guild_permissions.administrator:
+        return True
+    if member.guild_permissions.manage_messages:
+        return True
+    if member.guild_permissions.manage_roles:
+        return True
+    if member.guild_permissions.kick_members:
+        return True
+    if member.guild_permissions.ban_members:
+        return True
+    staff_roles = {"Staff", "Moderator", "Mod", "Admin", "Administrator", "Owner", "Management", "Moderator"}
+    return any(r.name in staff_roles for r in member.roles)
+
+
+async def require_staff(ctx) -> bool:
+    """Check if the caller is staff. Sends ephemeral error if not."""
+    if not isinstance(ctx.author, discord.Member) or not _is_staff_member(ctx.author):
+        embed = discord.Embed(
+            title="🛡️ Permission Denied",
+            description="Only **staff members** can use this command.",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            try:
+                if not ctx.interaction.response.is_done():
+                    await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+                else:
+                    await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                pass
+        else:
+            await ctx.send(embed=embed)
+        return False
+    return True
+
+
+class ModStatsView(discord.ui.View):
+    def __init__(self, user_id: int, guild: discord.Guild, timeout=120):
+        super().__init__(timeout=timeout)
+        self.user_id = user_id
+        self.guild = guild
+        self.mode = "self"  # self | leaderboard
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "❌ This menu isn't for you. Run `/modstats` yourself.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    def _fetch_user_stats(self, user_id: int, guild_id: int):
+        cursor.execute(
+            "SELECT action, COUNT(*) FROM mod_actions WHERE moderator_id = ? AND guild_id = ? GROUP BY action",
+            (user_id, guild_id),
+        )
+        return dict(cursor.fetchall())
+
+    def _fetch_user_total(self, user_id: int, guild_id: int):
+        cursor.execute(
+            "SELECT COUNT(*) FROM mod_actions WHERE moderator_id = ? AND guild_id = ?",
+            (user_id, guild_id),
+        )
+        return cursor.fetchone()[0] or 0
+
+    def _fetch_top_mods(self, guild_id: int, limit: int = 10):
+        cursor.execute(
+            "SELECT moderator_id, COUNT(*) as total FROM mod_actions WHERE guild_id = ? GROUP BY moderator_id ORDER BY total DESC LIMIT ?",
+            (guild_id, limit),
+        )
+        return cursor.fetchall()
+
+    def build_self_embed(self):
+        guild = self.guild
+        stats = self._fetch_user_stats(self.user_id, guild.id)
+        total = self._fetch_user_total(self.user_id, guild.id)
+
+        embed = discord.Embed(
+            title=f"🛡️ Mod Stats — {guild.get_member(self.user_id).display_name if guild.get_member(self.user_id) else 'You'}",
+            color=discord.Color.blue(),
+            timestamp=datetime.utcnow(),
+        )
+
+        if total == 0:
+            embed.description = "No moderation actions recorded yet for you in this server."
+            return embed
+
+        embed.description = f"**Total actions:** `{total}`"
+
+        action_emojis = {
+            "ban": "🔨",
+            "kick": "👢",
+            "mute": "🔇",
+            "unmute": "🔊",
+            "warn": "⚠️",
+            "timeout": "⏱️",
+            "clear": "🧹",
+            "purge": "🧹",
+            "slowmode": "🐢",
+            "lock": "🔒",
+            "unlock": "🔓",
+        }
+
+        lines = []
+        for action, count in sorted(stats.items(), key=lambda x: -x[1]):
+            emoji = action_emojis.get(action.lower(), "•")
+            lines.append(f"{emoji} **{action.title()}**: `{count}`")
+
+        embed.add_field(
+            name="📊 Breakdown",
+            value="\n".join(lines),
+            inline=False,
+        )
+
+        # Last 5 actions
+        cursor.execute(
+            "SELECT action, target_id, reason, timestamp FROM mod_actions WHERE moderator_id = ? AND guild_id = ? ORDER BY timestamp DESC LIMIT 5",
+            (self.user_id, guild.id),
+        )
+        recent = cursor.fetchall()
+        if recent:
+            recent_lines = []
+            for action, target_id, reason, ts in recent:
+                target_str = f"<@{target_id}>" if target_id else "—"
+                ago = f"<t:{int(ts)}:R>"
+                recent_lines.append(f"**{action.title()}** {target_str} • {ago}\n┗ *{(reason or 'No reason')[:60]}*")
+            embed.add_field(
+                name="🕒 Recent Actions",
+                value="\n".join(recent_lines)[:1024],
+                inline=False,
+            )
+
+        embed.set_footer(
+            text=f"Requested by {guild.get_member(self.user_id).display_name if guild.get_member(self.user_id) else 'Unknown'}",
+        )
+        return embed
+
+    def build_leaderboard_embed(self):
+        guild = self.guild
+        top = self._fetch_top_mods(guild.id, limit=10)
+
+        embed = discord.Embed(
+            title="🏆 Mod Leaderboard",
+            description=f"Top moderators in **{guild.name}**",
+            color=discord.Color.gold(),
+            timestamp=datetime.utcnow(),
+        )
+
+        if not top:
+            embed.description = "No moderation actions have been logged yet."
+            return embed
+
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        lines = []
+        for i, (mod_id, total) in enumerate(top, start=1):
+            member = guild.get_member(mod_id)
+            name = member.display_name if member else f"User {mod_id}"
+            medal = medals.get(i, f"**#{i}**")
+            lines.append(f"{medal} {name} — `{total}` action{'s' if total != 1 else ''}")
+
+        embed.add_field(
+            name="📊 Top 10",
+            value="\n".join(lines),
+            inline=False,
+        )
+        embed.set_footer(text=f"Requested by {guild.get_member(self.user_id).display_name if guild.get_member(self.user_id) else 'Unknown'}")
+        return embed
+
+    def build_embed(self):
+        if self.mode == "self":
+            return self.build_self_embed()
+        return self.build_leaderboard_embed()
+
+    @discord.ui.button(label="👤 My Stats", style=discord.ButtonStyle.primary, row=0)
+    async def self_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.mode = "self"
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="🏆 Leaderboard", style=discord.ButtonStyle.success, row=0)
+    async def lb_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.mode = "leaderboard"
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.secondary, row=0)
+    async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+
+@bot.hybrid_command(name="modstats", aliases=["ms", "modlog"], description="View moderation stats (staff only)")
+@app_commands.describe(member="Look up another moderator's stats (staff only)")
+async def modstats(ctx, member: discord.Member = None):
+    if not await require_staff(ctx):
+        return
+
+    if ctx.guild is None:
+        embed = discord.Embed(
+            description="❌ This command can only be used inside a server.",
+            color=discord.Color.red(),
+        )
+        if ctx.interaction:
+            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
+
+    target = member or ctx.author
+
+    # If looking up someone else, show their stats directly
+    if member and member.id != ctx.author.id:
+        view = ModStatsView(ctx.author.id, ctx.guild)
+        view.user_id = target.id
+        embed = view.build_self_embed()
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed)
+        else:
+            await ctx.send(embed=embed)
+        return
+
+    # Own stats: show with view (self/leaderboard toggle)
+    view = ModStatsView(ctx.author.id, ctx.guild)
+    embed = view.build_embed()
+
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    else:
+        await ctx.send(embed=embed, view=view)
 # =========================================================
 # RUN BOT
 # =========================================================
