@@ -9763,6 +9763,130 @@ async def setnick(ctx, member: discord.Member, *, nickname: str = None):
         else:
             await ctx.send(embed=embed)
 # =========================================================
+# WOULD YOU RATHER COMMAND
+# =========================================================
+
+WYR_QUESTIONS = [
+    ("Be able to fly", "Be able to turn invisible"),
+    ("Have unlimited money", "Have unlimited time"),
+    ("Live in the past", "Live in the future"),
+    ("Never use social media again", "Never watch TV/movies again"),
+    ("Be famous", "Be the richest person alive"),
+    ("Only eat sweet food forever", "Only eat savory food forever"),
+    ("Always be 10 minutes late", "Always be 20 minutes early"),
+    ("Have a rewind button for your life", "Have a pause button for your life"),
+    ("Fight 100 duck-sized horses", "Fight 1 horse-sized duck"),
+    ("Be able to talk to animals", "Speak every human language"),
+    ("Have free Wi-Fi everywhere", "Have free food everywhere"),
+    ("Never sleep again", "Sleep 12 hours every day"),
+    ("Always have to sing instead of speak", "Always have to dance everywhere you go"),
+    ("Know how you die", "Know when you die"),
+    ("Give up video games forever", "Never Watch memes again"),
+    ("Have no fingers", "Have no toes"),
+    ("Live in a treehouse", "Live in an underwater house"),
+    ("Be the smartest person alive", "Be the funniest person alive"),
+    ("Have your search history leaked", "Have your Discord chat leaked"),
+    ("Fight Mike Tyson", "Fight khabib"),
+    ("Always have to tell the truth", "Always lie"),
+    ("Be able to teleport", "Be able to read minds"),
+    ("Have unlimited battery life", "Have unlimited storage"),
+    ("Eat only pizza for a year", "Eat only burgers for a year"),
+    ("Have a pet dinosaur", "Have a pet dragon"),
+    ("Be really tall but weak", "Be really short but strong"),
+    ("Never have to work again", "Love your job forever"),
+    ("Have a personal chef", "Have a personal trainer"),
+    ("Be invisible when naked", "Fly but only at walking speed"),
+    ("Always have hiccups", "Always have itchy feet"),
+    ("Never use your phone again", "Never use your computer again"),
+    ("Have a photographic memory", "Be able to forget anything on command"),
+    ("Be able to stop time", "Be able to slow time"),
+    ("Have a lifetime supply of coffee", "Have a lifetime supply of tea"),
+    ("Live without music", "Live without movies"),
+    ("Look 20 years younger", "Look 20 years older"),
+    ("Have a robot butler", "Have a robot maid"),
+    ("Only shower in cold water", "Only shower in boiling water"),
+    ("Give up your phone for a year for $1M", "Give up your bed for a year for $1M"),
+    ("Fight a bear with a knife", "Fight a wolf with your bare hands"),
+    ("Have money but no friends", "Have friends but no money"),
+    ("Be able to breathe underwater", "Be able to survive in space"),
+    ("Have a 10-hour commute", "Have no commute but work 12-hour days"),
+    ("Only wear dirty clothes", "Only wear ugly clothes"),
+    ("Have a pet that talks", "Be able to talk to plants"),
+    ("Never age physically", "Never age mentally"),
+    ("Be able to control fire", "Be able to control water"),
+    ("Have a flying car", "Have a self-driving house"),
+    ("Always be too hot", "Always be too cold"),
+    ("Only ever whisper", "Only ever scream"),
+]
+
+
+class WYRView(discord.ui.View):
+    def __init__(self, author_id: int, option_a: str, option_b: str, timeout=120):
+        super().__init__(timeout=timeout)
+        self.author_id = author_id
+        self.option_a = option_a
+        self.option_b = option_b
+        self.votes_a = set()
+        self.votes_b = set()
+
+        # Update button labels
+        self.children[0].label = f"🅰️ {option_a[:70]}"
+        self.children[1].label = f"🅱️ {option_b[:70]}"
+
+    def build_embed(self):
+        total = len(self.votes_a) + len(self.votes_b)
+        if total == 0:
+            pct_a = pct_b = 0
+        else:
+            pct_a = int(len(self.votes_a) / total * 100)
+            pct_b = 100 - pct_a
+
+        bar_len = 20
+        filled_a = int(bar_len * pct_a / 100) if total else 0
+        bar_a = "█" * filled_a + "░" * (bar_len - filled_a)
+        bar_b = "█" * (bar_len - filled_a) + "░" * filled_a
+
+        embed = discord.Embed(
+            title="🤔 Would You Rather?",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name=f"🅰️ {self.option_a}",
+            value=f"{bar_a} **{pct_a}%** ({len(self.votes_a)} votes)",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"🅱️ {self.option_b}",
+            value=f"{bar_b} **{pct_b}%** ({len(self.votes_b)} votes)",
+            inline=False,
+        )
+        embed.set_footer(text=f"Total votes: {total}")
+        return embed
+
+    @discord.ui.button(label="Option A", style=discord.ButtonStyle.primary)
+    async def button_a(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.votes_a.add(interaction.user.id)
+        self.votes_b.discard(interaction.user.id)
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="Option B", style=discord.ButtonStyle.danger)
+    async def button_b(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.votes_b.add(interaction.user.id)
+        self.votes_a.discard(interaction.user.id)
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+
+@bot.hybrid_command(name="wouldyourather", aliases=["wyr"], description="Would you rather...?")
+async def wouldyourather(ctx):
+    option_a, option_b = random.choice(WYR_QUESTIONS)
+    view = WYRView(ctx.author.id, option_a, option_b)
+    embed = view.build_embed()
+
+    if ctx.interaction:
+        await ctx.interaction.response.send_message(embed=embed, view=view)
+    else:
+        await ctx.send(embed=embed, view=view)
+# =========================================================
 # RUN BOT
 # =========================================================
 
