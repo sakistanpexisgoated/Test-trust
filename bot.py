@@ -198,7 +198,7 @@ CREATE TABLE IF NOT EXISTS welcome_config (
     welcome_channel_id INTEGER,
     goodbye_channel_id INTEGER,
     dm_welcome INTEGER DEFAULT 0,
-    welcome_message TEXT DEFAULT 'Welcome {user} to **{server}**! You are the {count}th member!',
+    welcome_message TEXT DEFAULT 'Welcome {user} to **{server}**!',
     goodbye_message TEXT DEFAULT '{user} has left {server}.',
     welcome_embed INTEGER DEFAULT 1,
     welcome_color INTEGER DEFAULT 5793266
