@@ -3028,7 +3028,7 @@ SETUP_ROLES = [
 ]
 
 SETUP_STRUCTURE = {
-    "〈🔒〉・Staff Only": [
+    "Staff Only": [
         ("Staff-Rules", "📖", "text"),
         ("Staff-Announcements", "📢", "text"),
         ("Staff-Chat", "💬", "text"),
@@ -3037,12 +3037,12 @@ SETUP_STRUCTURE = {
         ("Applications", "📄", "text"),
         ("Staff-Vc", "🎙️", "voice"),
     ],
-    "〈👋〉・Arrivals": [
+    "Arrivals": [
         ("Roles-Info", "🎭", "text"),
         ("Welcome", "👋", "text"),
         ("Goodbye", "🪽", "text"),
     ],
-    "〈⚠️〉・Important": [
+    "Important": [
         ("Verify", "✅", "text"),
         ("Rules", "📖", "text"),
         ("Announcements", "📢", "text"),
@@ -3060,17 +3060,17 @@ SETUP_STRUCTURE = {
         ("Hall-Of-Fame", "🥇", "text"),
         ("Help-Ticket", "🎟️", "text"),
     ],
-    "〈🎁〉・Giveaways": [
+    "Giveaways": [
         ("Giveaways", "🎁", "text"),
         ("Giveaway-Vouches", "🏅", "text"),
         ("Events", "🎉", "text"),
     ],
-    "〈🤝〉・Middleman": [
+    "Middleman": [
         ("Middleman", "🤝", "text"),
         ("Middleman-Vouches", "⭐", "text"),
         ("Middleman-Ticket", "🎟️", "text"),
     ],
-    "〈💬〉・General": [
+    "General": [
         ("General-Chat", "💬", "text"),
         ("Media", "📸", "text"),
         ("Commands", "⚙️", "text"),
@@ -3079,7 +3079,7 @@ SETUP_STRUCTURE = {
         ("Boosters-Chat", "🚀", "text"),
         ("Suggestions", "🛠️", "text"),
     ],
-    "〈💰〉・Trading": [
+    "Trading": [
         ("Trading-Fourm", "💸", "text"),
         ("Trading", "💰", "text"),
         ("Mid-Trading", "⭐", "text"),
@@ -3089,13 +3089,13 @@ SETUP_STRUCTURE = {
         ("Win-Or-Loss", "⚖️", "text"),
         ("Vouches", "✅", "text"),
     ],
-    "〈🎬〉・Content Creators": [
+    "Content Creators": [
         ("Creators-Rules", "📖", "text"),
         ("Creators-Announcements", "📢", "text"),
         ("Creators-Chat", "💬", "text"),
         ("Creators-Ideas", "🛠️", "text"),
     ],
-    "〈🔊〉・Voice Chats": [
+    "Voice Chats": [
         ("Create-Vc", "🔑", "voice"),
         ("Owners-Vc", "👑", "voice"),
         ("General-Vc", "🎙️", "voice"),
@@ -3105,15 +3105,24 @@ SETUP_STRUCTURE = {
     ],
 }
 
-SETUP_STYLES = {
-    "┃": {"label": "Heavy Bar  (┃)", "description": "📖┃Rules  •  💬┃General"},
-    "・": {"label": "Dot  (・)", "description": "📖・Rules  •  💬・General"},
-    "-・-": {"label": "Dash-Dot  (-・-)", "description": "📖-・-Rules  •  💬-・-General"},
+# =========================================================
+# THE TWO DESIGN STYLES
+# =========================================================
+
+DESIGNS = {
+    "double_bracket_dot": {
+        "label": "〚✅〛・syncs",
+        "description": "〚🔒〛・staff-only  •  〚💬〛・general",
+        "cat_fmt": lambda e, n: f"〚{e}〛・{n}",
+        "ch_fmt":  lambda e, n: f"〚{e}〛・{n}",
+    },
+    "single_bracket": {
+        "label": "〔👑〕",
+        "description": "〔🔒〕staff-only  •  〔💬〕general",
+        "cat_fmt": lambda e, n: f"〔{e}〕{n}",
+        "ch_fmt":  lambda e, n: f"〔{e}〕{n}",
+    },
 }
-
-
-def format_setup_channel(emoji, base_name, separator):
-    return f"{emoji}{separator}{base_name}"
 
 
 class SetupStyleView(discord.ui.View):
@@ -3122,17 +3131,17 @@ class SetupStyleView(discord.ui.View):
         self.user_id = user_id
 
         options = []
-        for sep, data in SETUP_STYLES.items():
+        for key, data in DESIGNS.items():
             options.append(
                 discord.SelectOption(
                     label=data["label"],
-                    description=data["description"],
-                    value=sep,
+                    description=data["description"][:100],
+                    value=key,
                 )
             )
 
         select = discord.ui.Select(
-            placeholder="Choose a channel naming style...",
+            placeholder="Choose a design style...",
             min_values=1,
             max_values=1,
             options=options,
@@ -3150,9 +3159,8 @@ class SetupStyleView(discord.ui.View):
         return True
 
     async def select_callback(self, interaction: discord.Interaction):
-        style = interaction.data["values"][0]
+        design_key = interaction.data["values"][0]
 
-        # Defer FIRST so Discord doesn't time out
         await interaction.response.defer()
 
         for child in self.children:
@@ -3163,16 +3171,19 @@ class SetupStyleView(discord.ui.View):
         except Exception:
             pass
 
-        await run_server_setup(interaction, style)
+        await run_server_setup(interaction, design_key)
 
     async def on_timeout(self):
         for child in self.children:
             child.disabled = True
 
 
-async def run_server_setup(interaction: discord.Interaction, style: str):
+async def run_server_setup(interaction: discord.Interaction, design_key: str):
     guild = interaction.guild
     author = interaction.user
+    design = DESIGNS[design_key]
+    cat_fmt = design["cat_fmt"]
+    ch_fmt = design["ch_fmt"]
 
     created_roles = 0
     created_channels = 0
@@ -3199,33 +3210,49 @@ async def run_server_setup(interaction: discord.Interaction, style: str):
                 return await setup_error("⚠️ I need **Manage Roles** permission to create the roles.")
 
     # --- CATEGORIES + CHANNELS ---
+    CATEGORY_EMOJIS = {
+        "Staff Only": "🔒",
+        "Arrivals": "👋",
+        "Important": "⚠️",
+        "Giveaways": "🎁",
+        "Middleman": "🤝",
+        "General": "💬",
+        "Trading": "💰",
+        "Content Creators": "🎬",
+        "Voice Chats": "🔊",
+    }
+
     for category_name, channel_list in SETUP_STRUCTURE.items():
-        category = discord.utils.get(guild.categories, name=category_name)
+        cat_emoji = CATEGORY_EMOJIS.get(category_name, "📁")
+        formatted_cat_name = cat_fmt(cat_emoji, category_name)
+
+        category = discord.utils.get(guild.categories, name=formatted_cat_name)
 
         if category is None:
             try:
                 category = await guild.create_category(
-                    category_name,
+                    formatted_cat_name,
                     reason=f"/setup used by {author}",
                 )
             except discord.Forbidden:
                 return await setup_error("I need **Manage Channels** permission.")
 
         for base_name, emoji, channel_type in channel_list:
-            channel_name = format_setup_channel(emoji, base_name, style)
-            existing = discord.utils.get(category.channels, name=channel_name)
+            channel_name = ch_fmt(emoji, base_name)
+            safe_name = channel_name.replace(" ", "-").lower()
+            existing = discord.utils.get(category.channels, name=safe_name)
 
             if existing is None:
                 try:
                     if channel_type == "voice":
                         await guild.create_voice_channel(
-                            name=channel_name,
+                            name=safe_name,
                             category=category,
                             reason=f"/setup used by {author}",
                         )
                     else:
                         await guild.create_text_channel(
-                            name=channel_name,
+                            name=safe_name,
                             category=category,
                             reason=f"/setup used by {author}",
                         )
@@ -3240,7 +3267,7 @@ async def run_server_setup(interaction: discord.Interaction, style: str):
         description=(
             f"Created **{created_roles}** roles and **{created_channels}** new channels "
             f"({existing_channels} already existed).\n\n"
-            f"**Style used:** `{style}`"
+            f"**Design used:** `{design['label']}`"
         ),
         color=discord.Color.green(),
     )
@@ -3251,14 +3278,13 @@ async def run_server_setup(interaction: discord.Interaction, style: str):
         pass
 
 
-@bot.hybrid_command(name="setup", description="Create the server layout and choose a channel naming style")
+@bot.hybrid_command(name="setup", description="Create the server layout and choose a design style")
 async def setup(ctx):
     try:
         guild = ctx.guild
         if guild is None:
             return await ctx.send("This command can only be used inside a server.")
 
-        # ONLY the server owner can run this
         if ctx.author.id != guild.owner_id:
             embed = discord.Embed(
                 description="👑 Only the **server owner** can use `/setup`.",
@@ -3268,24 +3294,17 @@ async def setup(ctx):
                 return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
             return await ctx.send(embed=embed)
 
-        preview_lines = []
-        for sep, data in SETUP_STYLES.items():
-            preview_lines.append(
-                f"**{data['label']}**\n"
-                f"`{format_setup_channel('📖', 'Rules', sep)}`  •  "
-                f"`{format_setup_channel('💬', 'General', sep)}`"
-            )
-
         embed = discord.Embed(
-            title="🏗️ Server Setup — Choose a Style",
+            title="🏗️ Server Setup — Choose a Design",
             description=(
-                "Select the channel naming style you want below.\n"
+                "Pick a design style from the dropdown below.\n"
                 "The bot will build out all categories, channels, and roles automatically.\n\n"
-                + "\n\n".join(preview_lines)
+                "**Options:**\n"
+                "`〚🔒〛・staff-only`  •  `〔🔒〕staff-only`"
             ),
             color=discord.Color.blurple(),
         )
-        embed.set_footer(text="Select a style from the dropdown to begin")
+        embed.set_footer(text="Select a design from the dropdown to begin")
 
         view = SetupStyleView(ctx.author.id)
 
@@ -3295,7 +3314,6 @@ async def setup(ctx):
             await ctx.send(embed=embed, view=view)
 
     except Exception as e:
-        # Print the real error to console so you can see it in Railway logs
         import traceback
         traceback.print_exc()
         err = discord.Embed(description=f"❌ Setup error: `{e}`", color=discord.Color.red())
