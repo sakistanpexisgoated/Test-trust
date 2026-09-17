@@ -7410,6 +7410,216 @@ async def leaderboard(ctx):
     else:
         await ctx.send(embed=embed, view=view)
 # =========================================================
+# WEATHER COMMAND (Open-Meteo — free, no API key)
+# =========================================================
+
+WEATHER_CODES = {
+    0: ("☀️", "Clear sky"),
+    1: ("🌤️", "Mainly clear"),
+    2: ("⛅", "Partly cloudy"),
+    3: ("☁️", "Overcast"),
+    45: ("🌫️", "Fog"),
+    48: ("🌫️", "Depositing rime fog"),
+    51: ("🌦️", "Light drizzle"),
+    53: ("🌦️", "Moderate drizzle"),
+    55: ("🌧️", "Dense drizzle"),
+    56: ("🌧️", "Light freezing drizzle"),
+    57: ("🌧️", "Dense freezing drizzle"),
+    61: ("🌧️", "Slight rain"),
+    63: ("🌧️", "Moderate rain"),
+    65: ("🌧️", "Heavy rain"),
+    66: ("🌧️", "Light freezing rain"),
+    67: ("🌧️", "Heavy freezing rain"),
+    71: ("🌨️", "Slight snow"),
+    73: ("🌨️", "Moderate snow"),
+    75: ("❄️", "Heavy snow"),
+    77: ("🌨️", "Snow grains"),
+    80: ("🌦️", "Slight rain showers"),
+    81: ("🌧️", "Moderate rain showers"),
+    82: ("⛈️", "Violent rain showers"),
+    85: ("🌨️", "Slight snow showers"),
+    86: ("❄️", "Heavy snow showers"),
+    95: ("⛈️", "Thunderstorm"),
+    96: ("⛈️", "Thunderstorm with slight hail"),
+    99: ("⛈️", "Thunderstorm with heavy hail"),
+}
+
+
+def _weather_emoji(code: int):
+    return WEATHER_CODES.get(code, ("🌡️", "Unknown"))
+
+
+@bot.hybrid_command(name="weather", description="Get the current weather for a city")
+@app_commands.describe(city="City name (e.g. Tokyo, New York, London)")
+async def weather(ctx, *, city: str):
+    if ctx.interaction:
+        await ctx.interaction.response.defer()
+
+    async with aiohttp.ClientSession() as session:
+        # Step 1: geocode the city name -> lat/lon
+        try:
+            async with session.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={"name": city, "count": 1, "language": "en", "format": "json"},
+                timeout=10,
+            ) as resp:
+                geo = await resp.json()
+        except Exception as e:
+            embed = discord.Embed(
+                description=f"❌ Geocoding failed: `{str(e)[:150]}`",
+                color=discord.Color.red(),
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+
+        results = geo.get("results") or []
+        if not results:
+            embed = discord.Embed(
+                description=f"❌ Couldn't find a city called `{city}`.",
+                color=discord.Color.red(),
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+
+        place = results[0]
+        lat = place["latitude"]
+        lon = place["longitude"]
+        display_name = place["name"]
+        country = place.get("country", "")
+        admin = place.get("admin1", "")
+        timezone = place.get("timezone", "auto")
+
+        # Step 2: fetch current weather
+        try:
+            async with session.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m",
+                    "daily": "temperature_2m_max,temperature_2m_min,sunrise,sunset",
+                    "timezone": timezone,
+                    "forecast_days": 1,
+                },
+                timeout=10,
+            ) as resp:
+                data = await resp.json()
+        except Exception as e:
+            embed = discord.Embed(
+                description=f"❌ Weather fetch failed: `{str(e)[:150]}`",
+                color=discord.Color.red(),
+            )
+            if ctx.interaction:
+                return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
+            return await ctx.send(embed=embed)
+
+    current = data.get("current", {})
+    daily = data.get("daily", {})
+
+    temp = current.get("temperature_2m")
+    feels = current.get("apparent_temperature")
+    humidity = current.get("relative_humidity_2m")
+    wind = current.get("wind_speed_10m")
+    wind_dir = current.get("wind_direction_10m")
+    precip = current.get("precipitation")
+    code = current.get("weather_code", 0)
+    is_day = current.get("is_day", 1)
+
+    emoji, condition = _weather_emoji(code)
+    if not is_day and code == 0:
+        emoji, condition = "🌙", "Clear sky (night)"
+
+    # wind direction arrow
+    if wind_dir is not None:
+        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        arrow = dirs[int((wind_dir + 22.5) % 360 // 45)]
+    else:
+        arrow = ""
+
+    location_str = display_name
+    if admin and admin != display_name:
+        location_str += f", {admin}"
+    if country:
+        location_str += f", {country}"
+
+    # Temperature color
+    if temp is None:
+        color = discord.Color.blurple()
+    elif temp <= 0:
+        color = discord.Color.from_rgb(120, 190, 255)
+    elif temp <= 10:
+        color = discord.Color.from_rgb(90, 170, 255)
+    elif temp <= 20:
+        color = discord.Color.from_rgb(120, 220, 180)
+    elif temp <= 30:
+        color = discord.Color.from_rgb(255, 190, 100)
+    else:
+        color = discord.Color.from_rgb(255, 110, 90)
+
+    embed = discord.Embed(
+        title=f"{emoji} {condition}",
+        description=f"**{location_str}**",
+        color=color,
+    )
+
+    embed.add_field(
+        name="🌡️ Temperature",
+        value=f"**{temp}°C**\nFeels like **{feels}°C**" if temp is not None else "—",
+        inline=True,
+    )
+    embed.add_field(
+        name="💧 Humidity",
+        value=f"**{humidity}%**" if humidity is not None else "—",
+        inline=True,
+    )
+    embed.add_field(
+        name="💨 Wind",
+        value=f"**{wind} km/h** {arrow}" if wind is not None else "—",
+        inline=True,
+    )
+    embed.add_field(
+        name="🌧️ Precipitation",
+        value=f"**{precip} mm**" if precip is not None else "—",
+        inline=True,
+    )
+
+    if daily:
+        tmax = daily.get("temperature_2m_max", [None])[0]
+        tmin = daily.get("temperature_2m_min", [None])[0]
+        sunrise_raw = (daily.get("sunrise") or [None])[0]
+        sunset_raw = (daily.get("sunset") or [None])[0]
+
+        sunrise = sunrise_raw.split("T")[1] if sunrise_raw else "—"
+        sunset = sunset_raw.split("T")[1] if sunset_raw else "—"
+
+        embed.add_field(
+            name="📈 Today",
+            value=f"Max **{tmax}°C** / Min **{tmin}°C**" if tmax is not None else "—",
+            inline=True,
+        )
+        embed.add_field(
+            name="🌅 Sunrise",
+            value=f"**{sunrise}**",
+            inline=True,
+        )
+        embed.add_field(
+            name="🌇 Sunset",
+            value=f"**{sunset}**",
+            inline=True,
+        )
+
+    embed.set_footer(
+        text=f"Requested by {ctx.author.display_name} • Powered by Open-Meteo",
+        icon_url=ctx.author.display_avatar.url,
+    )
+
+    if ctx.interaction:
+        await ctx.interaction.followup.send(embed=embed)
+    else:
+        await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
