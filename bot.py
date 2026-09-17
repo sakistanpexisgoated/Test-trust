@@ -3329,7 +3329,7 @@ async def afk(ctx, *, reason: str = "AFK"):
     
     embed = discord.Embed(
         title="AFK Set!",
-        description=f"You are now afk in this server. Reason: **{reason}**",
+        description=f"You are now afk. Reason: **{reason}**",
         color=discord.Color.blue()
     )
     embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
