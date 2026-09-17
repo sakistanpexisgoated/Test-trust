@@ -191,7 +191,62 @@ CREATE TABLE IF NOT EXISTS tickets (
 """)
 
 db.commit()
+# =========================================================
+# VOUCH SYSTEM — DB
+# =========================================================
 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS vouches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    voucher_id INTEGER NOT NULL,
+    target_id INTEGER NOT NULL,
+    reason TEXT,
+    created_at REAL NOT NULL
+)
+""")
+
+db.commit()
+
+
+def add_vouch(guild_id, voucher_id, target_id, reason):
+    cursor.execute(
+        "INSERT INTO vouches (guild_id, voucher_id, target_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+        (guild_id, voucher_id, target_id, reason, time.time()),
+    )
+    db.commit()
+
+
+def has_vouched(guild_id, voucher_id, target_id):
+    cursor.execute(
+        "SELECT 1 FROM vouches WHERE guild_id = ? AND voucher_id = ? AND target_id = ?",
+        (guild_id, voucher_id, target_id),
+    )
+    return cursor.fetchone() is not None
+
+
+def get_vouch_count(guild_id, target_id):
+    cursor.execute(
+        "SELECT COUNT(*) FROM vouches WHERE guild_id = ? AND target_id = ?",
+        (guild_id, target_id),
+    )
+    return cursor.fetchone()[0] or 0
+
+
+def get_recent_vouches(guild_id, target_id, limit=5):
+    cursor.execute(
+        "SELECT voucher_id, reason, created_at FROM vouches WHERE guild_id = ? AND target_id = ? ORDER BY created_at DESC LIMIT ?",
+        (guild_id, target_id, limit),
+    )
+    return cursor.fetchall()
+
+
+def get_vouch_leaderboard(guild_id, limit=10):
+    cursor.execute(
+        "SELECT target_id, COUNT(*) as c FROM vouches WHERE guild_id = ? GROUP BY target_id ORDER BY c DESC LIMIT ?",
+        (guild_id, limit),
+    )
+    return cursor.fetchall()
 # =========================================================
 # WELCOME SYSTEM — DB + CARD + EVENTS + COMMANDS
 # =========================================================
