@@ -163,6 +163,137 @@ CREATE TABLE IF NOT EXISTS giveaways (
 """)
 
 cursor.execute("""
+CREATE TABLE IF NOT EXISTS ticket_config (
+    guild_id INTEGER PRIMARY KEY,
+    category_id INTEGER,
+    log_channel_id INTEGER,
+    support_role_id INTEGER,
+    panel_channel_id INTEGER,
+    panel_message_id INTEGER
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    ticket_number INTEGER NOT NULL,
+    subject TEXT,
+    status TEXT DEFAULT 'open',
+    created_at REAL NOT NULL,
+    closed_at REAL,
+    closed_by INTEGER,
+    claimed_by INTEGER
+)
+""")
+
+db.commit()
+
+# Ticket settings per guild (in-memory, backed by DB)
+ticket_panels = {}
+
+
+def get_ticket_config(guild_id: int):
+    cursor.execute(
+        "SELECT category_id, log_channel_id, support_role_id, panel_channel_id, panel_message_id FROM ticket_config WHERE guild_id = ?",
+        (guild_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "category_id": row[0],
+        "log_channel_id": row[1],
+        "support_role_id": row[2],
+        "panel_channel_id": row[3],
+        "panel_message_id": row[4],
+    }
+
+
+def set_ticket_config(guild_id: int, **kwargs):
+    existing = get_ticket_config(guild_id) or {}
+    merged = {**existing, **kwargs}
+
+    cursor.execute(
+        """
+        INSERT INTO ticket_config (guild_id, category_id, log_channel_id, support_role_id, panel_channel_id, panel_message_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            category_id = excluded.category_id,
+            log_channel_id = excluded.log_channel_id,
+            support_role_id = excluded.support_role_id,
+            panel_channel_id = excluded.panel_channel_id,
+            panel_message_id = excluded.panel_message_id
+        """,
+        (
+            guild_id,
+            merged.get("category_id"),
+            merged.get("log_channel_id"),
+            merged.get("support_role_id"),
+            merged.get("panel_channel_id"),
+            merged.get("panel_message_id"),
+        ),
+    )
+    db.commit()
+
+
+def next_ticket_number(guild_id: int) -> int:
+    cursor.execute("SELECT MAX(ticket_number) FROM tickets WHERE guild_id = ?", (guild_id,))
+    row = cursor.fetchone()
+    return (row[0] or 0) + 1
+
+
+def create_ticket_row(guild_id: int, channel_id: int, user_id: int, subject: str = "No subject") -> int:
+    num = next_ticket_number(guild_id)
+    cursor.execute(
+        "INSERT INTO tickets (guild_id, channel_id, user_id, ticket_number, subject, status, created_at) VALUES (?, ?, ?, ?, ?, 'open', ?)",
+        (guild_id, channel_id, user_id, num, subject, time.time()),
+    )
+    db.commit()
+    return num
+
+
+def get_ticket_by_channel(channel_id: int):
+    cursor.execute(
+        "SELECT id, guild_id, channel_id, user_id, ticket_number, subject, status, created_at, closed_at, closed_by, claimed_by FROM tickets WHERE channel_id = ?",
+        (channel_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0], "guild_id": row[1], "channel_id": row[2], "user_id": row[3],
+        "ticket_number": row[4], "subject": row[5], "status": row[6],
+        "created_at": row[7], "closed_at": row[8], "closed_by": row[9], "claimed_by": row[10],
+    }
+
+
+def close_ticket_row(channel_id: int, closed_by: int):
+    cursor.execute(
+        "UPDATE tickets SET status = 'closed', closed_at = ?, closed_by = ? WHERE channel_id = ?",
+        (time.time(), closed_by, channel_id),
+    )
+    db.commit()
+
+
+def claim_ticket_row(channel_id: int, staff_id: int):
+    cursor.execute("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?", (staff_id, channel_id))
+    db.commit()
+
+
+def is_staff_member(member: discord.Member) -> bool:
+    if member.guild_permissions.administrator:
+        return True
+    if member.guild_permissions.manage_messages:
+        return True
+    if member.guild_permissions.manage_channels:
+        return True
+    staff_roles = {"Staff", "Moderator", "Mod", "Admin", "Administrator", "Owner", "Management", "Support"}
+    return any(r.name in staff_roles for r in member.roles)
+
+cursor.execute("""
 CREATE TABLE IF NOT EXISTS allowed_links (
     guild_id INTEGER,
     link_domain TEXT,
