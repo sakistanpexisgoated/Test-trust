@@ -3274,38 +3274,6 @@ async def kiss(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
         
-@bot.hybrid_command(name="gif", description="Search and send a GIF")
-async def gif(ctx, *, search: str):
-    import aiohttp
-    tenor_key = os.getenv("TENOR_API_KEY", "LIVDSRZULELA")
-    url = f"https://g.tenor.com/v1/search?q={search}&key={tenor_key}&limit=10"
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                results = data.get("results", [])
-                if results:
-                    gif_url = random.choice(results)["media"][0]["gif"]["url"]
-                    embed = discord.Embed(color=discord.Color.blurple())
-                    embed.set_image(url=gif_url)
-                    embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
-                    if ctx.interaction:
-                        return await ctx.interaction.response.send_message(embed=embed)
-                    else:
-                        if ctx.message:
-                            try:
-                                await ctx.message.delete()
-                            except Exception:
-                                pass
-                        return await ctx.send(embed=embed)
-            
-    embed = discord.Embed(description=f"Could not find any GIFs for `{search}`.", color=discord.Color.red())
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-    else:
-        await ctx.send(embed=embed, delete_after=5)
-
 @bot.hybrid_command(name="hack", description="Fictional hack command for fun")
 async def hack(ctx, member: discord.Member):
     if member.id == ctx.author.id:
