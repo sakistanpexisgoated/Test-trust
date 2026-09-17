@@ -7769,238 +7769,115 @@ async def userinfo(ctx, member: discord.Member = None):
     else:
         await ctx.send(embed=embed)
 # =========================================================
-# TRANSLATE COMMAND (free — no API key)
+# TRANSLATE COMMAND (supports every Google language)
 # =========================================================
 
 TRANSLATE_LANGS = {
     "af": "Afrikaans", "sq": "Albanian", "am": "Amharic", "ar": "Arabic",
-    "hy": "Armenian", "az": "Azerbaijani", "eu": "Basque", "be": "Belarusian",
-    "bn": "Bengali", "bs": "Bosnian", "bg": "Bulgarian", "ca": "Catalan",
-    "ceb": "Cebuano", "zh-CN": "Chinese (Simplified)", "zh-TW": "Chinese (Traditional)",
-    "co": "Corsican", "hr": "Croatian", "cs": "Czech", "da": "Danish",
+    "hy": "Armenian", "as": "Assamese", "ay": "Aymara", "az": "Azerbaijani",
+    "bm": "Bambara", "eu": "Basque", "be": "Belarusian", "bn": "Bengali",
+    "bho": "Bhojpuri", "bs": "Bosnian", "bg": "Bulgarian", "ca": "Catalan",
+    "ceb": "Cebuano", "ny": "Chichewa", "zh-CN": "Chinese (Simplified)",
+    "zh-TW": "Chinese (Traditional)", "co": "Corsican", "hr": "Croatian",
+    "cs": "Czech", "da": "Danish", "dv": "Dhivehi", "doi": "Dogri",
     "nl": "Dutch", "en": "English", "eo": "Esperanto", "et": "Estonian",
-    "fi": "Finnish", "fr": "French", "fy": "Frisian", "gl": "Galician",
-    "ka": "Georgian", "de": "German", "el": "Greek", "gu": "Gujarati",
-    "ht": "Haitian Creole", "ha": "Hausa", "haw": "Hawaiian", "he": "Hebrew",
-    "hi": "Hindi", "hmn": "Hmong", "hu": "Hungarian", "is": "Icelandic",
-    "ig": "Igbo", "id": "Indonesian", "ga": "Irish", "it": "Italian",
+    "ee": "Ewe", "tl": "Filipino", "fi": "Finnish", "fr": "French",
+    "fy": "Frisian", "gl": "Galician", "ka": "Georgian", "de": "German",
+    "el": "Greek", "gn": "Guarani", "gu": "Gujarati", "ht": "Haitian Creole",
+    "ha": "Hausa", "haw": "Hawaiian", "he": "Hebrew", "hi": "Hindi",
+    "hmn": "Hmong", "hu": "Hungarian", "is": "Icelandic", "ig": "Igbo",
+    "ilo": "Ilocano", "id": "Indonesian", "ga": "Irish", "it": "Italian",
     "ja": "Japanese", "jv": "Javanese", "kn": "Kannada", "kk": "Kazakh",
-    "km": "Khmer", "rw": "Kinyarwanda", "ko": "Korean", "ku": "Kurdish",
+    "km": "Khmer", "rw": "Kinyarwanda", "gom": "Konkani", "ko": "Korean",
+    "kri": "Krio", "ku": "Kurdish (Kurmanji)", "ckb": "Kurdish (Sorani)",
     "ky": "Kyrgyz", "lo": "Lao", "la": "Latin", "lv": "Latvian",
-    "lt": "Lithuanian", "lb": "Luxembourgish", "mk": "Macedonian", "mg": "Malagasy",
-    "ms": "Malay", "ml": "Malayalam", "mt": "Maltese", "mi": "Maori",
-    "mr": "Marathi", "mn": "Mongolian", "my": "Myanmar (Burmese)", "ne": "Nepali",
-    "no": "Norwegian", "ny": "Nyanja (Chichewa)", "or": "Odia (Oriya)", "ps": "Pashto",
-    "fa": "Persian", "pl": "Polish", "pt": "Portuguese", "pa": "Punjabi",
-    "ro": "Romanian", "ru": "Russian", "sm": "Samoan", "gd": "Scots Gaelic",
+    "ln": "Lingala", "lt": "Lithuanian", "lg": "Luganda",
+    "lb": "Luxembourgish", "mk": "Macedonian", "mai": "Maithili",
+    "mg": "Malagasy", "ms": "Malay", "ml": "Malayalam", "mt": "Maltese",
+    "mi": "Maori", "mr": "Marathi", "mni-Mtei": "Meiteilon (Manipuri)",
+    "lus": "Mizo", "mn": "Mongolian", "my": "Myanmar (Burmese)",
+    "ne": "Nepali", "no": "Norwegian", "or": "Odia (Oriya)", "om": "Oromo",
+    "ps": "Pashto", "fa": "Persian", "pl": "Polish", "pt": "Portuguese",
+    "pa": "Punjabi", "qu": "Quechua", "ro": "Romanian", "ru": "Russian",
+    "sm": "Samoan", "sa": "Sanskrit", "gd": "Scots Gaelic", "nso": "Sepedi",
     "sr": "Serbian", "st": "Sesotho", "sn": "Shona", "sd": "Sindhi",
     "si": "Sinhala", "sk": "Slovak", "sl": "Slovenian", "so": "Somali",
     "es": "Spanish", "su": "Sundanese", "sw": "Swahili", "sv": "Swedish",
-    "tl": "Tagalog (Filipino)", "tg": "Tajik", "ta": "Tamil", "tt": "Tatar",
-    "te": "Telugu", "th": "Thai", "tr": "Turkish", "tk": "Turkmen",
-    "uk": "Ukrainian", "ur": "Urdu", "ug": "Uyghur", "uz": "Uzbek",
-    "vi": "Vietnamese", "cy": "Welsh", "xh": "Xhosa", "yi": "Yiddish",
-    "yo": "Yoruba", "zu": "Zulu",
+    "tg": "Tajik", "ta": "Tamil", "tt": "Tatar", "te": "Telugu",
+    "th": "Thai", "ti": "Tigrinya", "ts": "Tsonga", "tr": "Turkish",
+    "tk": "Turkmen", "ak": "Twi", "uk": "Ukrainian", "ur": "Urdu",
+    "ug": "Uyghur", "uz": "Uzbek", "vi": "Vietnamese", "cy": "Welsh",
+    "xh": "Xhosa", "yi": "Yiddish", "yo": "Yoruba", "zu": "Zulu",
 }
 
-# Common aliases → language codes
-TRANSLATE_ALIASES = {
-    "chinese": "zh-CN", "mandarin": "zh-CN", "cantonese": "zh-TW",
-    "spanish": "es", "french": "fr", "german": "de", "italian": "it",
-    "japanese": "ja", "korean": "ko", "russian": "ru", "arabic": "ar",
-    "hindi": "hi", "portuguese": "pt", "dutch": "nl", "polish": "pl",
-    "turkish": "tr", "greek": "el", "hebrew": "he", "swedish": "sv",
-    "norwegian": "no", "danish": "da", "finnish": "fi", "ukrainian": "uk",
-    "vietnamese": "vi", "thai": "th", "indonesian": "id", "filipino": "tl",
-    "tagalog": "tl", "bengali": "bn", "urdu": "ur", "persian": "fa",
-    "farsi": "fa", "tamil": "ta", "telugu": "te", "kannada": "kn",
-}
+
+def _build_alias_map():
+    """Auto-generate an alias map from TRANSLATE_LANGS + manual extras."""
+    aliases = {}
+
+    # Auto-add the lowercase display name as an alias
+    for code, name in TRANSLATE_LANGS.items():
+        aliases[name.lower()] = code
+        # Also add the base name without parentheses (e.g. "chinese" → zh-CN)
+        base = name.split("(")[0].strip().lower()
+        if base:
+            aliases.setdefault(base, code)
+
+    # Manual extras — common short names / slang
+    aliases.update({
+        "chinese": "zh-CN", "mandarin": "zh-CN", "cantonese": "zh-TW",
+        "traditional chinese": "zh-TW", "simplified chinese": "zh-CN",
+        "farsi": "fa", "tagalog": "tl", "filipino": "tl",
+        "burmese": "my", "myanmar": "my",
+        "kurdish": "ku", "sorani": "ckb", "kurmanji": "ku",
+        "moldovan": "ro", "moldavian": "ro",
+        "castilian": "es", "brazilian": "pt",
+        "brazilian portuguese": "pt", "european portuguese": "pt",
+        "mexican spanish": "es", "latin american spanish": "es",
+        "dutch": "nl", "flemish": "nl",
+        "haitian": "ht", "hawaiian": "haw",
+        "gaelic": "gd", "scottish gaelic": "gd", "irish gaelic": "ga",
+        "swiss german": "de",
+        "egyptian arabic": "ar",
+        "uk english": "en", "us english": "en", "american": "en",
+        "british": "en",
+        "kreyol": "ht", "creole": "ht",
+        "mizo": "lus", "manipuri": "mni-Mtei", "meitei": "mni-Mtei",
+        "konkani": "gom", "bhojpuri": "bho", "maithili": "mai",
+        "dogri": "doi", "santali": "sa",
+        "chichewa": "ny", "nyanja": "ny",
+        "aymara": "ay", "quechua": "qu", "guarani": "gn",
+        "twi": "ak", "akan": "ak",
+    })
+
+    return aliases
+
+
+TRANSLATE_ALIASES = _build_alias_map()
 
 
 def _resolve_lang(text: str):
-    """Resolve a language name/code to a valid code, or None."""
+    """Resolve a language name/code to a valid code, or None. Case-insensitive."""
     if not text:
         return None
+
     t = text.strip().lower()
-    if t in TRANSLATE_LANGS:
-        return t
-    # case-insensitive exact code match (handles "ZH-CN" → "zh-CN")
+
+    # 1. Direct code match (case-insensitive against TRANSLATE_LANGS keys)
     for code in TRANSLATE_LANGS:
         if code.lower() == t:
             return code
+
+    # 2. Alias map
     if t in TRANSLATE_ALIASES:
         return TRANSLATE_ALIASES[t]
+
+    # 3. Loose match — "chinese" matches "Chinese (Simplified)" etc.
+    for alias, code in TRANSLATE_ALIASES.items():
+        if t == alias or t in alias or alias in t:
+            return code
+
     return None
-
-
-@bot.hybrid_command(name="translate", aliases=["tr"], description="Translate text to another language")
-@app_commands.describe(
-    language="Target language (e.g. spanish, japanese, fr)",
-    text="The text to translate (leave empty to translate a replied message)",
-)
-async def translate(ctx, language: str, *, text: str = None):
-    # If no text provided, try to grab it from a replied-to message
-    if not text:
-        if not ctx.interaction and ctx.message and ctx.message.reference:
-            try:
-                ref = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-                text = ref.content
-            except Exception:
-                text = None
-
-    if not text:
-        embed = discord.Embed(
-            description=(
-                "❌ Please provide text to translate.\n"
-                "**Examples:**\n"
-                "`R!translate spanish hello world`\n"
-                "Reply to a message with `R!translate japanese`"
-            ),
-            color=discord.Color.red(),
-        )
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-
-    if len(text) > 1500:
-        embed = discord.Embed(
-            description="❌ Text too long (max 1500 characters).",
-            color=discord.Color.red(),
-        )
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-
-    target_code = _resolve_lang(language)
-    if not target_code:
-        embed = discord.Embed(
-            description=(
-                f"❌ Unknown language `{language}`.\n"
-                "Use a **language name** (e.g. `spanish`) or a **code** (e.g. `es`).\n"
-                "Try `R!translate languages` for a full list."
-            ),
-            color=discord.Color.red(),
-        )
-        if ctx.interaction:
-            return await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-
-    if ctx.interaction:
-        await ctx.interaction.response.defer()
-
-    # Google Translate free endpoint
-    url = "https://translate.googleapis.com/translate_a/single"
-    params = {
-        "client": "gtx",
-        "sl": "auto",
-        "tl": target_code,
-        "dt": "t",
-        "q": text,
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url,
-                params=params,
-                timeout=10,
-                headers={"User-Agent": "Mozilla/5.0"},
-            ) as resp:
-                if resp.status != 200:
-                    embed = discord.Embed(
-                        description=f"❌ Translate failed (status {resp.status}).",
-                        color=discord.Color.red(),
-                    )
-                    if ctx.interaction:
-                        return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-                    return await ctx.send(embed=embed)
-                data = await resp.json()
-    except asyncio.TimeoutError:
-        embed = discord.Embed(description="⏰ Translate timed out, try again.", color=discord.Color.red())
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-    except Exception as e:
-        embed = discord.Embed(
-            description=f"❌ Error: `{str(e)[:150]}`",
-            color=discord.Color.red(),
-        )
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-
-    # Google's response is a nested array; join the translated segments
-    try:
-        translated = "".join(seg[0] for seg in data[0] if seg and seg[0])
-        detected_code = data[2] if len(data) > 2 else "auto"
-    except Exception:
-        translated = None
-        detected_code = "auto"
-
-    if not translated:
-        embed = discord.Embed(description="❌ Couldn't translate that text.", color=discord.Color.red())
-        if ctx.interaction:
-            return await ctx.interaction.followup.send(embed=embed, ephemeral=True)
-        return await ctx.send(embed=embed)
-
-    detected_name = TRANSLATE_LANGS.get(detected_code, detected_code.upper())
-    target_name = TRANSLATE_LANGS.get(target_code, target_code.upper())
-
-    # Trim if it got too long
-    if len(translated) > 1024:
-        translated = translated[:1020] + "..."
-
-    embed = discord.Embed(
-        title="🌐 Translation",
-        color=discord.Color.blurple(),
-    )
-    embed.add_field(name="📝 Original", value=text[:1024], inline=False)
-    embed.add_field(name="✅ Translated", value=translated, inline=False)
-    embed.set_footer(
-        text=f"{detected_name} → {target_name} • Requested by {ctx.author.display_name}",
-        icon_url=ctx.author.display_avatar.url,
-    )
-
-    if ctx.interaction:
-        await ctx.interaction.followup.send(embed=embed)
-    else:
-        if ctx.message:
-            try:
-                await ctx.message.delete()
-            except Exception:
-                pass
-        await ctx.send(embed=embed)
-
-
-@bot.hybrid_command(name="languages", aliases=["langs"], description="List supported translation languages")
-async def languages(ctx):
-    # Build a compact list of common languages
-    common = [
-        "English (`en`)", "Spanish (`es`)", "French (`fr`)", "German (`de`)",
-        "Italian (`it`)", "Portuguese (`pt`)", "Russian (`ru`)", "Japanese (`ja`)",
-        "Korean (`ko`)", "Chinese (`zh-CN`)", "Arabic (`ar`)", "Hindi (`hi`)",
-        "Dutch (`nl`)", "Polish (`pl`)", "Turkish (`tr`)", "Greek (`el`)",
-        "Hebrew (`he`)", "Swedish (`sv`)", "Norwegian (`no`)", "Danish (`da`)",
-        "Finnish (`fi`)", "Ukrainian (`uk`)", "Vietnamese (`vi`)", "Thai (`th`)",
-        "Indonesian (`id`)", "Filipino (`tl`)", "Bengali (`bn`)", "Urdu (`ur`)",
-        "Persian (`fa`)", "Tamil (`ta`)", "Telugu (`te`)", "Romanian (`ro`)",
-    ]
-
-    embed = discord.Embed(
-        title="🌐 Supported Languages",
-        description=(
-            "**Common languages:**\n" + " • ".join(common)
-            + "\n\n**All languages:** You can use any Google Translate language. "
-              "Most names work: `spanish`, `japanese`, `french`, etc."
-        ),
-        color=discord.Color.blurple(),
-    )
-    embed.set_footer(text="Example: R!translate japanese hello")
-
-    if ctx.interaction:
-        await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-    else:
-        await ctx.send(embed=embed)
 # =========================================================
 # RUN BOT
 # =========================================================
