@@ -10054,6 +10054,61 @@ async def wouldyourather(ctx):
     else:
         await ctx.send(embed=embed, view=view)
 # =========================================================
+# SOFTBAN COMMAND (prefix-only)
+# =========================================================
+
+@bot.command(name="softban", aliases=["sb"])
+@commands.has_permissions(ban_members=True)
+async def softban(ctx, member: discord.Member, *, reason: str = "No reason provided"):
+    if ctx.guild is None:
+        return await ctx.send("❌ This command only works in a server.")
+
+    # Can't softban the server owner
+    if ctx.guild.owner_id == member.id:
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot softban the server owner.")
+
+    # Can't softban staff unless you're the owner
+    if member.guild_permissions.ban_members or member.guild_permissions.administrator:
+        if ctx.author.id != ctx.guild.owner_id:
+            return await ctx.send(f"❌ {ctx.author.mention} you cannot softban a staff member.")
+
+    # Can't softban yourself
+    if member.id == ctx.author.id:
+        return await ctx.send(f"❌ {ctx.author.mention} you cannot softban yourself.")
+
+    # Bot can't softban someone with a higher/equal role
+    if ctx.guild.me and member.top_role >= ctx.guild.me.top_role and ctx.author.id != ctx.guild.owner_id:
+        return await ctx.send(f"❌ {member.mention} has a higher or equal role than me, I cannot softban them.")
+
+    # Run it
+    try:
+        await member.ban(
+            reason=f"[Softban] {reason} | By {ctx.author}",
+            delete_message_seconds=604800,  # last 7 days (Discord max)
+        )
+        await ctx.guild.unban(member, reason=f"[Softban] Auto-unban by {ctx.author}")
+    except discord.Forbidden:
+        return await ctx.send("❌ I don't have permission to ban/unban that member.")
+    except Exception as e:
+        return await ctx.send(f"❌ Softban failed: `{str(e)[:150]}`")
+
+    embed = discord.Embed(
+        title="🧹 Successfully Softbanned",
+        description=f"{member.mention} was banned and immediately unbanned.\nTheir recent messages have been purged.",
+        color=discord.Color.orange()
+    )
+    embed.add_field(name="Member", value=f"{member} (`{member.id}`)", inline=False)
+    embed.add_field(name="📄 Reason", value=reason, inline=False)
+    embed.set_footer(text=f"Softbanned by {ctx.author.display_name}")
+
+    # Log it to modstats if you have that system
+    try:
+        log_mod_action(ctx.author.id, member.id, ctx.guild.id, "softban", reason)
+    except Exception:
+        pass
+
+    await ctx.send(embed=embed)
+# =========================================================
 # RUN BOT
 # =========================================================
 
