@@ -10093,7 +10093,7 @@ async def softban(ctx, member: discord.Member, *, reason: str = "No reason provi
         return await ctx.send(f"❌ Softban failed: `{str(e)[:150]}`")
 
     embed = discord.Embed(
-        title="🧹 Successfully Softbanned",
+        title="⚔️ Successfully Softbanned",
         description=f"{member.mention} was banned and immediately unbanned.\nTheir recent messages have been purged.",
         color=discord.Color.orange()
     )
@@ -10108,6 +10108,50 @@ async def softban(ctx, member: discord.Member, *, reason: str = "No reason provi
         pass
 
     await ctx.send(embed=embed)
+# =========================================================
+# CLEARSNIPE COMMAND (prefix-only)
+# =========================================================
+
+@bot.command(name="clearsnipe", aliases=["cs"])
+async def clearsnipe(ctx):
+    if ctx.guild is None:
+        return await ctx.send("❌ This command only works in a server.")
+
+    channel_id = ctx.channel.id
+
+    # Wipe both snipe and editsnipe caches for this channel
+    had_snipe = channel_id in sniped_messages and sniped_messages[channel_id]
+    had_edit = channel_id in edited_messages and edited_messages[channel_id]
+
+    if not had_snipe and not had_edit:
+        embed = discord.Embed(
+            description=f"ℹ️ {ctx.author.mention} there's nothing sniped in {ctx.channel.mention} to clear.",
+            color=discord.Color.orange()
+        )
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
+        return await ctx.send(embed=embed, delete_after=5)
+
+    # Clear caches
+    sniped_messages[channel_id] = []
+    edited_messages[channel_id] = []
+
+    # Try to delete the invoking message too
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+
+    embed = discord.Embed(
+        title="💸 Snipe Cache Cleared",
+        description=f"Cleared deleted and edited message caches in {ctx.channel.mention}.",
+        color=discord.Color.green()
+    )
+    embed.set_footer(text=f"Cleared by {ctx.author.display_name}")
+
+    await ctx.send(embed=embed, delete_after=5)
 # =========================================================
 # RUN BOT
 # =========================================================
