@@ -10115,43 +10115,30 @@ async def softban(ctx, member: discord.Member, *, reason: str = "No reason provi
 @bot.command(name="clearsnipe", aliases=["cs"])
 async def clearsnipe(ctx):
     if ctx.guild is None:
-        return await ctx.send("❌ This command only works in a server.")
+        return
 
     channel_id = ctx.channel.id
 
-    # Wipe both snipe and editsnipe caches for this channel
     had_snipe = channel_id in sniped_messages and sniped_messages[channel_id]
     had_edit = channel_id in edited_messages and edited_messages[channel_id]
 
-    if not had_snipe and not had_edit:
-        embed = discord.Embed(
-            description=f"ℹ️ {ctx.author.mention} there's nothing sniped in {ctx.channel.mention} to clear.",
-            color=discord.Color.orange()
-        )
+    if not had_snipe and had_edit is False:
+        # Nothing to clear — react with ❌
         try:
-            await ctx.message.delete()
+            await ctx.message.add_reaction("❌")
         except Exception:
             pass
-        return await ctx.send(embed=embed, delete_after=5)
+        return
 
-    # Clear caches
+    # Wipe caches
     sniped_messages[channel_id] = []
     edited_messages[channel_id] = []
 
-    # Try to delete the invoking message too
+    # React with ✅ to show success
     try:
-        await ctx.message.delete()
+        await ctx.message.add_reaction("✅")
     except Exception:
         pass
-
-    embed = discord.Embed(
-        title="💸 Snipe Cache Cleared",
-        description=f"Cleared deleted and edited message caches in {ctx.channel.mention}.",
-        color=discord.Color.green()
-    )
-    embed.set_footer(text=f"Cleared by {ctx.author.display_name}")
-
-    await ctx.send(embed=embed, delete_after=5)
 # =========================================================
 # RUN BOT
 # =========================================================
